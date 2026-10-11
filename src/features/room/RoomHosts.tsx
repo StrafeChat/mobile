@@ -8,8 +8,8 @@
  * - the report sheet (presenters reportSheet - the web's openReportDialog);
  * - the key-backup prompts (stores/recoveryPrompt) and the encryption-store reset dialog;
  * - "Leaving Strafe" for external links (stores/externalLink);
- * - the room area's own sheets: notification settings, create thread, members over a pushed
- *   screen, and the one-line text prompt.
+ * - the room area's own sheets: create thread, members over a pushed screen, and the
+ *   one-line text prompt (notification settings are the settings area's page).
  *
  * Mount once, inside the UI provider (bottom sheets) and the router.
  */
@@ -17,7 +17,6 @@ import { useEffect, useRef } from 'react';
 import { closeSafetyNumberModal, safetyNumberModal } from '@web/stores/safetyNumberModal';
 import { userProfileFullModal } from '@web/stores/userProfileFullModal';
 import { useSolid } from '@/bridge/solid';
-import { NotifySheetHost } from './NotifySheet';
 import { TextPromptHost } from './TextPromptHost';
 import { E2eeEnvironmentHost } from './e2ee/E2eeEnvironmentHost';
 import { RecoveryHost } from './e2ee/RecoveryHost';
@@ -60,7 +59,6 @@ export function RoomHosts() {
     <>
       <ProfileSheetHost />
       <ReportSheetHost />
-      <NotifySheetHost />
       <CreateThreadSheetHost />
       <MembersSheetHost />
       <TextPromptHost />

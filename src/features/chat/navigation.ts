@@ -38,9 +38,15 @@ export function navigateToRoom(roomId: string, spaceId: string | null): void {
   backToShell();
 }
 
-/** A thread is a room of its own, shown as a stack screen (the room area's route). */
-export function openThread(threadId: string): void {
-  router.push({ pathname: '/thread/[threadId]', params: { threadId } } as never);
+/**
+ * A thread is a room of its own, shown as a stack screen (the room area's route). Pass its
+ * space when known: the screen then needs no lookup (an archived thread is not in the live
+ * channel lists, so without it the screen cannot tell which space's roles and members apply).
+ */
+export function openThread(threadId: string, spaceId?: string | null): void {
+  const params: Record<string, string> = { threadId };
+  if (spaceId) params.spaceId = spaceId;
+  router.push({ pathname: '/thread/[threadId]', params } as never);
 }
 
 /** Show a space's room list (after joining it from an invite card, or "Go to space"). */

@@ -28,6 +28,7 @@ import { toMatrixUserId } from '@web/lib/e2ee/constants';
 import { instance, loadInstanceInfo } from '@web/stores/instance';
 import { cryptoHost } from '../../crypto/host';
 import { DeviceId, OlmMachine, UserId } from '../../crypto/matrixSdkCrypto';
+import { trackKeyBackupOperation } from './backupActivity';
 import { createPassphrase, deletePassphrase, passphraseReadable, readPassphrase } from './passphrase';
 
 const DB_NAME_PREFIX = 'strafe-e2ee-';
@@ -247,7 +248,14 @@ export async function forgetLocalDeviceIdentities(userId: string): Promise<void>
     }
   }
   try {
-    const keys = Object.keys(localStorage).filter((k) => k.startsWith(`${LOCAL_DEVICE_KEY}:`) || k.startsWith(`${ESTABLISHED_STORE_KEY}:`));
+    // Enumerated through key(i): the app's localStorage is an MMKV-backed object whose keys are
+    // not own properties, so Object.keys (the web's spelling) would find nothing - and a
+    // device id left behind after the wipe reads as "established store gone" next start.
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith(`${LOCAL_DEVICE_KEY}:`) || k.startsWith(`${ESTABLISHED_STORE_KEY}:`))) keys.push(k);
+    }
     for (const k of keys) localStorage.removeItem(k);
   } catch {
     // The mismatch path still ends up provisioning a fresh device.
@@ -321,8 +329,31 @@ async function openMachine(
  * Get (creating if needed) the current user's OlmMachine. Device ids are server-assigned.
  * The promise is cached - rejected ones too, as on the web, so a broken store reports the
  * same E2eeStoreUnusableError everywhere - until the host restarts or the store is reset.
+ *
+ * An open that a host restart overtook (its call died with the page, or the reopen superseded
+ * it) is not a failure of the store: the caller is handed the reopen instead. Without this,
+ * the first caller of the session - the device bootstrap, which runs once - would fail on a
+ * WebView that died while the store was opening, and skip the backup flow (restore prompt,
+ * backup sync) until the app was restarted.
  */
 export async function getMachine(userId: string): Promise<OlmMachine> {
+  let promise = machineFor(userId);
+  for (let hops = 0; ; hops++) {
+    try {
+      return await promise;
+    } catch (e) {
+      const next = machinePromise;
+      const overtaken = e instanceof SupersededOpenError || (e instanceof Error && e.name.startsWith('CryptoHost'));
+      if (!overtaken || hops >= MAX_REOPEN_HOPS || !next || next === promise || currentUserId !== userId) throw e;
+      promise = next;
+    }
+  }
+}
+
+/** How many replacement opens one getMachine call follows before giving up. */
+const MAX_REOPEN_HOPS = 3;
+
+function machineFor(userId: string): Promise<OlmMachine> {
   if (machinePromise && currentUserId === userId) return machinePromise;
   if (currentUserId !== userId) {
     openedMachine?.close();
@@ -402,9 +433,12 @@ export function getCurrentDeviceId(): string | null {
  * Import a Megolm key export; returns how many sessions were actually new. Only the legacy
  * PIN backup still speaks this format (legacyBackup.ts).
  */
-export async function importRoomKeys(machine: OlmMachine, exported: string): Promise<number> {
-  const result = await machine.importExportedRoomKeys(exported, () => {});
-  return Number(result.importedCount ?? 0);
+export function importRoomKeys(machine: OlmMachine, exported: string): Promise<number> {
+  // Reported, so the PIN sheet's spinner knows when the import it is waiting on has ended.
+  return trackKeyBackupOperation('legacyImport', async () => {
+    const result = await machine.importExportedRoomKeys(exported, () => {});
+    return Number(result.importedCount ?? 0);
+  });
 }
 
 // The host restarted: every machine handle is gone. Reopen for the signed-in user and retry

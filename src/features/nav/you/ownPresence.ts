@@ -1,7 +1,8 @@
 /**
  * Changing your own status and custom status (UserArea / MobileYouPanel): optimistic through
  * setUserPresence, then PATCH /users/@me {presence}. Unlike the web, a failed save puts the
- * previous value back (the web leaves the optimistic one showing) and says so.
+ * previous value back (the web leaves the optimistic one showing) and says so, and clearing
+ * the custom status really clears it on the server.
  */
 import { t } from '@web/i18n/t';
 import { patchMe } from '@web/api/users';
@@ -49,7 +50,9 @@ export async function setOwnCustomStatus(text: string): Promise<boolean> {
   if ((prev.custom_status ?? '') === next) return true;
   setUserPresence(uid, { status: presence.byUser[uid]?.status ?? 'online', custom_status: next || undefined });
   try {
-    await patchMe({ presence: { custom_status: next || undefined } });
+    // Clearing sends an empty string: the server leaves a missing field as it was, so the
+    // web's `undefined` (dropped from the JSON) never clears it and the old one comes back.
+    await patchMe({ presence: { custom_status: next } });
     return true;
   } catch {
     restore(uid, prev);

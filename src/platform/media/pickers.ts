@@ -14,6 +14,10 @@
  * - **Android: the original.** The system photo picker withholds location metadata from apps
  *   without ACCESS_MEDIA_LOCATION (this app does not ask for it), so the file is sent as picked.
  * - **Copies in the cache**, marked `owned`, so a pick that is removed unsent is deleted.
+ * - **Optional crop** (`crop`), for avatars, banners and icons: the platform's own crop
+ *   screen after the pick. It limits the pick to one image (neither platform crops a
+ *   multi-selection), the result is a still JPEG/PNG (an animated GIF loses its animation),
+ *   and `aspect` is honoured on Android only - iOS always crops a square.
  */
 import { Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -27,6 +31,17 @@ export type PickResult =
   | { status: 'cancelled' }
   | { status: 'denied'; permission: 'camera' }
   | { status: 'failed'; message: string };
+
+/** The crop screen shown after picking; `aspect` as [width, height], e.g. [1, 1] for an avatar. */
+export interface CropOptions {
+  aspect?: [number, number];
+}
+
+function cropOptions(crop: CropOptions | undefined): ImagePicker.ImagePickerOptions {
+  if (!crop) return {};
+  const aspect = crop.aspect && crop.aspect[0] > 0 && crop.aspect[1] > 0 ? crop.aspect : undefined;
+  return { allowsEditing: true, ...(aspect ? { aspect } : {}) };
+}
 
 function mediaOptions(): ImagePicker.ImagePickerOptions {
   return Platform.OS === 'ios'
@@ -49,17 +64,18 @@ function failed(e: unknown): PickResult {
 
 /**
  * Photos and videos from the library. `limit` caps the selection (pass the composer's free
- * slots); `mediaTypes` narrows it.
+ * slots); `mediaTypes` narrows it; `crop` shows the crop screen (one image only).
  */
 export async function pickFromLibrary(
-  opts: { limit?: number; mediaTypes?: ('images' | 'videos')[] } = {},
+  opts: { limit?: number; mediaTypes?: ('images' | 'videos')[]; crop?: CropOptions } = {},
 ): Promise<PickResult> {
-  const limit = Math.max(1, opts.limit ?? ATTACHMENTS_PER_MESSAGE);
+  const limit = opts.crop ? 1 : Math.max(1, opts.limit ?? ATTACHMENTS_PER_MESSAGE);
   try {
     return fromImagePicker(
       await ImagePicker.launchImageLibraryAsync({
         ...mediaOptions(),
-        mediaTypes: opts.mediaTypes ?? ['images', 'videos'],
+        ...cropOptions(opts.crop),
+        mediaTypes: opts.crop ? ['images'] : (opts.mediaTypes ?? ['images', 'videos']),
         allowsMultipleSelection: limit > 1,
         selectionLimit: limit,
         orderedSelection: true,
@@ -77,11 +93,13 @@ async function cameraAllowed(): Promise<boolean> {
   return (await ImagePicker.requestCameraPermissionsAsync()).granted;
 }
 
-/** A photo from the camera. */
-export async function takePhoto(): Promise<PickResult> {
+/** A photo from the camera; `crop` shows the crop screen after the shot. */
+export async function takePhoto(opts: { crop?: CropOptions } = {}): Promise<PickResult> {
   try {
     if (!(await cameraAllowed())) return { status: 'denied', permission: 'camera' };
-    return fromImagePicker(await ImagePicker.launchCameraAsync({ ...mediaOptions(), mediaTypes: ['images'] }));
+    return fromImagePicker(
+      await ImagePicker.launchCameraAsync({ ...mediaOptions(), ...cropOptions(opts.crop), mediaTypes: ['images'] }),
+    );
   } catch (e) {
     return failed(e);
   }

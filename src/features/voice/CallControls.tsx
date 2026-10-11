@@ -11,7 +11,7 @@
  * server deafen; camera and screen share need the Video permission; screen share needs a
  * platform that can publish one.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import { t } from '@web/i18n/t';
 import { leaveVoiceRoom, ringMembers, setScreenShareEnabled, toggleDeafen, toggleMute, toggleNoiseSuppression } from '@web/stores/voice';
@@ -27,6 +27,12 @@ import { toggleCameraFromUi } from './join';
 import { openScreenShareSheet, toggleVoiceStats } from './sheets';
 
 export type ControlTone = 'idle' | 'on' | 'off';
+
+/** The OS refused a route change (a device that went away mid-pick): say so, keep the call. */
+function routeFailed(err: unknown): void {
+  console.warn('[voice] audio route', err);
+  toast.error(t('mobile.voice.actionFailed'));
+}
 
 export interface ControlButtonProps {
   icon: string;
@@ -83,11 +89,29 @@ export function ControlButton({ icon, label, tone = 'idle', selected, disabled, 
 export function PushToTalkButton({ disabled, compact }: { disabled?: boolean; compact?: boolean }) {
   const theme = useTheme();
   const [held, setHeld] = useState(false);
+  const heldRef = useRef(false);
   const press = useCallback((on: boolean) => {
+    if (heldRef.current === on) return;
+    heldRef.current = on;
     setHeld(on);
     setPushToTalkHeld(on);
     if (on) haptics.impact('medium');
   }, []);
+  // A press whose release never arrives must not leave the microphone open: the button
+  // disabled under the finger (a moderator's mute) or unmounted mid-press (the dock giving
+  // way to the call screen, the call screen minimised) gets no onPressOut.
+  useEffect(() => {
+    if (disabled) press(false);
+  }, [disabled, press]);
+  useEffect(
+    () => () => {
+      if (heldRef.current) {
+        heldRef.current = false;
+        setPushToTalkHeld(false);
+      }
+    },
+    [],
+  );
   const c = theme.colors;
   const label = t('mobile.voice.holdToTalk');
   return (
@@ -186,7 +210,7 @@ export function CallControls({ roomId, kind, session: s, perms, absentIds, onLea
       label: t('mobile.voice.audioOutput'),
       description: routeLabel(route),
       icon: routeIcon(route),
-      onSelect: () => chooseAudioRoute(),
+      onSelect: () => chooseAudioRoute().catch(routeFailed),
     },
     { key: 'stats', label: t('voice.stats.title'), icon: 'wave-square', onSelect: () => toggleVoiceStats() },
     'separator',
@@ -251,10 +275,10 @@ export function CallControls({ roomId, kind, session: s, perms, absentIds, onLea
           label={`${t('mobile.voice.audioOutput')}: ${routeLabel(route)}`}
           tone={route === 'speaker' ? 'on' : 'idle'}
           selected={route === 'speaker'}
-          onPress={() => void pressSpeakerButton()}
+          onPress={() => void pressSpeakerButton().catch(routeFailed)}
           onLongPress={() => {
             haptics.longPress();
-            void chooseAudioRoute();
+            void chooseAudioRoute().catch(routeFailed);
           }}
         />
         <ControlButton

@@ -17,6 +17,12 @@ const mockHandle = {
 };
 let mockStart: () => Promise<unknown> = async () => mockHandle;
 
+// The shell (reached through @/ui) is not under test here; keep its navigation imports out.
+jest.mock('@/shell/SwipeShell', () => ({
+  HorizontalGestureOwner: ({ children }: { children: unknown }) => children,
+  useShellGesture: () => ({ pan: null, progress: null }),
+}));
+
 jest.mock('@/platform/media', () => ({
   startVoiceRecording: () => mockStart(),
   VOICE_MESSAGE_MAX_MS: 300000,

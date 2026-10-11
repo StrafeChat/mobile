@@ -62,13 +62,26 @@ export function railItems(dmIds: readonly string[], spaceIds: readonly string[])
   ];
 }
 
-/** The PM on screen (it never shows on the rail), and the room on screen in general. */
-function useActiveRoom(): { roomId: string | null; pmRoomId: string | null } {
+/**
+ * The PM on screen (it never shows on the rail), and the room on screen in general with its
+ * space when known.
+ */
+function useActiveRoom(): { roomId: string | null; pmRoomId: string | null; spaceId: string | null } {
   return useSolid(() => {
     const v = shell.view();
-    if (v.kind !== 'room') return { roomId: null, pmRoomId: null };
-    return { roomId: v.roomId, pmRoomId: v.spaceId ? null : v.roomId };
+    if (v.kind !== 'room') return { roomId: null, pmRoomId: null, spaceId: null };
+    return { roomId: v.roomId, pmRoomId: v.spaceId ? null : v.roomId, spaceId: v.spaceId ?? null };
   });
+}
+
+/**
+ * The room a space's badges leave out (the one on screen): only the space it is in needs it,
+ * so switching rooms re-counts that space and not every space on the rail. A room opened
+ * without its space named still goes to all of them.
+ */
+export function viewingRoomFor(spaceId: string, active: { roomId: string | null; spaceId: string | null }): string | null {
+  if (!active.roomId) return null;
+  return !active.spaceId || active.spaceId === spaceId ? active.roomId : null;
 }
 
 /** The white pill at the rail's edge: tall when selected, short when unread. */
@@ -133,9 +146,10 @@ const HomeButton = memo(function HomeButton() {
   );
 });
 
-const DmRailItem = memo(function DmRailItem({ roomId, activeRoomId }: { roomId: string; activeRoomId: string | null }) {
+/** An unread PM under Home. Never the one on screen (useRailDmIds leaves that out). */
+const DmRailItem = memo(function DmRailItem({ roomId }: { roomId: string }) {
   const theme = useTheme();
-  const row = usePmRow(roomId, activeRoomId);
+  const row = usePmRow(roomId, null);
   const menu = useLongPressActions(() => pmMenuEntries(roomId), { title: row?.name });
   if (!row) return null;
   const label = [row.name, t('mobile.notifications.unread', { count: row.unread })].join(', ');
@@ -240,18 +254,18 @@ export function SpaceRail({ bottomInset = 0 }: { bottomInset?: number }) {
         case 'home':
           return <HomeButton />;
         case 'dm':
-          return <DmRailItem roomId={item.roomId} activeRoomId={active.pmRoomId} />;
+          return <DmRailItem roomId={item.roomId} />;
         case 'divider':
           return <RailDivider />;
         case 'space':
-          return <SpaceRailItem spaceId={item.spaceId} viewingRoomId={active.roomId} />;
+          return <SpaceRailItem spaceId={item.spaceId} viewingRoomId={viewingRoomFor(item.spaceId, active)} />;
         case 'add':
           return <RailAction icon="fa-plus" label={t('space.addSpace')} onPress={openCreateSpace} />;
         case 'discover':
           return <RailAction icon="fa-compass" label={t('discover.title')} onPress={openDiscover} />;
       }
     },
-    [active.pmRoomId, active.roomId],
+    [active],
   );
 
   return (

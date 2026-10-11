@@ -78,11 +78,16 @@ export function OAuthAuthorizeScreen() {
   const theme = useTheme();
   const me = useMe();
   const raw = useLocalSearchParams<Params>();
+  // expo-router hands back a new params object on every render; keyed on the object, the
+  // request below re-ran after each response (setInfo -> render -> new query -> fetch...).
+  const paramsKey = JSON.stringify(raw);
   const params: Params = useMemo(() => {
     const out: Params = {};
-    for (const [k, v] of Object.entries(raw)) (out as Record<string, string | undefined>)[k] = one(v as string | string[] | undefined);
+    for (const [k, v] of Object.entries(JSON.parse(paramsKey) as Record<string, string | string[] | undefined>)) {
+      (out as Record<string, string | undefined>)[k] = one(v);
+    }
     return out;
-  }, [raw]);
+  }, [paramsKey]);
 
   const query: AuthorizeQuery = useMemo(
     () => ({

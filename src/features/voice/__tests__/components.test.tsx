@@ -212,6 +212,31 @@ describe('CallScreen', () => {
     expect(setPushToTalkHeld).toHaveBeenLastCalledWith(false);
   });
 
+  test('a held talk button never leaves the microphone open: unmounted or disabled mid-press', async () => {
+    await act(async () => {
+      setVoiceSettings({ inputMode: 'ptt' });
+      setVoice('byRoom', { v1: [st('me')] });
+      connect();
+    });
+    const view = await render(
+      <UiProvider>
+        <CallScreen />
+      </UiProvider>,
+    );
+    await fireEvent(screen.getByTestId('voice-ptt'), 'pressIn');
+    expect(setPushToTalkHeld).toHaveBeenLastCalledWith(true);
+    // A moderator mutes you while you hold it: the press-out will never come.
+    await act(async () => connect('v1', 's1', { serverMute: true }));
+    expect(setPushToTalkHeld).toHaveBeenLastCalledWith(false);
+
+    await act(async () => connect());
+    await fireEvent(screen.getByTestId('voice-ptt'), 'pressIn');
+    expect(setPushToTalkHeld).toHaveBeenLastCalledWith(true);
+    // The screen goes away under the finger (minimised, or the dock swapped for the stage).
+    await view.unmount();
+    expect(setPushToTalkHeld).toHaveBeenLastCalledWith(false);
+  });
+
   test('a PM call offers ring again for people not in it, in the more sheet', async () => {
     await act(async () => {
       setVoice('byRoom', { p1: [st('me', { room_id: 'p1' })] });
@@ -262,6 +287,42 @@ describe('VoiceHosts', () => {
     expect(activateKeepAwakeAsync).toHaveBeenCalledTimes(1);
     await act(async () => setVoice('session', { ...store.__idleSession }));
     expect(deactivateKeepAwake).toHaveBeenCalledTimes(1);
+  });
+
+  test('an audio call on the earpiece lets the screen sleep (held to the face); video keeps it on', async () => {
+    const { __setSpeakerphone } = require('@/platform/voice') as { __setSpeakerphone: (on: boolean) => void };
+    await act(async () => __setSpeakerphone(false));
+    try {
+      await render(
+        <UiProvider>
+          <VoiceHosts />
+        </UiProvider>,
+      );
+      await act(async () => connect());
+      expect(activateKeepAwakeAsync).not.toHaveBeenCalled();
+      await act(async () => setVoice('media', { b: { camera: 'TR_cam' } }));
+      expect(activateKeepAwakeAsync).toHaveBeenCalledTimes(1);
+      await act(async () => setVoice('media', reconcile({})));
+      expect(deactivateKeepAwake).toHaveBeenCalledTimes(1);
+      await act(async () => __setSpeakerphone(true));
+      expect(activateKeepAwakeAsync).toHaveBeenCalledTimes(2);
+    } finally {
+      await act(async () => __setSpeakerphone(true));
+    }
+  });
+
+  test('a screen-share picker left open when the call ended does not reopen with the next call', async () => {
+    const { openScreenShareSheet, screenShareSheetStore } = require('../sheets') as typeof import('../sheets');
+    await act(async () => connect());
+    await render(
+      <UiProvider>
+        <VoiceHosts />
+      </UiProvider>,
+    );
+    await act(async () => openScreenShareSheet());
+    expect(screenShareSheetStore.get()).toBe(true);
+    await act(async () => setVoice('session', { ...store.__idleSession }));
+    expect(screenShareSheetStore.get()).toBe(false);
   });
 
   test('the user sheet: volume and mute for me for others, moderation with the permission', async () => {

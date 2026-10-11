@@ -9,13 +9,17 @@ import { describe, expect, jest, test } from '@jest/globals';
 import type { MessageListItem } from '@/data';
 import { groupBlocks, isJumbo, linkEmbedOf, loneGif, mediaFilename, parseBody, segmentsPlainText } from '../body/bodyModel';
 import {
+  EDGE_LOAD_MARGIN_PX,
   bottomVisibleMessageId,
+  buildRows,
   chooseLanding,
   distanceToBottom,
   edgesToLoad,
   itemType,
   resolveJumpRow,
+  sameRow,
   topVisibleMessage,
+  type ListRow,
 } from '../list/listLogic';
 import { quickReactions, reactionKeyOf, recentKeyOf, DEFAULT_QUICK_REACTIONS } from '../reactions/recents';
 import { contentWidth, videoBox } from '../layout';
@@ -139,8 +143,10 @@ describe('list logic', () => {
     expect(topVisibleMessage([tok(1), tok(3), tok(2)])).toEqual({ index: 2, id: '10' });
   });
 
+  const geometry = { viewport: 600, content: 5000, moving: false, source: 'scroll' as const, unprompted: 0 };
+
   test('paging: older near the top while more exists; newer only in a jumped-to window', () => {
-    const base = { offset: 1000, distanceToBottom: 1000, hasMessages: true, hasMoreOlder: undefined, loadingOlder: false, hasMoreNewer: false, loadingNewer: false };
+    const base = { ...geometry, offset: 1000, distanceToBottom: 1000, hasMessages: true, hasMoreOlder: undefined, loadingOlder: false, hasMoreNewer: false, loadingNewer: false };
     expect(edgesToLoad(base)).toEqual({ older: false, newer: false });
     expect(edgesToLoad({ ...base, offset: 100 })).toEqual({ older: true, newer: false });
     expect(edgesToLoad({ ...base, offset: 100, hasMoreOlder: false })).toEqual({ older: false, newer: false });
@@ -150,11 +156,62 @@ describe('list logic', () => {
     expect(distanceToBottom(1000, 400, 500)).toBe(100);
   });
 
+  test('paging never fires on an unmeasured list or mid-landing (offset 0 is not "at the top" then)', () => {
+    const base = { ...geometry, offset: 0, distanceToBottom: 0, hasMessages: true, hasMoreOlder: true, loadingOlder: false, hasMoreNewer: true, loadingNewer: false };
+    expect(edgesToLoad({ ...base, viewport: 0 })).toEqual({ older: false, newer: false });
+    expect(edgesToLoad({ ...base, content: 0 })).toEqual({ older: false, newer: false });
+    expect(edgesToLoad({ ...base, moving: true })).toEqual({ older: false, newer: false });
+    expect(edgesToLoad(base)).toEqual({ older: true, newer: true });
+  });
+
+  test('regression: checks the reader did not prompt never chain pages on a full list', () => {
+    // #files-test: the list sat "near the top" after every page (its position was not kept),
+    // and each page's arrival paged again - 44 requests, back to the room's first message.
+    const atTop = { ...geometry, offset: 120, distanceToBottom: 4000, hasMessages: true, hasMoreOlder: true, loadingOlder: false, hasMoreNewer: false, loadingNewer: false };
+    expect(edgesToLoad({ ...atTop, source: 'settle', unprompted: 0 }).older).toBe(true);
+    expect(edgesToLoad({ ...atTop, source: 'settle', unprompted: 1 }).older).toBe(false);
+    expect(edgesToLoad({ ...atTop, source: 'settle', unprompted: 7 }).older).toBe(false);
+    // The reader's own scroll at the top always pages.
+    expect(edgesToLoad({ ...atTop, source: 'scroll', unprompted: 7 }).older).toBe(true);
+    // A list too short to scroll past the margin keeps filling itself.
+    expect(edgesToLoad({ ...atTop, source: 'settle', unprompted: 3, content: 600 + EDGE_LOAD_MARGIN_PX - 1 }).older).toBe(true);
+  });
+
+  test('rows: dividers fold into the message below them, edges become header / footer', () => {
+    const model: MessageListItem[] = [
+      { kind: 'historyEdge', key: 'edge:older', side: 'older' },
+      { kind: 'dateDivider', key: 'd:10', date: '2026-10-10T00:00:00Z', newMessages: false },
+      msg('10'),
+      { kind: 'newDivider', key: 'n:20' },
+      { kind: 'e2eeDivider', key: 'e:20', encrypted: true },
+      msg('20'),
+      { kind: 'historyEdge', key: 'edge:newer', side: 'newer' },
+    ];
+    const { rows, olderEdge, newerEdge } = buildRows(model);
+    expect(olderEdge).toBe(true);
+    expect(newerEdge).toBe(true);
+    // The top row is always a message keyed by its own id - what the list anchors a prepend on.
+    expect(rows.map((r) => r.key)).toEqual(['10', '20']);
+    expect(rows[1]!.kind === 'message' && rows[1]!.dividers.map((d) => d.key)).toEqual(['n:20', 'e:20']);
+    expect(buildRows([{ kind: 'intro', key: 'intro' }, msg('1')]).rows.map((r) => r.kind)).toEqual(['intro', 'message']);
+  });
+
+  test('rows compare by value, so unchanged rows do not re-render on a structural change', () => {
+    const a = buildRows([{ kind: 'dateDivider', key: 'd:1', date: 'x', newMessages: false }, msg('1')]).rows[0]!;
+    const same = buildRows([{ kind: 'dateDivider', key: 'd:1', date: 'x', newMessages: false }, msg('1')]).rows[0]!;
+    const newDivider = buildRows([{ kind: 'dateDivider', key: 'd:1', date: 'x', newMessages: true }, msg('1')]).rows[0]!;
+    const grouped = buildRows([msg('1', { showHeader: false })]).rows[0]!;
+    expect(sameRow(a, same)).toBe(true);
+    expect(sameRow(a, newDivider)).toBe(false);
+    expect(sameRow(a, grouped)).toBe(false);
+  });
+
   test('rows recycle by shape', () => {
-    expect(itemType(msg('1'))).toBe('message');
-    expect(itemType(msg('1', { showHeader: false }))).toBe('continuation');
-    expect(itemType(msg('1', { system: true }))).toBe('system');
-    expect(itemType({ kind: 'newDivider', key: 'n' })).toBe('newDivider');
+    const row = (m: MessageListItem): ListRow => buildRows([m]).rows[0]!;
+    expect(itemType(row(msg('1')))).toBe('message');
+    expect(itemType(row(msg('1', { showHeader: false })))).toBe('continuation');
+    expect(itemType(row(msg('1', { system: true })))).toBe('system');
+    expect(itemType({ kind: 'intro', key: 'intro' })).toBe('intro');
   });
 });
 
@@ -174,6 +231,15 @@ describe('quick reactions', () => {
 });
 
 describe('links, viewer, players, sizing', () => {
+  test('a thread opens with its space when the caller knows it', () => {
+    const { openThread } = require('../navigation') as typeof import('../navigation');
+    const { router } = require('expo-router') as { router: { push: jest.Mock } };
+    openThread('t1', 's1');
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/thread/[threadId]', params: { threadId: 't1', spaceId: 's1' } });
+    openThread('t2', null);
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/thread/[threadId]', params: { threadId: 't2' } });
+  });
+
   test('in-app link targets', () => {
     expect(internalTarget('https://chat.example/rooms/12')).toEqual({ kind: 'room', roomId: '12', spaceId: null });
     expect(internalTarget('https://chat.example/spaces/3/rooms/4')).toEqual({ kind: 'room', roomId: '4', spaceId: '3' });

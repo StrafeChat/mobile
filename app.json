@@ -92,7 +92,7 @@
       [
         "expo-notifications",
         {
-          "color": "#5865F2"
+          "color": "#509b6b"
         }
       ],
       [
@@ -121,6 +121,9 @@
         }
       ],
       "./plugins/withStrafeCallService",
+      "./plugins/withStrafePushIos",
+      "./plugins/withStrafePushAndroid",
+      "./plugins/withReleaseSigning",
       "expo-asset"
     ],
     "experiments": {

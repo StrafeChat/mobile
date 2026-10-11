@@ -54,6 +54,7 @@ jest.mock('../links', () => {
   const RN = require('react-native');
   return {
     openSettings: jest.fn(),
+    openAdminDashboard: jest.fn(),
     openSpaceSettings: jest.fn(),
     openRoomSettings: jest.fn(),
     joinVoiceFromUi: jest.fn(async () => true),

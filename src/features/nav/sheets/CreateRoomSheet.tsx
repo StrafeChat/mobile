@@ -75,13 +75,16 @@ export function CreateRoomSheet({ spaceId, parentSectionId, open, onRequestClose
         ...(parent ? { parent_id: parent } : {}),
         ...(e2ee && kind === 'text' ? { e2ee_enabled: true } : {}),
       });
-      await refreshSpaceRooms(spaceId);
-      setLoading(false);
-      onRequestClose();
     } catch (err) {
       setError(errorMessage(err, 'createRoom.failed'));
       setLoading(false);
+      return;
     }
+    // Created: a list refresh that fails is not a failed create (saying so would invite a
+    // second, duplicate room); the gateway's room event or the next refresh brings it in.
+    await refreshSpaceRooms(spaceId).catch(() => undefined);
+    setLoading(false);
+    onRequestClose();
   }
 
   return (
@@ -174,13 +177,14 @@ export function CreateSectionSheet({ spaceId, open, onRequestClose, onClosed }: 
     setLoading(true);
     try {
       await createSpaceRoom(spaceId, { name: n, type: ROOM_TYPE_SECTION });
-      await refreshSpaceRooms(spaceId);
-      setLoading(false);
-      onRequestClose();
     } catch (err) {
       setError(errorMessage(err, 'createSection.failed'));
       setLoading(false);
+      return;
     }
+    await refreshSpaceRooms(spaceId).catch(() => undefined);
+    setLoading(false);
+    onRequestClose();
   }
 
   return (

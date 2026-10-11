@@ -419,8 +419,28 @@ describe('email links', () => {
     });
     expect(api.resetPassword).toHaveBeenCalledWith('reset-abcdefghijklmnop', 'new password');
     expect(screen.getByTestId('reset-done')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('reset-go-login'));
+    await act(async () => {
+      await fireEvent.press(screen.getByTestId('reset-go-login'));
+    });
     expect(session.signOut).toHaveBeenCalled();
+  });
+
+  test('reset: a link for another account leaves this session signed in', async () => {
+    authStore.mockSetAuth('token', 'live');
+    api.resetPassword.mockResolvedValue({ ok: true });
+    session.verifySession.mockResolvedValueOnce({ state: 'valid' });
+    setParams({ token: 'reset-abcdefghijklmnop' });
+    await render(<ResetPasswordScreen />);
+    await fireEvent.changeText(screen.getByTestId('reset-password'), 'new password');
+    await fireEvent.changeText(screen.getByTestId('reset-confirm'), 'new password');
+    await act(async () => {
+      await fireEvent.press(screen.getByTestId('reset-submit'));
+    });
+    await act(async () => {
+      await fireEvent.press(screen.getByTestId('reset-go-login'));
+    });
+    expect(session.signOut).not.toHaveBeenCalled();
+    expect(routerMod.router.replace).toHaveBeenCalledWith('/');
   });
 
   test('reset: without a token it asks for the link first', async () => {

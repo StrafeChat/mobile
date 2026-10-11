@@ -61,6 +61,7 @@ import { voiceSettings } from '@web/stores/voiceSettings';
 import { useSolid } from '@/bridge/solid';
 import { closeView, currentRoomId } from '@/shell/state';
 import { isOnline, startConnectivity } from './connectivity';
+import { announceRoomGone } from './roomGone';
 import {
   initInstanceHandlers,
   instanceInfoFailed,
@@ -259,13 +260,18 @@ function initRoomLeaveHandler(): () => void {
     if (currentRoomId() === roomId) closeView();
     removeRoom(roomId);
     clearMessages(roomId);
+    // Its unsent draft (the plaintext of an encrypted conversation) and queued file copies go too.
+    announceRoomGone(roomId);
   });
 }
 
 function handleReady(payload: ReadyPayload): void {
   // The gateway accepted the token at the upgrade just now.
   noteSessionValid();
+  // READY's spaces are the ones this connection starts with, not ones just joined.
+  knownSpaceIds = null;
   hydrateFromReady(payload);
+  knownSpaceIds = untrack(spaceIdSet);
   // Custom emoji are not in READY; one fetch per connection (membership may have changed).
   void loadCustomEmojis();
   // Member lists are cached per connection; whatever changed while down was not seen.
@@ -366,6 +372,19 @@ function holdSubscriptions(ids: () => readonly string[]): void {
   });
 }
 
+function spaceIdSet(): Set<string> {
+  return new Set(spaces.spaces.map((s) => s.id).filter((id): id is string => !!id));
+}
+
+/**
+ * The spaces as of the last READY plus those seen joining since; null while READY is being
+ * applied. Upstream, resubscribeAll splits subRefCounts' NUL-joined keys on ' ', so each
+ * frame it sends carries a bad id and the gateway answers 4403 - harmless for the space
+ * channel it still re-asserts, but only worth it after a real join.
+ */
+let knownSpaceIds: Set<string> | null = null;
+let resubscribeTimers: ReturnType<typeof setTimeout>[] = [];
+
 function subscriptionEffects(): void {
   const me = createMemo(() => auth.user?.id);
   createEffect(() => {
@@ -383,18 +402,22 @@ function subscriptionEffects(): void {
 
   // A space joined mid-session: the gateway can refuse its channels' subscriptions for a
   // moment (the membership is not visible to its authorisation read yet), so re-assert
-  // them twice. The spaces the session starts with are not "joined": the web re-asserts
-  // every subscription twice on each start for them, which is pure traffic. (`ready` is set
-  // before READY's spaces are stored, hence the wait for hydration.)
-  let known: Set<string> | null = null;
+  // them twice. Only a space that appears between READYs counts: handleReady sets the
+  // baseline from what READY brought. Deriving it from the store instead (as the web does,
+  // and this did) took the empty list a fresh sign-in or the REST fallback leaves - both
+  // set `hydrated` before READY, and `ready` flips before READY's spaces are stored - so
+  // every sign-in re-asserted every subscription twice, and resubscribeAll's frames are
+  // malformed upstream (a 4403 per channel each time; see knownSpaceIds).
   createEffect(() => {
-    if (!stargate.ready || !auth.hydrated) return;
-    const current = new Set(spaces.spaces.map((s) => s.id).filter((id): id is string => !!id));
-    const added = known !== null && [...current].some((id) => !known!.has(id));
-    known = current;
+    const current = spaceIdSet();
+    if (!stargate.ready || knownSpaceIds === null) return;
+    const added = [...current].some((id) => !knownSpaceIds!.has(id));
+    knownSpaceIds = current;
     if (!added) return;
-    const timers = RESUBSCRIBE_DELAYS_MS.map((ms) => setTimeout(resubscribeAll, ms));
-    onCleanup(() => timers.forEach(clearTimeout));
+    // Not cleared by the effect's next run: a rename landing within 4 s of the join would
+    // otherwise cancel the re-assertion. resubscribeAll is a no-op on a closed socket.
+    resubscribeTimers.forEach(clearTimeout);
+    resubscribeTimers = RESUBSCRIBE_DELAYS_MS.map((ms) => setTimeout(resubscribeAll, ms));
   });
 }
 

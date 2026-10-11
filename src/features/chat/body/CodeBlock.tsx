@@ -9,9 +9,9 @@ import { ScrollView, StyleSheet, Text as RNText, View, type TextStyle } from 're
 import * as Clipboard from 'expo-clipboard';
 import { t } from '@web/i18n/t';
 import { highlightCodeLines, type CodeToken } from '@/platform/overrides/lib/codeHighlight';
-import { HorizontalGestureOwner } from '@/shell/SwipeShell';
 import { useTheme, type CodeColors } from '@/theme';
 import { haptics, MONO_FONT, Text, Touchable, withAlpha } from '@/ui';
+import { RowHorizontalOwner } from '../row/SwipeToReply';
 
 const COPIED_MS = 1500;
 
@@ -98,7 +98,7 @@ export const CodeBlock = memo(function CodeBlock({ lang, content }: { lang: stri
           </Text>
         </Touchable>
       </View>
-      <HorizontalGestureOwner>
+      <RowHorizontalOwner>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           <RNText
             onLongPress={() => void copy()}
@@ -107,7 +107,7 @@ export const CodeBlock = memo(function CodeBlock({ lang, content }: { lang: stri
             {body}
           </RNText>
         </ScrollView>
-      </HorizontalGestureOwner>
+      </RowHorizontalOwner>
     </View>
   );
 });

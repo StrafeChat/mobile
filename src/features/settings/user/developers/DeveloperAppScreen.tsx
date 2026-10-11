@@ -7,7 +7,7 @@
  * Links the web opens in a new tab open here on the in-app consent screen (install a bot) or
  * the in-app browser (docs, a generated URL with a redirect).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Share, View } from 'react-native';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { formatDate, t } from '@web/i18n/t';
@@ -128,34 +128,37 @@ export function DeveloperAppScreen() {
   const [redirect, setRedirect] = useState('');
   const { copy, copied } = useCopy();
 
-  function seed(a: Application, first: boolean) {
-    setApp(a);
+  // The two forms are seeded separately, as the web does: saving (or switching) one part of
+  // the application must not throw away unsaved edits in the other form.
+  const seedGeneral = useCallback((a: Application) => {
     setFName(a.name);
     setFDesc(a.description);
     setFRedirects(a.redirect_uris.join('\n'));
-    seedBot(a.bot);
-    if (first) {
-      setScopes(new Set<OAuthScope>(a.has_bot ? ['bot'] : ['identify']));
-      setPerms(0);
-      setRedirect(a.redirect_uris[0] ?? '');
-    }
-  }
-  function seedBot(bot: BotProfile | undefined) {
+  }, []);
+  const seedBot = useCallback((bot: BotProfile | undefined) => {
     setBName(bot?.display_name ?? '');
     setBAbout(bot?.about_me ?? '');
     setBBio(bot?.bio ?? '');
-  }
+  }, []);
 
   useEffect(() => {
     if (!appId) return;
     let live = true;
     getApplication(appId)
-      .then((a) => live && seed(a, true))
+      .then((a) => {
+        if (!live) return;
+        setApp(a);
+        seedGeneral(a);
+        seedBot(a.bot);
+        setScopes(new Set<OAuthScope>(a.has_bot ? ['bot'] : ['identify']));
+        setPerms(0);
+        setRedirect(a.redirect_uris[0] ?? '');
+      })
       .catch(() => live && setLoadError(t('settings.developers.loadFailed')));
     return () => {
       live = false;
     };
-  }, [appId]);
+  }, [appId, seedGeneral, seedBot]);
 
   const redirects = parseRedirects(fRedirects);
   const dirty = !!app && (fName.trim() !== app.name || fDesc.trim() !== app.description || redirects.join('\n') !== app.redirect_uris.join('\n'));
@@ -183,7 +186,8 @@ export function DeveloperAppScreen() {
     setError('');
     try {
       const updated = await updateApplication(app.id, { name: fName.trim(), description: fDesc.trim(), redirect_uris: redirects });
-      seed(updated, false);
+      setApp(updated);
+      seedGeneral(updated);
       if (!updated.redirect_uris.includes(redirect)) setRedirect(updated.redirect_uris[0] ?? '');
     } catch {
       setError(t('settings.developers.saveFailed'));
@@ -210,7 +214,8 @@ export function DeveloperAppScreen() {
       return { created, updated };
     });
     if (!res) return;
-    seed(res.updated, false);
+    setApp(res.updated);
+    seedBot(res.updated.bot);
     setSecret({ labelKey: 'settings.developers.botToken', value: res.created.token });
     setScopes(new Set<OAuthScope>(['bot']));
   }
@@ -224,7 +229,7 @@ export function DeveloperAppScreen() {
   async function setBotPublic(on: boolean) {
     if (!app) return;
     const res = await run(() => updateApplication(app.id, { bot_public: on }));
-    if (res) seed(res, false);
+    if (res) setApp(res);
   }
 
   async function remove() {
@@ -242,7 +247,7 @@ export function DeveloperAppScreen() {
     setError('');
     try {
       const updated = await updateBotProfile(app.id, { display_name: bName.trim(), about_me: bAbout.trim(), bio: bBio.trim() });
-      setApp({ ...app, bot: updated });
+      setApp((a) => (a ? { ...a, bot: updated } : a));
       seedBot(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('settings.developers.saveFailed'));
@@ -253,7 +258,7 @@ export function DeveloperAppScreen() {
 
   async function botImage(kind: 'avatar' | 'banner') {
     if (!app?.bot) return;
-    const pick = await pickImage({ maxBytes: PROFILE_IMAGE_MAX_BYTES });
+    const pick = await pickImage({ maxBytes: PROFILE_IMAGE_MAX_BYTES, ...(kind === 'avatar' ? { crop: { aspect: [1, 1] } } : {}) });
     if (pick.status === 'cancelled') return;
     if (pick.status === 'error') {
       setBotMediaError(pick.message);

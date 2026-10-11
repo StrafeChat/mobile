@@ -23,6 +23,7 @@ import { openMedia } from '../mediaViewer';
 import { openMessageLink, showLinkActions } from '../navigation';
 import { VideoPlayer } from '../media/VideoPlayer';
 import { IframeEmbed } from './IframeEmbed';
+import { linkUnderline, useUnderlineLinks } from './inline';
 import { mediaFilename } from './bodyModel';
 
 const CARD_MAX = 448;
@@ -68,6 +69,7 @@ function PreviewImage({ media, width }: { media: UnfurlMedia; width: number }) {
 
 function Card({ d, fallbackUrl }: { d: LinkMetadata; fallbackUrl: string }) {
   const theme = useTheme();
+  const underline = useUnderlineLinks();
   const maxW = useMediaMaxWidth(CARD_MAX);
   const inner = maxW - 2 * 12 - 3;
   const href = d.url || fallbackUrl;
@@ -106,6 +108,7 @@ function Card({ d, fallbackUrl }: { d: LinkMetadata; fallbackUrl: string }) {
           onPress={() => openMessageLink(href)}
           onLongPress={() => showLinkActions(href)}
           accessibilityRole="link"
+          style={linkUnderline(underline)}
         >
           {d.title}
         </Text>

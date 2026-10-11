@@ -2,7 +2,8 @@
  * The app-side host client against a scripted page: boot order (wipe before the engine),
  * the ready gate, timeouts, verbatim errors, page reloads and the crash-loop guard.
  */
-import { CryptoHostClient, type HostBoot } from '../host';
+import { CryptoHostClient, cryptoHost, type HostBoot } from '../host';
+import { DecryptionSettings, DeviceId, MegolmDecryptionError, OlmMachine, RoomId, TrustRequirement, UserId } from '../matrixSdkCrypto';
 import { CryptoHostCrashedError, CryptoHostRestartedError, CryptoHostTimeoutError, CryptoHostUnavailableError } from '../errors';
 import { PROTOCOL_VERSION, type CallMessage } from '../protocol';
 
@@ -11,7 +12,7 @@ jest.mock('../../storage', () => ({ appStorage: { set: jest.fn(), getBoolean: je
 /** A page that records calls and answers them the way the test says. */
 function scriptedPage(client: CryptoHostClient) {
   const calls: CallMessage[] = [];
-  let answer: (msg: CallMessage) => { ok: boolean; value?: unknown; error?: { name: string; message: string } } | null = (msg) => {
+  let answer: (msg: CallMessage) => { ok: boolean; value?: unknown; error?: { name: string; message: string; data?: Record<string, unknown> } } | null = (msg) => {
     if (msg.method === 'host.wasmFinish') {
       return { ok: true, value: { versions: { vodozemac: '0', matrix_sdk_crypto: '0', git_sha: '', git_description: '' }, encryptionSettingsDefaults: {} } };
     }
@@ -127,4 +128,32 @@ test('it stops restarting a host that keeps crashing', () => {
   const results = Array.from({ length: 5 }, () => client.crashed('renderer killed'));
   expect(results).toEqual([true, true, true, true, false]);
   expect(client.state).toBe('failed');
+});
+
+test('a decrypt failure comes back as MegolmDecryptionError even under a minified class name', async () => {
+  // The engine throws it as a non-Error whose constructor name is all the page can report;
+  // a page bundle built without keepNames reported it as 'We', and it arrived as a bare Error.
+  const page = scriptedPage(cryptoHost);
+  page.setAnswer((msg) => {
+    if (msg.method === 'host.wasmFinish') return { ok: true, value: { versions: {}, encryptionSettingsDefaults: {} } };
+    if (msg.method === 'machine.initialize') {
+      return { ok: true, value: { handle: 1, userId: '@1:x', deviceId: '11', identityKeys: { ed25519: 'e', curve25519: 'c' }, deviceCreationTimeMs: 0 } };
+    }
+    if (msg.method === 'machine.decryptRoomEvents') {
+      return { ok: true, value: [{ ok: false, error: { name: 'We', message: 'Can\'t find the room key', data: { code: 0, withheldCode: 'm.unverified' } } }] };
+    }
+    return { ok: true, value: null };
+  });
+  const detach = cryptoHost.attach({ post: (m) => page.post(m) }, boot());
+  try {
+    page.hello();
+    await cryptoHost.whenReady();
+    const machine = await OlmMachine.initialize(new UserId('@1:x'), new DeviceId('11'));
+    const err = await machine.decryptRoomEvent('{}', new RoomId('!r:x'), new DecryptionSettings(TrustRequirement.Untrusted)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MegolmDecryptionError);
+    expect(err).toMatchObject({ code: 0, withheldCode: 'm.unverified', message: "Can't find the room key" });
+  } finally {
+    detach();
+    cryptoHost.resetForTests();
+  }
 });

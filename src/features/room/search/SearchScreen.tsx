@@ -11,7 +11,7 @@
  * overwrites a newer one. Tap a hit: the conversation, scrolled to it.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { I18nManager, ScrollView, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,7 @@ import { spaces } from '@web/stores/spaces';
 import { spaceMembers } from '@web/stores/spaceMembers';
 import { getMessageBodyText } from '@web/components/messageList/utils';
 import { t } from '@web/i18n/t';
+import { snapshot } from '@/bridge/solid';
 import {
   ROOM_TYPE_TEXT,
   deepEqual,
@@ -164,7 +165,9 @@ export function SearchScreen() {
           ? await searchSpaceMessages(spaceId, query, before, info?.e2ee ? roomId : undefined)
           : await searchRoomMessages(roomId, query, before);
       if (mine !== requestId.current) return;
-      setResults((prev) => (before ? [...prev, ...outcome.matches] : outcome.matches));
+      // Local (E2EE) hits are the messages store's own proxies: keep plain copies in React state.
+      const found = outcome.matches.map((m) => ({ roomId: m.roomId, message: snapshot(m.message) }));
+      setResults((prev) => (before ? [...prev, ...found] : found));
       setHasMore(outcome.hasMore);
       setLocalOnly(outcome.localOnly);
       setEncryptedRooms(outcome.encryptedRooms ?? 0);
@@ -312,7 +315,7 @@ export function SearchScreen() {
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingStart: 4, paddingEnd: 12, minHeight: 56 }}>
-          <IconButton icon="arrow-left" label={t('common.back')} onPress={goBack} size="lg" />
+          <IconButton icon={I18nManager.isRTL ? 'arrow-right' : 'arrow-left'} label={t('common.back')} onPress={goBack} size="lg" />
           <SearchInput
             value={text}
             onValueChange={setText}

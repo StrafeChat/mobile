@@ -19,6 +19,12 @@ jest.mock('expo-image', () => {
   const RN = require('react-native');
   return { Image: () => React.createElement(RN.View) };
 });
+// The shell (reached through @/ui) is not under test here; keep its navigation imports out.
+jest.mock('@/shell/SwipeShell', () => ({
+  HorizontalGestureOwner: ({ children }: { children: unknown }) => children,
+  useShellGesture: () => ({ pan: null, progress: null }),
+}));
+
 jest.mock('@web/stores/externalLink', () => ({ requestOpenExternalLink: () => undefined }));
 
 // The setup's bottom-sheet stand-in has no scrollable creator; the plain list is enough here.

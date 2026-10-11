@@ -100,7 +100,14 @@ jest.mock('@web/api/devices', () => {
 });
 
 // eslint-disable-next-line import/first
-import { commitKeyBackup, prepareKeyBackup, RecoveryCodeMismatchError, restoreKeyBackup, stopBackupSync } from '../../overrides/e2ee/keyBackup';
+import {
+  commitKeyBackup,
+  keyBackupActivity,
+  prepareKeyBackup,
+  RecoveryCodeMismatchError,
+  restoreKeyBackup,
+  stopBackupSync,
+} from '../../overrides/e2ee/keyBackup';
 
 jest.setTimeout(120_000);
 
@@ -329,9 +336,15 @@ test('key backup: prepare in the host, upload, wrong code refused, restore on a 
   stopBackupSync();
   mockBackup.machine = alice2;
   const other = await prepareKeyBackup();
-  await expect(restoreKeyBackup('100', other.code)).rejects.toBeInstanceOf(RecoveryCodeMismatchError);
+  // Each restore reports its start and its end, so the recovery sheet knows when to close.
+  const settled = keyBackupActivity.settled;
+  const refused = restoreKeyBackup('100', other.code);
+  expect(keyBackupActivity.running).toBe('restore');
+  await expect(refused).rejects.toBeInstanceOf(RecoveryCodeMismatchError);
+  expect(keyBackupActivity).toMatchObject({ running: null, settled: settled + 1, lastOutcome: 'failed' });
   const imported = await restoreKeyBackup('100', prepared.code);
   expect(imported).toBe(backedUp);
+  expect(keyBackupActivity).toMatchObject({ running: null, settled: settled + 2, lastOutcome: 'succeeded', lastImported: backedUp });
 
   const restored = await alice2.decryptRoomEvent(roomEvent(firstCiphertext, ALICE, 'e0'), new RoomId(ROOM), untrusted());
   expect(JSON.parse(restored.event).content.body).toBe('hello 0');

@@ -16,7 +16,7 @@
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
 import { confirmDialog } from '@web/stores/confirmDialog';
-import { instance } from '@web/stores/instance';
+import { instance, loadInstanceInfo } from '@web/stores/instance';
 import {
   CallEncryptionUnsupportedError,
   acceptIncomingCall,
@@ -50,6 +50,29 @@ export interface JoinVoiceOptions {
 /** The room a join is in flight for (the Join buttons' spinner), or null. */
 export const joiningStore = createExternalStore<string | null>(null);
 
+/** How long a join waits for the instance's feature list before giving up on it. */
+export const INSTANCE_WAIT_MS = 8_000;
+
+/**
+ * Whether the instance has voice. Right after a cold start - a push's Answer button opens
+ * the app and joins as soon as the session is READY - GET / may not have answered yet, and
+ * `voiceEnabled` is still its default (false); wait for it (a while) instead of refusing.
+ */
+async function instanceHasVoice(): Promise<boolean> {
+  if (instance.voiceEnabled) return true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.resolve()
+      .then(() => loadInstanceInfo())
+      .catch(() => undefined),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, INSTANCE_WAIT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
+  return instance.voiceEnabled;
+}
+
 /** Resolves true once connected (or already there), false when refused, cancelled or failed. */
 export async function joinVoiceFromUi(roomId: string, opts: JoinVoiceOptions = {}): Promise<boolean> {
   const fail = (message: string): false => {
@@ -58,12 +81,23 @@ export async function joinVoiceFromUi(roomId: string, opts: JoinVoiceOptions = {
     return false;
   };
   if (joiningStore.get()) return false;
-  if (!instance.voiceEnabled) return fail(t('space.voiceUnsupported'));
+  if (!instance.voiceEnabled) {
+    // Held as "joining" while it waits, so a second tap (or a push action) is not a second join.
+    joiningStore.set(roomId);
+    let has = false;
+    try {
+      has = await instanceHasVoice();
+    } finally {
+      joiningStore.set(null);
+    }
+    if (!has) return fail(t('space.voiceUnsupported'));
+  }
   const spaceId = opts.spaceId === undefined ? (spaceIdOfRoom(roomId) ?? null) : opts.spaceId;
   const openCall = opts.openCall !== false;
 
   if (isConnectedTo(roomId)) {
-    if (opts.video && !voice.session.camera) {
+    // Join with video while already in: the camera, where the Video permission allows it.
+    if (opts.video && !voice.session.camera && (!spaceId || voicePermsFor(auth.user?.id, spaceId, roomId).video)) {
       const cam = await ensureCameraPermission();
       reportPermission('camera', cam);
       if (cam === 'granted') await setCameraEnabled(true);
@@ -137,6 +171,12 @@ export async function acceptIncomingFromUi(video = false): Promise<boolean> {
   const inc = voice.incoming;
   if (!inc) return false;
   const roomId = inc.roomId;
+  // Refused before anything changes: the ring stays up (Decline still works) rather than
+  // vanishing into a join that cannot happen - never a call in the clear.
+  if (!callEncryptionSupported()) {
+    toast.error(t('mobile.voice.errors.e2eeUnsupported'), { icon: 'phone-slash' });
+    return false;
+  }
   stopRingtone();
   const mic = await ensureMicPermission();
   reportPermission('mic', mic);

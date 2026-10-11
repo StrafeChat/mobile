@@ -2,7 +2,6 @@
  * What a conversation's header and its info sheet do: calls, the members list, mark as read,
  * leaving a group, going to a thread's channel.
  */
-import { router } from 'expo-router';
 import { getRoom, removeRoomParticipant } from '@web/api/rooms';
 import { addOrUpdateRoom, removeRoom } from '@web/stores/rooms';
 import { ackRoomOptimistic } from '@web/stores/readState';
@@ -90,13 +89,12 @@ export async function removeFromGroup(roomId: string, userId: string, name: stri
   }
 }
 
-/** A thread's channel: in the shell, or back to it from a pushed thread screen. */
-export function openParentChannel(parentId: string, spaceId: string | null, mode: RoomMode): void {
-  if (mode === 'screen' && router.canGoBack()) {
-    router.back();
-    if (currentRoomId() !== parentId) openRoom(parentId, spaceId);
-    return;
-  }
-  openRoom(parentId, spaceId);
+/**
+ * A thread's channel, in the shell. From a pushed thread screen the whole stack goes: going
+ * back one screen would land on whatever pushed the thread (the thread browser, a search),
+ * not on the channel.
+ */
+export function openParentChannel(parentId: string, spaceId: string | null): void {
+  if (currentRoomId() !== parentId) openRoom(parentId, spaceId);
   backToShell();
 }

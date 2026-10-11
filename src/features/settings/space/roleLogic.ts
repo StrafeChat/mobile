@@ -34,13 +34,30 @@ export function moveRole(orderDesc: readonly SpaceRole[], roleId: string, direct
 }
 
 /**
- * The PATCHes that put custom roles in `orderDesc` (highest first): @everyone stays at 0 and
- * custom roles take 1..N from the bottom up, as the web's reorder does. Only roles whose
- * position changes are sent.
+ * The PATCHes that put custom roles in `orderDesc` (highest first). @everyone stays at 0. When
+ * the roles hold distinct positions, the new order reuses those same positions, so roles that
+ * did not move keep theirs - deleting a role leaves a gap, and renumbering 1..N across it would
+ * PATCH roles at or above the editor's own, which the server refuses part-way through. With
+ * duplicate positions, custom roles take 1..N from the bottom up, as the web's reorder does.
+ * Only roles whose position changes are sent, lowest first.
  */
 export function rolePositionPatches(orderDesc: readonly SpaceRole[]): { id: string; position: number }[] {
   const asc = [...orderDesc].reverse();
-  return asc.map((r, i) => ({ id: r.id, position: i + 1, from: r.position })).filter((p) => p.from !== p.position).map(({ id, position }) => ({ id, position }));
+  const slots = asc.map((r) => r.position).sort((a, b) => a - b);
+  const distinct = slots.every((p, i) => p > 0 && (i === 0 || p !== slots[i - 1]));
+  return asc
+    .map((r, i) => ({ id: r.id, position: distinct ? slots[i]! : i + 1, from: r.position }))
+    .filter((p) => p.from !== p.position)
+    .map(({ id, position }) => ({ id, position }));
+}
+
+/** Whether the role at `index` of a highest-first order may move one place up or down: neither
+ * it nor the role it would pass may be out of the viewer's reach (the server refuses both). */
+export function canMoveRole(orderDesc: readonly SpaceRole[], index: number, direction: 'up' | 'down', viewerHighest: number): boolean {
+  const role = orderDesc[index];
+  const other = orderDesc[direction === 'up' ? index - 1 : index + 1];
+  if (!role || !other) return false;
+  return !roleLocked(role, viewerHighest) && !roleLocked(other, viewerHighest);
 }
 
 /** The everyone role id for a space (its field, or the role named @everyone). */

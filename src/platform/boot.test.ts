@@ -206,6 +206,42 @@ describe('restoring a stored session', () => {
   });
 });
 
+describe('re-asserting subscriptions', () => {
+  const subscribes = (socket: FakeSocket) => socket.sent.filter((f) => f.op === 1);
+
+  test('a fresh sign-in subscribes each channel once: READY spaces are not "joined"', async () => {
+    localStorage.setItem('strafe.desktop.instance', JSON.stringify(INSTANCE));
+    const app = await startApp(routeFetch({}));
+    // Sets `hydrated` before READY, with no spaces yet: the case that used to re-assert
+    // every subscription twice (a 4403 storm, since upstream resubscribeAll mangles ids).
+    app.session.finishSignIn({ token: 'tok-2', user: ME });
+    const socket = FakeSocket.latest();
+    socket.open();
+    socket.receive({ op: 4, d: READY });
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(subscribes(socket)).toEqual([
+      { op: 1, d: { user_id: '1' } },
+      { op: 1, d: { space_id: '100' } },
+      { op: 1, d: { space_id: '200' } },
+    ]);
+  });
+
+  test('a space joined mid-session gets its subscriptions re-asserted', async () => {
+    storeSession();
+    await startApp(routeFetch({}));
+    const socket = FakeSocket.latest();
+    socket.open();
+    socket.receive({ op: 4, d: READY });
+    const before = subscribes(socket).length;
+    const { addOrUpdateSpace } = require('@web/stores/spaces') as typeof import('@web/stores/spaces');
+    addOrUpdateSpace({ id: '101', name: 'Joined', owner_id: '2' } as never);
+    await jest.advanceTimersByTimeAsync(5_000);
+    // The new space itself, then two rounds of resubscribeAll over everything held.
+    expect(subscribes(socket).length).toBeGreaterThan(before + 2);
+    expect(subscribes(socket)).toContainEqual({ op: 1, d: { space_id: '101' } });
+  });
+});
+
 describe('noticing that a session ended', () => {
   async function readyApp(fetch: FetchMock): Promise<App & { socket: FakeSocket }> {
     storeSession();

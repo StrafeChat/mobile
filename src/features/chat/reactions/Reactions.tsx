@@ -54,8 +54,10 @@ function ReactionPill({ roomId, messageId, emoji, count, me, canJoin, onShowReac
   return (
     <Touchable
       feedback="opacity"
-      disabled={disabled}
+      // Not `disabled`: an inert pill still answers the long-press for who reacted (the web's
+      // tooltip sits around its disabled button).
       onPress={() => {
+        if (disabled) return;
         const key = parseReactionKey(emoji);
         reactWith(roomId, messageId, key.kind === 'unicode' ? { unicode: key.emoji } : { customId: key.id });
       }}

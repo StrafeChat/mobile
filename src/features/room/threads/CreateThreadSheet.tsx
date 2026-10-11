@@ -55,7 +55,10 @@ function CreateThreadForm({ request, busy, setBusy }: { request: CreateThreadReq
   const theme = useTheme();
   const gates = useRoomGates(request.roomId, request.spaceId);
   const allowPrivate = !!gates?.canCreatePrivateThreads;
-  const starter = request.starterMessageId ? starterPreview(request.roomId, request.starterMessageId, request.spaceId) : null;
+  // The caller's preview when it built one (chat's message actions), else the loaded message's.
+  const starter = request.starterMessageId
+    ? request.starter?.preview || starterPreview(request.roomId, request.starterMessageId, request.spaceId)
+    : null;
   const [name, setName] = useState(() => (starter ?? '').slice(0, MAX_THREAD_NAME_LENGTH));
   const [archive, setArchive] = useState<Minutes>(String(DEFAULT_THREAD_AUTO_ARCHIVE) as Minutes);
   const [isPrivate, setIsPrivate] = useState(() => !!request.privateDefault && allowPrivate && !request.starterMessageId);

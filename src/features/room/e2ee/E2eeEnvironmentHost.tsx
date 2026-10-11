@@ -3,7 +3,10 @@
  * stores/recoveryPrompt:
  *
  * - e2eeEnvironmentError: no Web Crypto. On a phone the crypto shims and the engine's
- *   WebView make this practically unreachable; if it ever shows, it explains and closes.
+ *   WebView make this practically unreachable; if it ever shows, it explains and closes. The
+ *   error's own text is the web's advice for a browser tab opened over a LAN address (HTTPS,
+ *   mkcert, adb reverse - in English), which means nothing to someone holding a phone, so the
+ *   dialog says what is true here instead.
  * - e2eeStoreError: this device's encryption store cannot be opened (E2eeStoreUnusableError
  *   - the engine's storage was cleared or damaged, or its passphrase is gone from the
  *   keystore). The reset gives the device a fresh identity: resetLocalE2eeStore (the mobile
@@ -56,7 +59,7 @@ export function E2eeEnvironmentHost() {
         open={!!environment}
         onClose={() => setRecoveryPrompt('e2eeEnvironmentError', null)}
         title={t('mobile.crypto.engineUnavailableTitle')}
-        description={environment ?? undefined}
+        description={environment ? t('mobile.crypto.engineUnavailableBody') : undefined}
         icon="lock-open"
         tone="warning"
         actions={[{ label: t('common.gotIt'), onPress: () => setRecoveryPrompt('e2eeEnvironmentError', null) }]}

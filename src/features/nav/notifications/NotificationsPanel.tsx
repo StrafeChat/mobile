@@ -11,8 +11,8 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { t } from '@web/i18n/t';
-import { putRelationship, removeRelationship } from '@web/api/relationships';
-import { removeRelationshipLocally , relationships } from '@web/stores/relationships';
+import { removeRelationship } from '@web/api/relationships';
+import { removeRelationshipLocally, relationships } from '@web/stores/relationships';
 import { ackRoomOptimistic } from '@web/stores/readState';
 import { auth } from '@web/stores/auth';
 import { popoverSubjectFromParticipant } from '@web/lib/userProfilePopoverHelpers';
@@ -21,7 +21,7 @@ import { presentProfileSheet } from '@/platform/presenters';
 import { openRoom } from '@/shell/state';
 import { useTheme } from '@/theme';
 import { Avatar, Badge, Button, EmptyState, Header, Icon, ListHeader, Text, Touchable, toast, useLongPressActions, withAlpha } from '@/ui';
-import { errorMessage } from '../actions';
+import { acceptFriendRequest, errorMessage } from '../actions';
 import { openPmWith } from '../navigation';
 
 type Row =
@@ -146,9 +146,12 @@ export function NotificationsPanel({ bottomInset = 0 }: { bottomInset?: number }
   const respond = useCallback(async (userId: string, accept: boolean) => {
     setBusy(userId);
     try {
-      if (accept) await putRelationship(userId);
-      else await removeRelationship(userId);
-      removeRelationshipLocally(userId);
+      if (accept) {
+        await acceptFriendRequest(userId);
+      } else {
+        await removeRelationship(userId);
+        removeRelationshipLocally(userId);
+      }
     } catch (err) {
       toast.error(errorMessage(err, 'mobile.nav.requestFailed'));
     } finally {

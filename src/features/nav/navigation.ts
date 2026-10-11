@@ -33,14 +33,27 @@ export function backToShell(): void {
 }
 
 /**
- * Show a space: its room list on the nav panel, on the Home tab - what the web does on
- * /spaces/:id (the space root shows the rails). Used after creating or joining a space.
+ * Leave the pushed screen this is called from for the shell. A screen opened on its own - a
+ * cold-start invite link - has no shell beneath it to dismiss to, so it is replaced by the
+ * shell instead (backToShell alone would leave it on screen, its buttons doing nothing).
  */
-export function goToSpace(spaceId: string): void {
+export function closeScreenToShell(): void {
+  if (router.canDismiss()) router.dismissAll();
+  else replaceRoute('/');
+}
+
+/**
+ * Show a space: its room list on the nav panel, on the Home tab - what the web does on
+ * /spaces/:id (the space root shows the rails). Used after creating or joining a space;
+ * `fromScreen` when called from a pushed screen (invite, Discover, create), which then closes
+ * even when it was opened without the shell beneath.
+ */
+export function goToSpace(spaceId: string, opts: { fromScreen?: boolean } = {}): void {
   setSelectedSpaceId(spaceId);
   setShellTab('home');
   openNav();
-  backToShell();
+  if (opts.fromScreen) closeScreenToShell();
+  else backToShell();
 }
 
 /** Discover, from the rail's compass. */
@@ -61,11 +74,6 @@ export function openJoinSpace(): void {
 /** The invite preview for a code (`abc` or `abc@other.instance`). */
 export function openInvite(code: string): void {
   pushRoute(`/invite/${encodeURIComponent(code)}`);
-}
-
-/** The instance admin dashboard (settings area). */
-export function openAdminDashboard(): void {
-  pushRoute('/admin');
 }
 
 /**

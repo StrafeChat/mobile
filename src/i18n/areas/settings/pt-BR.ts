@@ -77,7 +77,6 @@ export default {
   notifPermDefault: 'Seu celular pedirá permissão quando você ativar isto.',
   openSystemSettings: 'Abrir configurações do sistema',
   notifWhileOpenHint: 'Notificar também a conversa na tela enquanto o app estiver aberto.',
-  notifNoPush: 'As notificações chegam enquanto o Strafe está em execução. Sua instância não envia notificações push para o app fechado.',
   notifSoundsTitle: 'Sons e vibração',
   notifSoundHint: 'Usa o som e o volume de notificação do seu celular.',
   notifPms: 'Mensagens privadas',
@@ -85,6 +84,8 @@ export default {
 
   restoreLast: 'Abrir a última conversa ao iniciar',
   spellcheckHint: 'Verificação ortográfica e correção automática no editor de mensagens.',
+  swipeReply: 'Deslizar uma mensagem para responder',
+  swipeReplyHint: 'Deslize uma mensagem para a esquerda para respondê-la. Desativado, deslizar para a esquerda em qualquer lugar de uma conversa abre a lista de membros; responda pelo menu da mensagem.',
   keybindsWebOnly: 'Os atalhos de teclado são definidos no Strafe em um computador.',
 
   useDeviceLanguage: 'Usar o idioma do dispositivo',

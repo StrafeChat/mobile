@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["StrafePushModule"],
+    "appDelegateSubscribers": ["StrafePushAppDelegateSubscriber"]
+  },
+  "android": {
+    "modules": ["chat.strafe.push.StrafePushModule"]
+  }
+}

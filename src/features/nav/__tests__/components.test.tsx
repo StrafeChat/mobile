@@ -9,7 +9,8 @@ import { setSpaces } from '@web/stores/spaces';
 import { setRooms } from '@web/stores/rooms';
 import { readState, setReadState } from '@web/stores/readState';
 import { setSpaceMembers } from '@web/stores/spaceMembers';
-import { setRelationships, RelType } from '@web/stores/relationships';
+import { relationships, setRelationships, RelType } from '@web/stores/relationships';
+import { setInstance } from '@web/stores/instance';
 import { setPresence } from '@web/stores/presence';
 import { PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
 import { ME, member, pm, resetStores, role, space, sroom, user } from '@/data/testing/fixtures';
@@ -163,6 +164,33 @@ describe('NavPanel', () => {
     expect(screen.getByText('Zed')).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: 'Accept' }));
     expect(relApi.putRelationship).toHaveBeenCalledWith('z');
+    // Even before the gateway says so, the request has become a friend (and left the inbox).
+    expect(relationships.relationships).toEqual([expect.objectContaining({ type: RelType.Friend })]);
+    expect(screen.queryByText('Zed')).toBeNull();
+  });
+
+  test('Notifications tab: a RELATIONSHIP_ADD that lands before the accept response keeps the new friend', async () => {
+    const zed = user('z', { display_name: 'Zed' });
+    setRelationships({ relationships: [{ id: 'z', type: RelType.IncomingRequest, user: zed }], loading: false, hydrated: true });
+    (relApi.putRelationship as jest.Mock).mockImplementationOnce(async () => {
+      // The gateway event first (the server publishes before it answers).
+      setRelationships('relationships', [{ id: 'z', type: RelType.Friend, user: zed }]);
+    });
+    await mount();
+    await fireEvent.press(screen.getByRole('tab', { name: /^Notifications/ }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Accept' }));
+    expect(relationships.relationships).toEqual([expect.objectContaining({ type: RelType.Friend })]);
+  });
+
+  test('You tab: an instance administrator gets the admin dashboard', async () => {
+    await mount();
+    await fireEvent.press(screen.getByRole('tab', { name: 'You' }));
+    expect(screen.queryByRole('button', { name: 'Admin dashboard' })).toBeNull();
+    await act(async () => setInstance('instanceAdmin', true));
+    await fireEvent.press(screen.getByRole('button', { name: 'Admin dashboard' }));
+    // Called bare - not handed the press event, which it would take for the tab to open.
+    expect(links.openAdminDashboard).toHaveBeenCalledWith();
+    await act(async () => setInstance('instanceAdmin', false));
   });
 
   test('You tab: status buttons save, shortcuts open Friends', async () => {
@@ -205,5 +233,16 @@ describe('FriendsView', () => {
     expect(screen.getByText('Cat')).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: 'Accept' }));
     expect(relApi.putRelationship).toHaveBeenCalledWith('3');
+  });
+
+  test('a reload keeps the list on screen (no full-page spinner over pull to refresh)', async () => {
+    await render(
+      <UiProvider>
+        <FriendsView />
+      </UiProvider>,
+    );
+    await act(async () => setRelationships('loading', true));
+    expect(screen.getByText('Ann')).toBeTruthy();
+    await act(async () => setRelationships('loading', false));
   });
 });

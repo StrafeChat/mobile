@@ -18,8 +18,9 @@ import { t } from '@web/i18n/t';
 import type { RoomInfo } from '@/data';
 import { RoomCallBanner } from '@/features/voice';
 import { useTheme } from '@/theme';
-import { Banner, Icon, Text, withAlpha } from '@/ui';
+import { Banner, Icon, Text, toast, withAlpha } from '@/ui';
 import { useBackupExists, useCryptoHostState, usePendingDecryptCount } from './hooks';
+import { errorMessage } from './util';
 
 function ArchivedThreadStrip({ locked }: { locked: boolean }) {
   const theme = useTheme();
@@ -68,7 +69,11 @@ function KeysPendingBanner({ roomId }: { roomId: string }) {
                 const uid = auth.user?.id;
                 if (!uid || restoring) return;
                 setRestoring(true);
-                void restoreWithPrompt(uid).finally(() => setRestoring(false));
+                // The flow reports its own failures in the prompt; anything it lets through (the
+                // lost-code start-over failing) must not leave the button spinning or go unheard.
+                void restoreWithPrompt(uid)
+                  .catch((e: unknown) => toast.error(errorMessage(e)))
+                  .finally(() => setRestoring(false));
               },
             }
           : undefined

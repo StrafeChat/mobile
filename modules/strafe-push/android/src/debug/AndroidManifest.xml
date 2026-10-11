@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Debug builds only: lets a developer replay a push captured by the gateway's debug
+         transport without Google (docs/PUSH.md): `adb shell am broadcast` to package
+         chat.strafe.mobile, action chat.strafe.mobile.DEBUG_PUSH, string extras s (slot) and
+         p (base64url body). Exported so `am` can reach it; it only accepts bodies encrypted
+         to this device's own slot keys, exactly like a real push. Release builds don't have it. -->
+    <receiver
+      android:name="chat.strafe.push.DebugPushReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="chat.strafe.mobile.DEBUG_PUSH" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

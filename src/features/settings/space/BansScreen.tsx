@@ -26,7 +26,7 @@ function Bans({ data, setError }: { data: SpaceSettingsData; setError: (m: strin
   const bans = useLoad(async () => [...(await listSpaceBans(data.spaceId))].sort((a, b) => b.created_at.localeCompare(a.created_at)), [data.spaceId]);
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState('');
-  const all = bans.data ?? [];
+  const all = useMemo(() => bans.data ?? [], [bans.data]);
   const list = useMemo(() => filterBans(all, query), [all, query]);
 
   async function revoke(b: SpaceBan) {

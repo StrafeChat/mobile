@@ -16,9 +16,8 @@ import { auth } from '@web/stores/auth';
 import { messages, type DecryptedMessage } from '@web/stores/messages';
 import { pinMessage, unpinMessage } from '@web/stores/pinnedMessages';
 import { customEmojis } from '@web/stores/customEmojis';
-import { getMessageBodyText, messagePreviewText } from '@web/components/messageList/utils';
-import { MAX_THREAD_NAME_LENGTH } from '@web/api/threads';
-import { messageActions, roomParticipantPool, roomGates, userDisplay, type MessageAction, type RoomGates } from '@/data';
+import { getMessageBodyText } from '@web/components/messageList/utils';
+import { messageActions, roomGates, userDisplay, type MessageAction, type RoomGates } from '@/data';
 import { presentReportSheet } from '@/platform/presenters';
 import { useTheme } from '@/theme';
 import { closeActionSheet, Icon, showActionSheet, toast, Touchable, withAlpha, type ActionItem } from '@/ui';
@@ -28,7 +27,10 @@ import { errorText } from '../navigation';
 import { openReactionPicker, reactWith } from '../reactions/ReactionPicker';
 import { loadRecent, quickReactions, type EmojiPick } from '../reactions/recents';
 import { confirmDeleteMessage } from './DeleteMessageSheet';
-import { openCreateThread } from './CreateThreadSheet';
+// The room area owns the create-thread form (from a message and from the thread browser).
+// Its presenters module directly, not '@/features/room': that index pulls RoomView, which
+// imports this area back.
+import { openCreateThread } from '@/features/room/presenters';
 
 export interface MessageActionContext {
   roomId: string;
@@ -100,12 +102,9 @@ function run(action: MessageAction, msg: DecryptedMessage, ctx: MessageActionCon
     case 'reply':
       startReply(roomId, msg.id);
       return;
-    case 'createThread': {
-      if (!spaceId) return;
-      const preview = messagePreviewText(getMessageBodyText(msg), roomParticipantPool(roomId), auth.user?.id, MAX_THREAD_NAME_LENGTH);
-      openCreateThread({ spaceId, roomId, starter: { id: msg.id, preview } });
+    case 'createThread':
+      if (spaceId) openCreateThread({ spaceId, roomId, starterMessageId: msg.id });
       return;
-    }
     case 'pin':
     case 'unpin':
       void (action === 'unpin' ? unpinMessage(roomId, msg.id) : pinMessage(roomId, msg.id)).catch((err: unknown) => toast.error(errorText(err)));

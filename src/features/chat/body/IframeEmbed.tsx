@@ -12,9 +12,9 @@ import { Image } from 'expo-image';
 import { WebView } from 'react-native-webview';
 import { t } from '@web/i18n/t';
 import type { VideoEmbed } from '@web/lib/embeds/providers';
-import { HorizontalGestureOwner } from '@/shell/SwipeShell';
 import { useTheme } from '@/theme';
 import { Icon, onScrim, Text, Touchable } from '@/ui';
+import { RowHorizontalOwner } from '../row/SwipeToReply';
 
 const PORTRAIT_W = 236;
 
@@ -41,7 +41,7 @@ export function IframeEmbed({ embed, poster, title, maxWidth }: { embed: VideoEm
   return (
     <View style={[styles.frame, { width, height, borderRadius: theme.radii.sm }]}>
       {active ? (
-        <HorizontalGestureOwner>
+        <RowHorizontalOwner>
           <WebView
             style={styles.web}
             source={{ html: embedHtml(embed, title || embed.provider), ...(origin ? { baseUrl: origin } : {}) }}
@@ -53,7 +53,7 @@ export function IframeEmbed({ embed, poster, title, maxWidth }: { embed: VideoEm
             setSupportMultipleWindows={false}
             accessibilityLabel={title || embed.provider}
           />
-        </HorizontalGestureOwner>
+        </RowHorizontalOwner>
       ) : (
         <Touchable feedback="opacity" onPress={() => setActive(true)} accessibilityRole="button" accessibilityLabel={label} style={styles.fill}>
           {poster ? <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={poster} /> : null}

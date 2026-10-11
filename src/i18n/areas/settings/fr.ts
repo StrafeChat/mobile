@@ -77,7 +77,6 @@ export default {
   notifPermDefault: "Votre téléphone demandera l'autorisation quand vous activerez ceci.",
   openSystemSettings: 'Ouvrir les réglages du système',
   notifWhileOpenHint: "Notifier aussi la conversation affichée pendant que l'application est ouverte.",
-  notifNoPush: "Les notifications arrivent tant que Strafe est ouvert. Votre instance n'envoie pas de notifications push à l'application fermée.",
   notifSoundsTitle: 'Sons et vibrations',
   notifSoundHint: 'Utilise le son et le volume de notification de votre téléphone.',
   notifPms: 'Messages privés',
@@ -85,6 +84,8 @@ export default {
 
   restoreLast: 'Ouvrir la dernière conversation au lancement',
   spellcheckHint: "Vérification orthographique et correction automatique dans l'éditeur de messages.",
+  swipeReply: 'Balayer un message pour répondre',
+  swipeReplyHint: 'Balayez un message vers la gauche pour y répondre. Désactivé, un balayage vers la gauche n\'importe où dans une conversation ouvre la liste des membres ; répondez depuis le menu du message.',
   keybindsWebOnly: 'Les raccourcis clavier se règlent dans Strafe sur un ordinateur.',
 
   useDeviceLanguage: "Utiliser la langue de l'appareil",

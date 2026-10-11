@@ -8,8 +8,8 @@
  * show its time (the web shows it on hover). A mention of the viewer tints the row with a
  * primary bar; a pending send is muted; a jump flashes the row it lands on.
  */
-import { memo, useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text as RNText, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text as RNText, View, type AccessibilityActionEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming, cancelAnimation } from 'react-native-reanimated';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
@@ -31,8 +31,10 @@ import { openUserProfile, showAuthorMenu } from '../people';
 import { MessageReactionsRow } from '../reactions/Reactions';
 import { ReplyReference } from './ReplyReference';
 import { SwipeToReply } from './SwipeToReply';
+import { swipeToReplyEnabled } from '../preferences';
 import { ThreadFooter } from './ThreadFooter';
 import { useListContext } from './listContext';
+import { sameMessageItem } from '../list/listLogic';
 
 type MessageItem = Extract<MessageListItem, { kind: 'message' }>;
 
@@ -78,13 +80,18 @@ function FlashOverlay({ id }: { id: string }) {
   );
 }
 
-export const MessageRow = memo(function MessageRow({ item }: { item: MessageItem }) {
-  const ctx = useListContext();
-  const msg = useMessage(ctx.roomId, item.id);
-  if (!msg) return null;
-  if (item.system) return <SystemRow msg={msg} />;
-  return <UserMessageRow item={item} msg={msg} />;
-});
+// Compared by value: each structural change of the list (a message arriving) hands every row
+// a new item object, and a shallow compare re-rendered every mounted row for it.
+export const MessageRow = memo(
+  function MessageRow({ item }: { item: MessageItem }) {
+    const ctx = useListContext();
+    const msg = useMessage(ctx.roomId, item.id);
+    if (!msg) return null;
+    if (item.system) return <SystemRow msg={msg} />;
+    return <UserMessageRow item={item} msg={msg} />;
+  },
+  (a, b) => sameMessageItem(a.item, b.item),
+);
 
 function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessage }) {
   const theme = useTheme();
@@ -115,6 +122,26 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
     <EditedMarker label={t('messages.editedAt', { time: formatMessageTimestamp(new Date(msg.updated_at)) })} />
   ) : null;
   const openProfile = () => openUserProfile(msg.sender_id, userCtx);
+  const canReply = ctx.canReply && realId;
+  // The gesture only when the person turned it on (see ../preferences); the accessibility
+  // action below is there either way.
+  const swipeReply = useSolid(() => swipeToReplyEnabled());
+  const canSwipeReply = canReply && swipeReply;
+  const bodyText = getMessageBodyText(msg);
+  // The participant pool walks the room's loaded messages: once per text, not per render.
+  const preview = useMemo(() => messagePreviewText(bodyText, roomParticipantPool(roomId), auth.user?.id, 500), [bodyText, roomId]);
+  // Screen readers can neither long-press a row reliably nor swipe it: both as actions.
+  const a11yActions = useMemo(
+    () => [
+      { name: 'longpress', label: t('mobile.ui.showActions') },
+      ...(canReply ? [{ name: 'reply', label: t('messages.actions.reply') }] : []),
+    ],
+    [canReply],
+  );
+  const onA11yAction = (e: AccessibilityActionEvent) => {
+    if (e.nativeEvent.actionName === 'longpress') openActions();
+    else if (e.nativeEvent.actionName === 'reply') reply();
+  };
 
   const nameText = (
     <RNText
@@ -132,7 +159,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const body = (
     <MessageBody
       key={msg.id}
-      text={getMessageBodyText(msg)}
+      text={bodyText}
       roomId={roomId}
       spaceId={spaceId}
       allowLinkPreviews={ctx.allowLinkPreviews}
@@ -178,12 +205,15 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
       : null;
 
   return (
-    <SwipeToReply enabled={ctx.canReply && realId} onReply={reply}>
+    <SwipeToReply enabled={canSwipeReply} onReply={reply}>
       <Pressable
         onPress={!item.showHeader && !compact ? () => setTimeFor((v) => (v === msg.id ? null : msg.id)) : undefined}
         {...rowLongPress}
-        accessibilityLabel={`${name}, ${formatMessageTimestamp(created)}: ${messagePreviewText(getMessageBodyText(msg), roomParticipantPool(roomId), auth.user?.id, 500)}`}
+        accessibilityRole="text"
+        accessibilityLabel={`${name}, ${formatMessageTimestamp(created)}: ${preview}`}
         accessibilityHint={t('mobile.chat.messageHint')}
+        accessibilityActions={a11yActions}
+        onAccessibilityAction={onA11yAction}
         style={[
           styles.row,
           item.showHeader ? styles.headerRow : styles.continuation,

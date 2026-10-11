@@ -226,4 +226,11 @@ describe('own presence', () => {
     expect(await setOwnCustomStatus('')).toBe(false);
     expect(presence.byUser[ME]?.custom_status).toBe('at lunch');
   });
+
+  test('clearing sends an empty custom status (a missing field leaves the old one on the server)', async () => {
+    setPresence({ byUser: { [ME]: { status: 'online', custom_status: 'busy' } } });
+    expect(await setOwnCustomStatus('   ')).toBe(true);
+    expect(usersApi.patchMe).toHaveBeenLastCalledWith({ presence: { custom_status: '' } });
+    expect(presence.byUser[ME]?.custom_status).toBeUndefined();
+  });
 });

@@ -77,7 +77,8 @@ export function HomeList({ bottomInset = 0 }: { bottomInset?: number }) {
       { kind: 'shortcut', key: 'notes' },
       { kind: 'section', key: 'conversations' },
     ];
-    if (loading) out.push({ kind: 'status', key: 'loading', text: t('common.loading') });
+    // "Loading" only while there is nothing to show yet (a pull to refresh keeps the list).
+    if (loading && ids.length === 0) out.push({ kind: 'status', key: 'loading', text: t('common.loading') });
     else if (ids.length === 0) out.push({ kind: 'status', key: 'empty', text: t('nav.noConversations') });
     for (const roomId of ids) out.push({ kind: 'pm', key: `pm:${roomId}`, roomId });
     return out;
@@ -116,7 +117,7 @@ export function HomeList({ bottomInset = 0 }: { bottomInset?: number }) {
             </Text>
           );
         case 'pm':
-          return <PmRow roomId={item.roomId} activeRoomId={sel.activeRoomId} />;
+          return <PmRow roomId={item.roomId} active={sel.activeRoomId === item.roomId} />;
       }
     },
     [sel, requests],

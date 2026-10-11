@@ -7,7 +7,7 @@ import './navTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import { setSpaces, spaces } from '@web/stores/spaces';
+import { refreshSpaceRooms, setSpaces, spaces } from '@web/stores/spaces';
 import { PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
 import { resetStores, role, space, sroom } from '@/data/testing/fixtures';
 import { closeView, setSelectedSpaceId, shell } from '@/shell/state';
@@ -19,7 +19,7 @@ import { CreateSpaceScreen } from '../create/CreateSpaceScreen';
 import { InviteScreen } from '../invite/InviteScreen';
 import { DiscoverScreen } from '../discover/DiscoverScreen';
 import { NavSheets } from '../sheets/NavSheets';
-import { closeNavSheet, openCreateRoomSheet, openInviteSheet } from '../sheets/store';
+import { closeNavSheet, navSheetStore, openCreateRoomSheet, openInviteSheet } from '../sheets/store';
 
 jest.mock('@web/api/spaces', () => ({
   ...jest.requireActual<object>('@web/api/spaces'),
@@ -134,6 +134,38 @@ describe('invite screen', () => {
     await settle();
     expect(screen.getByText('Invalid or expired invite')).toBeTruthy();
   });
+
+  test('opened on its own (a cold-start link, no shell beneath), Go home still leaves it', async () => {
+    (router.canDismiss as jest.Mock).mockReturnValue(false);
+    (spacesApi.getInvitePreview as jest.Mock).mockImplementationOnce(async () => {
+      throw new Error('not found');
+    });
+    await render(<InviteScreen code="nope" />);
+    await settle();
+    await fireEvent.press(screen.getByRole('button', { name: 'Go home' }));
+    expect(router.replace).toHaveBeenLastCalledWith('/');
+  });
+
+  test('opened on its own, joining lands on the shell with the space selected', async () => {
+    (router.canDismiss as jest.Mock).mockReturnValue(false);
+    await render(<InviteScreen code="Zz9@b.example" />);
+    await settle();
+    await fireEvent.press(screen.getByRole('button', { name: 'Join Faraway' }));
+    await settle();
+    expect(shell.selectedSpaceId()).toBe('local9');
+    expect(router.replace).toHaveBeenCalledWith('/');
+  });
+
+  test('with the shell beneath, it is dismissed back to it', async () => {
+    (router.canDismiss as jest.Mock).mockReturnValue(true);
+    await render(<InviteScreen code="Zz9@b.example" />);
+    await settle();
+    await fireEvent.press(screen.getByRole('button', { name: 'Join Faraway' }));
+    await settle();
+    expect(router.dismissAll).toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    (router.canDismiss as jest.Mock).mockReturnValue(false);
+  });
 });
 
 describe('discover', () => {
@@ -183,5 +215,24 @@ describe('sheets', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Create room' }));
     await settle();
     expect(spacesApi.createSpaceRoom).toHaveBeenCalledWith('s1', { name: 'Lounge', type: 4, parent_id: 'secB' });
+  });
+
+  test('a room that was created is not reported as failed when the list refresh after it fails', async () => {
+    setSpaces({ spaces: [space('s1', [EVERYONE])], spaceRoomsBySpaceId: { s1: [] }, loading: false, hydrated: true });
+    (refreshSpaceRooms as jest.Mock).mockImplementationOnce(async () => {
+      throw new Error('offline');
+    });
+    await render(
+      <UiProvider>
+        <NavSheets />
+      </UiProvider>,
+    );
+    await act(async () => openCreateRoomSheet('s1'));
+    await fireEvent.changeText(screen.getByLabelText(/^Room name/), 'news');
+    await fireEvent.press(screen.getByRole('button', { name: 'Create room' }));
+    await settle();
+    expect(spacesApi.createSpaceRoom).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Failed to create room')).toBeNull();
+    expect(navSheetStore.get()).toBeNull();
   });
 });

@@ -6,18 +6,18 @@
  * Messages in a space) also has its own button, and can be undone from the toast. Pull to
  * refresh re-reads the pins.
  */
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { pinMessage, refreshRoomPins, unpinMessage } from '@web/stores/pinnedMessages';
+import { ensureRoomPins, pinMessage, refreshRoomPins, unpinMessage } from '@web/stores/pinnedMessages';
 import { getMessageBodyText } from '@web/components/messageList/utils';
 import type { DecryptedMessage } from '@web/stores/messages';
 import { t } from '@web/i18n/t';
-import { isPlaceholderBody, useEnsureRoomPins, usePinnedMessage, usePinnedMessageIds, usePinsState, useRoomGates, useRoomInfo } from '@/data';
+import { isPlaceholderBody, usePinnedMessage, usePinnedMessageIds, usePinsState, useRoomGates, useRoomInfo } from '@/data';
 import { useTheme } from '@/theme';
-import { EmptyState, Header, IconButton, Spinner, showActionSheet, toast } from '@/ui';
+import { Button, EmptyState, Header, IconButton, Spinner, showActionSheet, toast } from '@/ui';
 import { MessageCard } from '../shared/MessageCard';
 import { goBack, goToMessage } from '../navigation';
 import { copyText, errorMessage } from '../util';
@@ -67,11 +67,30 @@ export function PinsScreen() {
   const roomId = String(params.roomId ?? '');
   const info = useRoomInfo(roomId, typeof params.spaceId === 'string' ? params.spaceId : null);
   const spaceId = (typeof params.spaceId === 'string' && params.spaceId) || info?.spaceId || null;
-  useEnsureRoomPins(roomId);
   const ids = usePinnedMessageIds(roomId);
   const state = usePinsState(roomId);
   const gates = useRoomGates(roomId, spaceId);
   const [refreshing, setRefreshing] = useState(false);
+  // Whether a read of the pins has finished. The store swallows a failed read (it only logs),
+  // so "not loaded" after a finished read means it failed - say so and offer a retry rather
+  // than spinning forever with no way to pull to refresh.
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    setSettled(false);
+    void ensureRoomPins(roomId).finally(() => {
+      if (live) setSettled(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [roomId]);
+
+  const reload = useCallback(() => {
+    setSettled(false);
+    void refreshRoomPins(roomId).finally(() => setSettled(true));
+  }, [roomId]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -81,8 +100,15 @@ export function PinsScreen() {
         leadingIcon="thumbtack"
         onBack={goBack}
       />
-      {!state.loaded && ids.length === 0 ? (
+      {!state.loaded && ids.length === 0 && !settled ? (
         <Spinner fill label={t('common.loading')} />
+      ) : !state.loaded && ids.length === 0 ? (
+        <EmptyState
+          icon="circle-exclamation"
+          body={t('mobile.room.pinsLoadFailed')}
+          size="page"
+          action={<Button title={t('common.retry')} variant="secondary" icon="rotate-right" onPress={reload} />}
+        />
       ) : (
         <ReadableWidth>
           <FlashList

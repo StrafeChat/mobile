@@ -48,7 +48,8 @@
  *      screenShareSupported, videoTrackRef / currentVoiceRoom for rendering with
  *      @livekit/react-native's VideoTrack, release of a held push-to-talk when the app
  *      leaves the foreground, and initMobileVoiceRuntime (audio session + Android
- *      foreground service, driven by `voice.session`).
+ *      foreground service, driven by `voice.session`; its notification's Mute / Hang up
+ *      run toggleMute / leaveVoiceRoom).
  *
  * Everything not listed is the web code unchanged: when merging a web change, copy it
  * over and re-apply M1-M9.
@@ -1693,5 +1694,6 @@ export function currentVoiceRoom(): Room | null {
   return live.room;
 }
 
-// The audio session and Android's call service follow the session's status and camera.
-initMobileVoiceRuntime(() => voice.session);
+// The audio session and Android's call service follow the session's status, camera and
+// microphone; the service notification's Mute and Hang up run the same actions as the app.
+initMobileVoiceRuntime(() => voice.session, { toggleMute, hangUp: () => void leaveVoiceRoom() });

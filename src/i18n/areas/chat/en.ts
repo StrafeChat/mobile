@@ -5,6 +5,7 @@
  */
 export default {
   listLabel: 'Messages',
+  loadFailed: 'Couldn\'t load messages.',
   messageHint: 'Long-press for actions, swipe left to reply',
   openProfile: 'Opens their profile',
   jumpToUnread: 'Jumps to the first unread message',

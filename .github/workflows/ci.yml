@@ -73,10 +73,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:crypto-host
+      # The push decryption, payload and rendering sources the StrafePush module and the
+      # Notification Service Extension share (RFC 8291 test vector included).
+      - name: Test the shared push sources
+        run: swift test --package-path modules/strafe-push/ios
       - run: npx expo prebuild --platform ios
       - name: Build for the simulator
         run: |
           set -o pipefail
           xcodebuild -workspace ios/Strafe.xcworkspace -scheme Strafe -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build | tail -n 200
+            -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build | tail -n 200
+      # The scheme builds the extension as a dependency of the app; make sure it was embedded.
+      - name: Check the Notification Service Extension is embedded
+        run: |
+          appex=ios/build/Build/Products/Debug-iphonesimulator/Strafe.app/PlugIns/StrafeNotificationService.appex
+          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$appex/Info.plist")" = com.apple.usernotifications.service
+          test -x "$appex/StrafeNotificationService"

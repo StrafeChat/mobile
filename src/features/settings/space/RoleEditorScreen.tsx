@@ -58,14 +58,18 @@ export function roleDraftDirty(r: SpaceRole, d: RoleDraft): boolean {
   );
 }
 
-/** The PATCH body for a role draft (no name for @everyone, nor a blank one). */
-export function rolePatch(r: SpaceRole, d: RoleDraft): { permissions: number; color: number; hoist: boolean; mentionable: boolean; name?: string } {
-  const body: { permissions: number; color: number; hoist: boolean; mentionable: boolean; name?: string } = {
-    permissions: d.permissions,
+/**
+ * The PATCH body for a role draft (no name for @everyone, nor a blank one). The permissions go
+ * only when they changed: the server checks every bit sent against what the editor may grant,
+ * so resending a bit the editor lacks (one the role already had) would refuse a colour change.
+ */
+export function rolePatch(r: SpaceRole, d: RoleDraft): { permissions?: number; color: number; hoist: boolean; mentionable: boolean; name?: string } {
+  const body: { permissions?: number; color: number; hoist: boolean; mentionable: boolean; name?: string } = {
     color: hexToInt(d.color),
     hoist: d.hoist,
     mentionable: d.mentionable,
   };
+  if (d.permissions !== r.permissions) body.permissions = d.permissions;
   if (!isEveryone(r) && d.name.trim()) body.name = d.name.trim();
   return body;
 }
@@ -76,7 +80,10 @@ export function RoleEditorScreen() {
   const { roleId } = useLocalSearchParams<{ roleId: string }>();
   const data = useSpaceSettings(spaceId);
   const role = data.roles.find((r) => r.id === roleId);
-  const canManage = data.gates.canManageRoles;
+  // A role at or above the viewer's own is out of reach: the server refuses any edit to it
+  // (@everyone excepted), so it is shown read-only rather than as a form that cannot save.
+  const locked = !!role && !isEveryone(role) && roleLocked(role, data.gates.viewerHighestPosition);
+  const canManage = data.gates.canManageRoles && !locked;
   const [tab, setTab] = useState<Tab>('display');
   const [draft, setDraft] = useState<RoleDraft | null>(role ? draftOf(role) : null);
   const [busy, setBusy] = useState(false);
@@ -108,9 +115,10 @@ export function RoleEditorScreen() {
     // Labels are translated getters; recompute when the language changes too.
   }, [permQuery]);
 
-  const ctx = { ownerId: data.space?.owner_id, viewerId: data.viewerId };
+  const ownerId = data.space?.owner_id;
+  const ctx = useMemo(() => ({ ownerId, viewerId: data.viewerId }), [ownerId, data.viewerId]);
   const holders = useMemo(() => (role ? data.members.filter((m) => m.roles?.includes(role.id)) : []), [data.members, role]);
-  const addable = useMemo(() => (role ? addableMembers(data.members, role.id, memberQuery, ctx) : []), [data.members, role, memberQuery, ctx.ownerId, ctx.viewerId]);
+  const addable = useMemo(() => (role ? addableMembers(data.members, role.id, memberQuery, ctx) : []), [data.members, role, memberQuery, ctx]);
 
   if (!data.space || !role || !draft) {
     return (
@@ -128,7 +136,6 @@ export function RoleEditorScreen() {
   }
 
   const everyone = isEveryone(role);
-  const locked = roleLocked(role, data.gates.viewerHighestPosition);
   const edit = (patch: Partial<RoleDraft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
 
   async function save() {

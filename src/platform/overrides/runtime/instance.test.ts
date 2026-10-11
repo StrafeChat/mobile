@@ -117,4 +117,34 @@ describe('loadInstanceInfo (mobile)', () => {
     await m.loadInstanceInfo();
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  test("a slow answer from the previous instance does not stand in for the new one's", async () => {
+    const OLD = { strafe: { version: '0.9' }, federation: { enabled: true, domain: 'old.example' }, features: { invite_only: { enabled: true } } };
+    let answerOld: (r: ReturnType<typeof reply>) => void = () => undefined;
+    let calls = 0;
+    const fetch = routeFetch({
+      '/': () => {
+        calls += 1;
+        if (calls === 1) return new Promise((resolve) => (answerOld = resolve));
+        return reply(200, INDEX);
+      },
+    });
+    const m = load(fetch);
+    const first = m.loadInstanceInfo();
+    await flush(10);
+    // The store holds the in-flight sentinel now; what the screens show must not.
+    expect(m.instanceVersion()).toBe('');
+    // The person picked another instance while the first one's GET / was still out.
+    m.resetInstanceInfo();
+    await m.loadInstanceInfo();
+    expect(m.instance.domain).toBe('chat.example.org');
+    answerOld(reply(200, OLD));
+    await first;
+    await flush(20);
+    // The old answer landed in the store; the new instance is read again over it.
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(m.instance).toMatchObject({ domain: 'chat.example.org', inviteOnly: false, loaded: true });
+    expect(m.instanceVersion()).toBe('1.2.3');
+    expect(m.instanceInfoFailed()).toBe(false);
+  });
 });

@@ -19,7 +19,7 @@ import { intToHex } from '../color';
 import { Note, SettingItem } from '../components/rows';
 import { TextPromptSheet } from '../components/sheets';
 import { spaceRolePath } from '../routes';
-import { customRolesDesc, isEveryone, moveRole, roleLocked, rolePositionPatches } from './roleLogic';
+import { canMoveRole, customRolesDesc, isEveryone, moveRole, roleLocked, rolePositionPatches } from './roleLogic';
 import { SpacePage } from './SpacePage';
 import type { SpaceSettingsData } from './useSpaceSettings';
 
@@ -121,7 +121,7 @@ function Roles({ data, setError }: { data: SpaceSettingsData; setError: (m: stri
                   <IconButton
                     icon="arrow-up"
                     label={t('mobile.settings.moveUp', { name: r.name })}
-                    disabled={i === 0 || saving}
+                    disabled={saving || !canMoveRole(shown, i, 'up', data.gates.viewerHighestPosition)}
                     onPress={() => {
                       haptics.selection();
                       setOrder((o) => moveRole(o ?? custom, r.id, 'up'));
@@ -130,7 +130,7 @@ function Roles({ data, setError }: { data: SpaceSettingsData; setError: (m: stri
                   <IconButton
                     icon="arrow-down"
                     label={t('mobile.settings.moveDown', { name: r.name })}
-                    disabled={i === shown.length - 1 || saving}
+                    disabled={saving || !canMoveRole(shown, i, 'down', data.gates.viewerHighestPosition)}
                     onPress={() => {
                       haptics.selection();
                       setOrder((o) => moveRole(o ?? custom, r.id, 'down'));

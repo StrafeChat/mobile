@@ -13,12 +13,15 @@ import { useTheme } from '@/theme';
 import { Avatar, Badge, BotTag, Icon, OfficialTag, Text, Touchable, UserAvatar, useLongPressActions, withAlpha } from '@/ui';
 import { pmMenuEntries } from '../menus';
 
-export const PmRow = memo(function PmRow({ roomId, activeRoomId }: { roomId: string; activeRoomId: string | null }) {
+/**
+ * `active`: this conversation is the one on screen. A boolean rather than the open room's id,
+ * so switching conversations re-renders (and re-derives) the two rows involved, not all of them.
+ */
+export const PmRow = memo(function PmRow({ roomId, active }: { roomId: string; active: boolean }) {
   const theme = useTheme();
-  const row = usePmRow(roomId, activeRoomId);
+  const row = usePmRow(roomId, active ? roomId : null);
   const menu = useLongPressActions(() => pmMenuEntries(roomId), { title: row?.name });
   if (!row) return null;
-  const active = activeRoomId === roomId;
   const unread = row.unread > 0;
   const loud = unread && !row.muted;
   const label = [

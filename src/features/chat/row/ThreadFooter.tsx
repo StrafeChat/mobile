@@ -7,6 +7,7 @@ import { memo, useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { t } from '@web/i18n/t';
 import { getThread } from '@web/api/threads';
+import { isApiError } from '@web/api/ApiError';
 import { spaceRoomFromPayload, spaces } from '@web/stores/spaces';
 import type { SpaceRoom } from '@web/api/spaces';
 import { useSolid } from '@/bridge/solid';
@@ -21,7 +22,12 @@ function fetchThread(id: string): Promise<SpaceRoom | null> {
   if (!p) {
     p = getThread(id)
       .then((raw) => spaceRoomFromPayload(raw))
-      .catch(() => null);
+      .catch((err: unknown) => {
+        // The server's answer (gone, not yours) is remembered; a network failure is not, or
+        // one blip would hide the strip for the rest of the session.
+        if (!isApiError(err)) fetched.delete(id);
+        return null;
+      });
     fetched.set(id, p);
   }
   return p;
@@ -59,7 +65,7 @@ export const ThreadFooter = memo(function ThreadFooter({ threadId, spaceId }: { 
   return (
     <Touchable
       feedback="highlight"
-      onPress={() => openThread(th.id)}
+      onPress={() => openThread(th.id, spaceId)}
       accessibilityRole="button"
       accessibilityLabel={`${th.name}, ${t('threads.messageCount', { count: th.count })}`}
       accessibilityHint={t('threads.view')}

@@ -1,8 +1,8 @@
 /**
  * The room area's screens and hosts against the web stores: the conversation frame (header,
  * info sheet, the member drawer's availability), the member list, the profile sheet's role
- * editor, the report sheet, notification settings, the recovery prompts, the external-link
- * guard and the text prompt.
+ * editor, the report sheet, the recovery prompts, the external-link guard and the text
+ * prompt. (Notification settings are the settings area's page: review.test.tsx.)
  */
 import './roomTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
@@ -21,12 +21,10 @@ const { RoomView } = require('../RoomView') as typeof import('../RoomView');
 const { MembersList } = require('../members/MembersList') as typeof import('../members/MembersList');
 const { ProfileSheetHost } = require('../profile/ProfileSheetHost') as typeof import('../profile/ProfileSheetHost');
 const { ReportSheetHost } = require('../report/ReportSheetHost') as typeof import('../report/ReportSheetHost');
-const { NotifySheetHost } = require('../NotifySheet') as typeof import('../NotifySheet');
 const { RecoveryHost } = require('../e2ee/RecoveryHost') as typeof import('../e2ee/RecoveryHost');
 const { ExternalLinkHost } = require('../links/ExternalLinkHost') as typeof import('../links/ExternalLinkHost');
 const { TextPromptHost } = require('../TextPromptHost') as typeof import('../TextPromptHost');
-const { openRoomNotifySheet, closeRoomNotifySheet, promptText } = require('../presenters') as typeof import('../presenters');
-const roomNotify = require('@web/lib/roomNotify') as { setRoomNotifyMode: jest.Mock; muteRoom: jest.Mock };
+const { promptText } = require('../presenters') as typeof import('../presenters');
 const reports = require('@web/api/reports') as { createReport: jest.Mock };
 const spacesApi = require('@web/api/spaces') as { setMemberSpaceRoles: jest.Mock };
 const externalLink = require('@web/stores/externalLink') as { requestOpenExternalLink: (u: string) => void; confirmExternalLink: jest.Mock };
@@ -44,7 +42,6 @@ afterEach(async () => {
   await act(async () => {
     dismissProfileSheet();
     dismissReportSheet();
-    closeRoomNotifySheet();
   });
   await act(async () => {
     jest.runOnlyPendingTimers();
@@ -154,26 +151,6 @@ describe('report sheet', () => {
     });
     expect(reports.createReport).toHaveBeenCalledWith(expect.objectContaining({ target_type: 'user', target_id: '200', reason: 'spam' }));
     expect(screen.getByText('Thanks, your report is in.')).toBeTruthy();
-  });
-});
-
-describe('notification settings', () => {
-  test('a mode keeps the sheet open; a mute duration applies and closes', async () => {
-    setRooms({ rooms: [pm('r', user('a'))] });
-    await render(<NotifySheetHost />);
-    await act(async () => {
-      openRoomNotifySheet('r', null);
-    });
-    await act(async () => {
-      // "Use default" also names what the default resolves to; the radio row is the mode itself.
-      fireEvent.press(screen.getByRole('radio', { name: 'All messages' }));
-    });
-    expect(roomNotify.setRoomNotifyMode).toHaveBeenCalledWith('r', 1);
-    expect(screen.getByText('For 1 hour')).toBeTruthy();
-    await act(async () => {
-      fireEvent.press(screen.getByText('For 1 hour'));
-    });
-    expect(roomNotify.muteRoom).toHaveBeenCalledWith('r', 60 * 60 * 1000);
   });
 });
 

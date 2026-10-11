@@ -10,6 +10,7 @@ import { instance, formatHandle } from '@web/stores/instance';
 import { stargate } from '@web/stores/stargate';
 import { presence, type UserPresence } from '@web/stores/presence';
 import { useSolid } from '@/bridge/solid';
+import { instanceVersion } from '@/platform/overrides/runtime/instance';
 
 export type AuthUser = NonNullable<AuthState['user']>;
 
@@ -63,7 +64,8 @@ export interface InstanceInfo {
 export function useInstance(): InstanceInfo {
   return useSolid(() => ({
     loaded: instance.loaded,
-    version: instance.version,
+    // Not instance.version: it holds a sentinel while GET / is being retried.
+    version: instanceVersion(),
     federationEnabled: instance.federationEnabled,
     domain: instance.domain,
     voiceEnabled: instance.voiceEnabled,

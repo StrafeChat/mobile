@@ -46,6 +46,14 @@ let wake: (() => void) | null = null;
 
 const [failed, setFailed] = createSignal(false);
 
+/**
+ * The instance's version for display: '' while an attempt is out (the store then holds the
+ * sentinel, which must never reach the screen). Reactive.
+ */
+export function instanceVersion(): string {
+  return instance.version === PENDING_VERSION ? '' : instance.version;
+}
+
 /** True after an attempt to read the instance failed, until one succeeds. Reactive. */
 export function instanceInfoFailed(): boolean {
   return failed();
@@ -60,11 +68,19 @@ function hasSession(): boolean {
   }
 }
 
-async function attemptOnce(): Promise<boolean> {
+/**
+ * Bumped by resetInstanceInfo: a load still running for the previously chosen instance
+ * keeps its hands off the state of the new one.
+ */
+let generation = 0;
+
+/** One GET /; null when the instance was changed meanwhile (the answer is not this one's). */
+async function attemptOnce(gen: number): Promise<boolean | null> {
   // The web function returns at once while `loaded` is set, which a failure leaves behind.
   setInstance('loaded', false);
   setInstance('version', PENDING_VERSION);
   await loadInstanceInfoOnce();
+  if (gen !== generation) return null;
   const ok = instance.version !== PENDING_VERSION;
   if (!ok) setInstance('version', '');
   reached = ok;
@@ -94,11 +110,12 @@ function backoff(attempt: number): Promise<void> {
   });
 }
 
-async function run(): Promise<void> {
+async function run(gen: number): Promise<void> {
   for (let attempt = 0; ; attempt++) {
-    if (await attemptOnce()) return;
-    if (!hasSession()) return;
+    const ok = await attemptOnce(gen);
+    if (ok !== false || !hasSession()) return;
     await backoff(attempt);
+    if (gen !== generation) return;
   }
 }
 
@@ -109,9 +126,10 @@ async function run(): Promise<void> {
 export function loadInstanceInfo(): Promise<void> {
   if (instance.loaded && reached) return Promise.resolve();
   if (!running) {
-    running = run().finally(() => {
-      running = null;
+    const flight = run(generation).finally(() => {
+      if (running === flight) running = null;
     });
+    running = flight;
   }
   return running;
 }
@@ -131,9 +149,24 @@ export function retryInstanceInfoNow(): void {
 
 /** Forget what was loaded (a different instance was picked); the next load asks again. */
 export function resetInstanceInfo(): void {
+  generation++;
   reached = false;
   setFailed(false);
   resetInstanceInfoOriginal();
-  // A retry waiting on the old instance should try the new one at once.
+  // A load for the old instance is not the new one's: the next call starts its own. The old
+  // request still lands in the web store when it answers, so if the new instance had already
+  // been read by then, read it again.
+  const stale = running;
+  running = null;
+  if (stale) {
+    const gen = generation;
+    void stale.then(() => {
+      if (gen === generation && reached) {
+        reached = false;
+        void loadInstanceInfo();
+      }
+    });
+  }
+  // A retry waiting on the old instance gives up at once.
   wake?.();
 }

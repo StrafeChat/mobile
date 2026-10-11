@@ -10,7 +10,8 @@
  *
  * - showDesktopNotification() posts a local notification (src/platform/notifications.ts),
  *   tagged per room so a newer one replaces the older, with the caller's onClick as its tap
- *   action and the room id in its data, so a tap that launches the app can still route.
+ *   action and the room id (and its space) in its data, so a tap that launches the app can
+ *   still route.
  *
  * - playNotificationSound(). The web synthesises a two-note chime with Web Audio. Here the
  *   chime is the *notification's own sound*: lib/notifications (and the settings "test"
@@ -36,6 +37,7 @@ import { nativeNotificationsGranted } from '../desktop/native';
 import { desktopPermission, notificationPrefs } from '@web-original/stores/notificationPrefs';
 import type { DesktopNotificationOptions } from '@web-original/stores/notificationPrefs';
 import { showLocalNotification, type LocalNotification } from '../../notifications';
+import { spaceIdOfRoom } from '../../rooms';
 
 export {
   desktopPermission,
@@ -112,7 +114,8 @@ export function showDesktopNotification(opts: DesktopNotificationOptions): boole
     ...(opts.body ? { body: opts.body } : {}),
     ...(opts.tag ? { tag: opts.tag } : {}),
     ...(opts.onClick ? { onPress: opts.onClick } : {}),
-    ...(roomId ? { data: { roomId } } : {}),
+    // The space too ('' for a PM): a tap that launches the app routes before READY.
+    ...(roomId ? { data: { roomId, spaceId: spaceIdOfRoom(roomId) ?? '' } } : {}),
     sound: takeChime(),
   };
   void showLocalNotification(notification);

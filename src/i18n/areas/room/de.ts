@@ -42,5 +42,6 @@ export default {
   searchIn: 'In {{name}} suchen',
   showArchived: 'Zeigt die archivierten Threads',
   undo: 'Rückgängig',
+  pinsLoadFailed: 'Die angehefteten Nachrichten konnten nicht geladen werden.',
   unpinned: 'Nachricht losgelöst',
 };

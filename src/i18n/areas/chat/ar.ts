@@ -5,6 +5,7 @@
  */
 export default {
   listLabel: 'الرسائل',
+  loadFailed: 'تعذّر تحميل الرسائل.',
   messageHint: 'اضغط مطولاً لعرض الإجراءات، واسحب لليسار للرد',
   openProfile: 'يفتح الملف الشخصي',
   jumpToUnread: 'ينتقل إلى أول رسالة غير مقروءة',

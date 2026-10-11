@@ -106,7 +106,14 @@ export function VoiceScreen() {
     };
   }, [call.status]);
 
+  // Bumped by every stop (and on leaving), so a start still waiting for the microphone - the
+  // permission prompt can take a while - knows it was called off and releases it at once.
+  const testGen = useRef(0);
+  const inCallRef = useRef(inCall);
+  inCallRef.current = inCall;
+
   function stopTest() {
+    testGen.current++;
     clearInterval(timers.current.poll);
     clearTimeout(timers.current.stop);
     recorder.current?.cancel();
@@ -117,13 +124,20 @@ export function VoiceScreen() {
   useEffect(() => () => stopTest(), []);
   // A call starting takes the microphone; the test gives way.
   useEffect(() => {
-    if (inCall && recorder.current) stopTest();
+    if (inCall) stopTest();
   }, [inCall]);
 
   async function startTest() {
+    if (recorder.current) return;
     setMicError('');
+    const gen = ++testGen.current;
     try {
       const handle = await startVoiceRecording();
+      // Left the page, stopped, started again or joined a call meanwhile: never keep the mic open.
+      if (gen !== testGen.current || inCallRef.current) {
+        handle.cancel();
+        return;
+      }
       recorder.current = handle;
       setTesting(true);
       timers.current.poll = setInterval(() => {
@@ -132,6 +146,7 @@ export function VoiceScreen() {
       }, 100);
       timers.current.stop = setTimeout(stopTest, MIC_TEST_MAX_MS);
     } catch (e) {
+      if (gen !== testGen.current) return;
       stopTest();
       setMicError(e instanceof VoiceRecorderError && e.reason === 'denied' ? t('mobile.media.micDenied') : t('settings.voice.micFailed'));
     }

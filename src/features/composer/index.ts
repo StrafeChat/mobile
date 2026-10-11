@@ -5,6 +5,7 @@
  */
 import { forgetComposer } from './state';
 import { discardAttachmentQueue } from './attachmentQueues';
+import { onRoomGone } from '@/platform/roomGone';
 
 export { Composer, type ComposerProps } from './Composer';
 export {
@@ -36,3 +37,5 @@ export function forgetComposerRoom(roomId: string): void {
   forgetComposer(roomId);
   discardAttachmentQueue(roomId);
 }
+
+onRoomGone(forgetComposerRoom);

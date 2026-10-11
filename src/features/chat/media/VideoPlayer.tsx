@@ -115,7 +115,7 @@ function ArmedVideo({ uri, onReady, onError }: { uri: string; onReady?: () => vo
       onReady?.();
       if (!started.current) {
         started.current = true;
-        void playExclusive(player);
+        playExclusive(player).catch(() => undefined);
       }
     }
     if (status === 'error') onError();

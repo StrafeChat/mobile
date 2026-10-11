@@ -10,6 +10,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { SharedValue } from 'react-native-reanimated';
 import { t } from '@web/i18n/t';
 import { useTheme } from '@/theme';
+import { useShellGesture } from '@/shell/SwipeShell';
 import { Icon, haptics, toast, withAlpha } from '@/ui';
 import { classifyDrag } from '../logic/recordGesture';
 import type { VoiceRecorderControls } from '../hooks/useVoiceRecorder';
@@ -32,6 +33,7 @@ export function MicButton({ recorder, dragX, dragY, disabled, supported }: MicBu
   const hold = useRef<Hold>('idle');
   const rtl = I18nManager.isRTL;
   const recording = recorder.state.phase !== 'idle';
+  const { pan: shellPan } = useShellGesture();
 
   const pan = Gesture.Pan()
     .enabled(!disabled && supported)
@@ -63,6 +65,10 @@ export function MicButton({ recorder, dragX, dragY, disabled, supported }: MicBu
       dragY.value = 0;
       if (was === 'held') recorder.finish();
     });
+  // The shell's panel swipe would otherwise take the press: it activates on 12 dp of sideways
+  // movement, well inside the hold delay, and slide-to-cancel is a sideways drag. A swipe that
+  // starts on the microphone belongs to the microphone.
+  if (shellPan) pan.blocksExternalGesture(shellPan);
 
   const tap = Gesture.Tap()
     .enabled(!disabled)

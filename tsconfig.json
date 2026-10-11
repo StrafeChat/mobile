@@ -18,6 +18,9 @@
       ],
       "@matrix-org/matrix-sdk-crypto-wasm": [
         "./src/platform/crypto/matrixSdkCrypto.ts"
+      ],
+      "@strafe/push": [
+        "./modules/strafe-push/index.ts"
       ]
     },
     "types": [
@@ -28,6 +31,8 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
+    "modules/*/index.ts",
+    "modules/*/src/**/*.ts",
     "web/src/global.d.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"

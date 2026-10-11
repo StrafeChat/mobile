@@ -9,7 +9,7 @@
 module.exports = {
   preset: 'jest-expo',
   resolver: '<rootDir>/jest/resolver.js',
-  testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/*.test.tsx', '<rootDir>/crypto-host/**/*.test.ts'],
+  testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/*.test.tsx', '<rootDir>/crypto-host/**/*.test.ts', '<rootDir>/plugins/**/*.test.js'],
   moduleNameMapper: {
     // @web-original/* is mapped to a marker path that jest/resolver.js turns into the real web
     // module WITHOUT applying overrides. It has to be listed (first) here: jest-expo also maps
@@ -18,6 +18,7 @@ module.exports = {
     '^@web-original/(.*)$': '<rootDir>/jest/__web-original__/$1',
     '^@web/(.*)$': '<rootDir>/web/src/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@strafe/push$': '<rootDir>/modules/strafe-push/index.ts',
     '^@matrix-org/matrix-sdk-crypto-wasm$': '<rootDir>/src/platform/crypto/matrixSdkCrypto.ts',
     '^solid-js$': '<rootDir>/node_modules/solid-js/dist/solid.cjs',
     '^solid-js/store$': '<rootDir>/node_modules/solid-js/store/dist/store.cjs',

@@ -1,0 +1,48 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+
+  <application>
+    <!-- FCM must not fetch a registration token (which talks to Google) until the person's
+         transport is actually FCM: getFcmToken() turns auto-init on. A device on UnifiedPush
+         never registers with Firebase at all. -->
+    <meta-data
+      android:name="firebase_messaging_auto_init_enabled"
+      android:value="false" />
+
+    <!-- The only MESSAGING_EVENT receiver: plugins/withStrafePushAndroid.js removes the ones
+         expo-notifications and firebase-messaging declare. -->
+    <service
+      android:name="chat.strafe.push.StrafeFirebaseMessagingService"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
+
+    <!-- UnifiedPush distributors broadcast to this explicitly by package; exported because the
+         distributor is another app. The connector's own MessagingReceiverImpl (which would use
+         its default key manager) stands down for it, and plugins/withStrafePushAndroid.js
+         removes it from the app altogether. -->
+    <receiver
+      android:name="chat.strafe.push.StrafeUnifiedPushReceiver"
+      android:enabled="true"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+        <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+        <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+        <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+        <action android:name="org.unifiedpush.android.connector.TEMP_UNAVAILABLE" />
+      </intent-filter>
+    </receiver>
+
+    <!-- Notification actions that run without opening the app (Mark as read, Decline). Only
+         our own PendingIntents reach it. -->
+    <receiver
+      android:name="chat.strafe.push.PushActionReceiver"
+      android:exported="false" />
+  </application>
+</manifest>

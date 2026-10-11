@@ -12,6 +12,13 @@ import { VoiceHosts } from '@/features/voice';
 import { MediaViewerHost } from '@/features/chat';
 import { useTheme } from '@/theme';
 
+/**
+ * A screen reached directly by a deep link (an invite, a thread, a profile) still gets the
+ * shell beneath it, so its back button and every "back to the conversation" have somewhere to
+ * go - without this, a cold start straight into /invite/x had nothing under it.
+ */
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function MainLayout() {
   const theme = useTheme();
   return (

@@ -7,7 +7,7 @@
  * append the file to a FormData; React Native's FormData takes `{ uri, name, type }` for a
  * file, so `asUploadFile` hands them exactly that.
  */
-import { pickFromLibrary, takePhoto, type LocalFile } from '@/platform/media';
+import { pickFromLibrary, takePhoto, type CropOptions, type LocalFile } from '@/platform/media';
 import { showActionSheet } from '@/ui';
 import { t } from '@web/i18n/t';
 
@@ -26,6 +26,11 @@ export interface PickImageOptions {
   accept?: readonly string[];
   /** Offer the camera (default true). An emoji is rarely a photo; it still may be. */
   camera?: boolean;
+  /**
+   * Show the platform's crop screen after the pick (one image). Square for avatars and icons;
+   * left off for banners (iOS only crops squares) and emoji (cropping flattens an animated GIF).
+   */
+  crop?: CropOptions;
 }
 
 /** The web's checks on a chosen file. Returns the error message, or null when it may be sent. */
@@ -64,7 +69,8 @@ export async function pickImage(opts: PickImageOptions = {}): Promise<ImagePick>
     ).then(() => resolve(chosen));
   });
   if (!source) return { status: 'cancelled' };
-  const res = source === 'camera' ? await takePhoto() : await pickFromLibrary({ limit: 1, mediaTypes: ['images'] });
+  const crop = opts.crop ? { crop: opts.crop } : {};
+  const res = source === 'camera' ? await takePhoto(crop) : await pickFromLibrary({ limit: 1, mediaTypes: ['images'], ...crop });
   if (res.status === 'cancelled') return { status: 'cancelled' };
   if (res.status === 'denied') return { status: 'error', message: t('mobile.media.cameraDenied') };
   if (res.status === 'failed') return { status: 'error', message: res.message || t('settings.profile.uploadFailed') };

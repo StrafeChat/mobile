@@ -5,6 +5,7 @@ import {
   buildMessageList,
   e2eeDividerIndices,
   firstUnreadIndex,
+  stableRowKeys,
   type BuildMessageListInput,
   type ListMessage,
   type MessageListItem,
@@ -188,5 +189,49 @@ describe('blocked senders, mentions, edges', () => {
     // Unknown counts as "maybe more" (the web's `?? true`).
     expect(kinds(build(list, { hasMoreOlder: undefined }).items)[0]).toBe('historyEdge');
     expect(kinds(build([], { hasMoreOlder: true }).items)).toEqual(['intro']);
+  });
+});
+
+describe('row keys across a send', () => {
+  const keysOf = (list: ListMessage[], room = 'r1') => {
+    const rowKeys = stableRowKeys(room, list, ME);
+    return build(list, { rowKeys })
+      .items.filter((i): i is Extract<MessageListItem, { kind: 'message' }> => i.kind === 'message')
+      .map((i) => [i.id, i.key]);
+  };
+
+  test('the confirmed message keeps its optimistic row (no remount), and its day divider too', () => {
+    const a = msg('100', ALICE, day1(9));
+    keysOf([a, msg('temp-1', ME, day1(10), { pending: true })]);
+    const rowKeys = stableRowKeys('r1', [a, msg('500', ME, day1(10))], ME);
+    expect(rowKeys.get('500')).toBe('temp-1');
+    // And it stays that key on later updates.
+    expect(keysOf([a, msg('500', ME, day1(10)), msg('600', ALICE, day1(11))])).toEqual([
+      ['100', '100'],
+      ['500', 'temp-1'],
+      ['600', '600'],
+    ]);
+  });
+
+  test('two sends confirmed together pair oldest first', () => {
+    keysOf([msg('temp-1', ME, day1(10), { pending: true }), msg('temp-2', ME, day1(10, 1), { pending: true })], 'r2');
+    expect(keysOf([msg('500', ME, day1(10)), msg('501', ME, day1(10, 1))], 'r2')).toEqual([
+      ['500', 'temp-1'],
+      ['501', 'temp-2'],
+    ]);
+  });
+
+  test('a failed send leaves nothing for a later message to inherit', () => {
+    keysOf([msg('100', ALICE, day1(9)), msg('temp-1', ME, day1(10), { pending: true })], 'r3');
+    keysOf([msg('100', ALICE, day1(9))], 'r3');
+    expect(keysOf([msg('100', ALICE, day1(9)), msg('700', ME, day1(12))], 'r3')).toEqual([
+      ['100', '100'],
+      ['700', '700'],
+    ]);
+  });
+
+  test("someone else's message never takes an optimistic row's key", () => {
+    keysOf([msg('temp-1', ME, day1(10), { pending: true })], 'r4');
+    expect(keysOf([msg('800', ALICE, day1(10))], 'r4')).toEqual([['800', '800']]);
   });
 });

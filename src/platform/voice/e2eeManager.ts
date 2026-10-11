@@ -230,13 +230,25 @@ export class CallE2EEManager implements BaseE2EEManager {
     // A republish (reconnect) creates a fresh sender for the same track.
     this.release((e) => e.side === 'send' && e.track === track);
     const identity = room.localParticipant.identity;
+    // A new native cryptor starts disabled, and disabled means frames pass through as they
+    // are. Enabling it takes two native round trips; media needs the SDP answer and DTLS
+    // first, so in practice it is on long before a frame is sent - but "in practice" is not
+    // the rule. Until it is on, the track itself is held off (a disabled track sends silence
+    // or black, which carries nothing), so not one real frame can leave unencrypted however
+    // the two race. If enabling fails the track stays held: no media rather than plain media.
+    const media = track.mediaStreamTrack as { enabled?: boolean } | undefined;
+    const held = !!media && media.enabled !== false;
+    if (held) media.enabled = false;
     const cryptor = RTCFrameCryptorFactory.createFrameCryptorForRtpSender(
       identity,
       sender,
       RTCFrameCryptorAlgorithm.kAesGcm,
       this.keyProvider.rtcKeyProvider,
     );
-    this.adopt({ cryptor, identity, side: 'send', track, trackSid });
+    this.adopt({ cryptor, identity, side: 'send', track, trackSid }, () => {
+      // Released only if nothing muted the track meanwhile (mute also works by disabling it).
+      if (held && media && !track.isMuted) media.enabled = true;
+    });
   }
 
   private attachReceiver(track: RemoteTrack, trackSid: string, identity: string): void {
@@ -252,7 +264,7 @@ export class CallE2EEManager implements BaseE2EEManager {
     this.adopt({ cryptor, identity, side: 'receive', track, trackSid });
   }
 
-  private adopt(fields: Omit<CryptorEntry, 'onState'>): void {
+  private adopt(fields: Omit<CryptorEntry, 'onState'>, onEnabled?: () => void): void {
     const { cryptor, identity } = fields;
     const onState = (ev: { state?: unknown }) => {
       if (FAILED_STATES.has(ev.state)) this.reportError(new Error(`frame cryptor ${String(ev.state)}`), identity);
@@ -264,6 +276,7 @@ export class CallE2EEManager implements BaseE2EEManager {
     void cryptor
       .setKeyIndex(this.keyProvider.latestKeyIndex(identity))
       .then(() => cryptor.setEnabled(true))
+      .then(() => onEnabled?.())
       .catch((err) => this.reportError(err, identity));
   }
 

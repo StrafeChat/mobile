@@ -1,7 +1,7 @@
 /**
  * Threads as the room area reads them from stores/spaces: a channel's active threads in the
- * browser's order, and one thread's record - from the store, or fetched once when the live
- * list does not hold it (archived, a deep link).
+ * browser's order, and one thread's record - from the store, or fetched when the live list
+ * does not hold it (archived, a deep link).
  */
 import type { SpaceRoom } from '@web/api/spaces';
 import { getThread } from '@web/api/threads';
@@ -50,23 +50,26 @@ export interface FetchedThread {
   raw: Record<string, unknown>;
 }
 
-const fetchedThreads = new Map<string, Promise<FetchedThread | null>>();
+const fetchingThreads = new Map<string, Promise<FetchedThread | null>>();
 
-/** GET /rooms/:id/thread once per thread (an archived or otherwise unlisted one). */
+/**
+ * GET /rooms/:id/thread (an archived or otherwise unlisted thread), one request at a time per
+ * thread. Nothing is kept once it answers: a remembered record would later be written back
+ * over a newer one (renamed, unarchived) the next time the thread is opened this way.
+ */
 export function fetchThreadOnce(threadId: string): Promise<FetchedThread | null> {
-  let p = fetchedThreads.get(threadId);
+  let p = fetchingThreads.get(threadId);
   if (!p) {
     p = getThread(threadId)
       .then((raw) => {
         const room = spaceRoomFromPayload(raw);
         return room ? { room, raw } : null;
       })
-      .catch(() => {
-        fetchedThreads.delete(threadId);
-        return null;
+      .catch(() => null)
+      .finally(() => {
+        fetchingThreads.delete(threadId);
       });
-    fetchedThreads.set(threadId, p);
+    fetchingThreads.set(threadId, p);
   }
   return p;
 }
-

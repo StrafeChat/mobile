@@ -50,18 +50,15 @@ describe('connectivity', () => {
     expect(conn.isOnline()).toBe(true);
   });
 
-  test('going to the background flushes the pending read position', async () => {
+  test("going to the background leaves the read position to viewportAck's keepalive (no second request)", async () => {
     const fetch = routeFetch({ '/rooms/9/ack': () => reply(204) });
     (globalThis as unknown as { fetch: unknown }).fetch = fetch;
+    // Already acked up to 10: this flush used to send it again on every trip to the background.
     (require('@web/stores/pendingAck') as typeof import('@web/stores/pendingAck')).setPendingAck('9', '10');
     appStateChange('inactive');
-    expect(fetch).not.toHaveBeenCalled();
     appStateChange('background');
     await flush();
-    expect(fetch).toHaveBeenCalledWith(
-      `${API}/rooms/9/ack`,
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ last_read_message_id: '10' }) }),
-    );
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   test('a long absence wakes the gateway and re-pulls the room on screen; a short one does neither', () => {

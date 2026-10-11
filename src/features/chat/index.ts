@@ -1,6 +1,6 @@
 /**
  * The chat area: the message list and everything a message renders, the typing row, the
- * full-screen media viewer, and the message sheets (actions, reactions, delete, create thread).
+ * full-screen media viewer, and the message sheets (actions, reactions, delete).
  *
  * Contract (src/features/room composes these):
  * - <MessageList roomId spaceId? />: the conversation's messages. Enters the room
@@ -13,7 +13,8 @@
  * - <MessageAttachments attachments />: a message's attachments.
  * - openMedia(items, index?, label?) and <MediaViewerHost /> (mount once at the root: it shows
  *   the /media screen whenever shared code opens stores/mediaViewer directly).
- * - openReactionPicker / openCreateThread / confirmDeleteMessage: the sheets the list hosts.
+ * - openReactionPicker / confirmDeleteMessage: the sheets the list hosts. (Create thread is
+ *   the room area's form: openCreateThread from '@/features/room'.)
  * - showMessageActions(messageId, { roomId, spaceId }): the long-press sheet.
  * - openUserProfile / showAuthorMenu: a person in a room's context.
  */
@@ -23,8 +24,8 @@ export { MessageBody, type MessageBodyProps } from './body/MessageBody';
 export { MessageAttachments } from './attachments/Attachments';
 export { openMedia, MediaViewerHost } from './mediaViewer';
 export { openReactionPicker } from './reactions/ReactionPicker';
-export { openCreateThread, CreateThreadSheet, type CreateThreadRequest } from './actions/CreateThreadSheet';
 export { confirmDeleteMessage } from './actions/DeleteMessageSheet';
 export { showMessageActions } from './actions/messageActions';
 export { openUserProfile, showAuthorMenu } from './people';
 export { openMessageLink } from './navigation';
+export { setSwipeToReplyEnabled, swipeToReplyEnabled } from './preferences';

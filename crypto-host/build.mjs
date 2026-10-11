@@ -62,6 +62,10 @@ const result = await esbuild.build({
   // WebView updates through the Play Store; iOS 15+ WKWebView).
   target: ['es2020', 'chrome89', 'safari15'],
   minify: true,
+  // Class names cross the bridge: an engine throwable that is not an Error (the decrypt
+  // failure, MegolmDecryptionError) is reported by its constructor's name (protocol.ts
+  // toWireError), which plain minification renames to two letters.
+  keepNames: true,
   legalComments: 'none',
   define: { __WASM_SHA256__: JSON.stringify(wasmSha256) },
   plugins: [bindingsAlias],

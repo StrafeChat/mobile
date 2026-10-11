@@ -129,6 +129,46 @@ describe('CallE2EEManager', () => {
     expect(mockCryptors).toHaveLength(1);
   });
 
+  it('holds the track off until its cryptor is enabled, so no frame leaves unencrypted', async () => {
+    const kp = fakeKeyProvider();
+    kp.install('me.s1', 0);
+    const m = new CallE2EEManager(kp as never);
+    const { room, local } = fakeRoom();
+    m.setup(room as unknown as Room);
+    const mst = { enabled: true };
+    local.emit(ParticipantEvent.LocalSenderCreated, { _id: 's1' }, { mediaStreamTrack: mst, isMuted: false });
+    expect(mst.enabled).toBe(false);
+    await flush();
+    expect(mockCryptors[0]!.calls).toEqual(['index:0', 'enabled:true']);
+    expect(mst.enabled).toBe(true);
+  });
+
+  it('does not unmute a track that was muted while its cryptor was being enabled', async () => {
+    const kp = fakeKeyProvider();
+    kp.install('me.s1', 0);
+    const m = new CallE2EEManager(kp as never);
+    const { room, local } = fakeRoom();
+    m.setup(room as unknown as Room);
+    const mst = { enabled: true };
+    const track = { mediaStreamTrack: mst, isMuted: false };
+    local.emit(ParticipantEvent.LocalSenderCreated, { _id: 's1' }, track);
+    track.isMuted = true;
+    await flush();
+    expect(mst.enabled).toBe(false);
+  });
+
+  it('leaves a muted track alone', async () => {
+    const kp = fakeKeyProvider();
+    kp.install('me.s1', 0);
+    const m = new CallE2EEManager(kp as never);
+    const { room, local } = fakeRoom();
+    m.setup(room as unknown as Room);
+    const mst = { enabled: false };
+    local.emit(ParticipantEvent.LocalSenderCreated, { _id: 's1' }, { mediaStreamTrack: mst, isMuted: true });
+    await flush();
+    expect(mst.enabled).toBe(false);
+  });
+
   it('moves our sender to the new key slot on rotation', async () => {
     const kp = fakeKeyProvider();
     const m = new CallE2EEManager(kp as never);

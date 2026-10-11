@@ -4,7 +4,7 @@
  * as `<instance>/invite/<code>`, with the system share sheet first and Copy beside it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Share, StyleSheet, View } from 'react-native';
+import { Platform, Share, StyleSheet, View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { createSpaceInvite } from '@web/api/spaces';
 import { useTheme } from '@/theme';
@@ -77,7 +77,9 @@ export function InviteSheet({ spaceId, open, onRequestClose, onClosed }: InviteS
             style={styles.flex}
             onPress={() => {
               haptics.selection();
-              void Share.share({ message: link, url: link }).catch(() => undefined);
+              // iOS shares `url` as the link and `message` as text beside it - both would put
+              // the link in twice; Android only reads `message`.
+              void Share.share(Platform.OS === 'ios' ? { url: link } : { message: link }).catch(() => undefined);
             }}
           />
           <Button

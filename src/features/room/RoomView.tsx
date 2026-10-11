@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { upsertSpaceRoomFromPayload } from '@web/stores/spaces';
 import { t } from '@web/i18n/t';
-import { useEnsureRoomPins, useRoomInfo, useSession, useSpaceRoomsLoaded, type RoomInfo } from '@/data';
+import { roomInfo, useEnsureRoomPins, useRoomInfo, useSession, useSpaceRoomsLoaded, type RoomInfo } from '@/data';
 import { MessageList, TypingIndicator } from '@/features/chat';
 import { Composer } from '@/features/composer';
 import { openNav, openRoom, setMembersAvailable } from '@/shell/state';
@@ -61,14 +61,17 @@ function RoomMissing({ roomId, spaceId, mode }: { roomId: string; spaceId: strin
       if (!live) return;
       const sid = r ? (r.room.space_id ?? spaceId) : null;
       if (r && sid) upsertSpaceRoomFromPayload(sid, r.raw);
-      else setLookup('gone');
+      // Found and stored: the view switches to the conversation as the store updates. If the
+      // record still doesn't make a room (an unusable payload), stop the spinner.
+      if (!r || !sid || !roomInfo(roomId, sid)) setLookup('gone');
     });
     return () => {
       live = false;
     };
   }, [roomId, spaceId, ready]);
 
-  const loading = !session.hydrated || (!!spaceId && !roomsLoaded) || lookup === 'fetching';
+  // 'idle' while ready is the render before the lookup starts: still loading, not "not found".
+  const loading = !session.hydrated || (!!spaceId && !roomsLoaded) || lookup === 'fetching' || (ready && lookup === 'idle');
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Header title={loading ? t('common.loading') : t('room.conversation')} onBack={onBack} />

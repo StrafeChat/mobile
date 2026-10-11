@@ -13,7 +13,7 @@
  * cleared (the server accepts that), where the web sends nothing and the old text stays. An
  * emptied display name is still left out, as on the web: names fall back to the username.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { getMe, patchMe, toAuthUser, uploadAvatar, uploadBanner, type MeResponse } from '@web/api/users';
@@ -88,6 +88,10 @@ export function AccountScreen() {
   const [birthdayError, setBirthdayError] = useState('');
 
   useUnsavedGuard(dirty && !saving);
+  // Read by the initial load, which must not wipe what was typed while it was in flight.
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const birthdayTouched = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -95,18 +99,17 @@ export function AccountScreen() {
       .then((res) => {
         if (!live) return;
         const d = draftFrom(res);
-        setDraft(d);
         setSaved(d);
+        if (!dirtyRef.current) setDraft(d);
         setBirthday(res.birthday);
-        setBirthdayOptIn(res.birthday_opt_in === true);
+        if (!birthdayTouched.current) setBirthdayOptIn(res.birthday_opt_in === true);
         mergeMe(res);
-        setDirty(false);
       })
       .catch(() => {
         if (!live) return;
         const u = auth.user;
         setBirthday(u?.birthday);
-        setBirthdayOptIn(u?.birthday_opt_in === true);
+        if (!birthdayTouched.current) setBirthdayOptIn(u?.birthday_opt_in === true);
       });
     return () => {
       live = false;
@@ -116,6 +119,7 @@ export function AccountScreen() {
   const edit = useCallback((patch: Partial<ProfileDraft>) => {
     setDraft((d) => ({ ...d, ...patch }));
     // As on the web: any keystroke marks the draft dirty, even one that is undone.
+    dirtyRef.current = true;
     setDirty(true);
   }, []);
 
@@ -140,6 +144,7 @@ export function AccountScreen() {
 
   async function toggleBirthday(next: boolean) {
     if (birthdayBusy) return;
+    birthdayTouched.current = true;
     setBirthdayBusy(true);
     setBirthdayError('');
     try {
@@ -154,7 +159,7 @@ export function AccountScreen() {
   }
 
   async function changeImage(kind: 'avatar' | 'banner') {
-    const pick = await pickImage({ title: kind === 'avatar' ? t('mobile.settings.changeAvatar') : t('mobile.settings.changeBanner'), maxBytes: PROFILE_IMAGE_MAX_BYTES });
+    const pick = await pickImage({ title: kind === 'avatar' ? t('mobile.settings.changeAvatar') : t('mobile.settings.changeBanner'), maxBytes: PROFILE_IMAGE_MAX_BYTES, ...(kind === 'avatar' ? { crop: { aspect: [1, 1] } } : {}) });
     if (pick.status === 'cancelled') return;
     if (pick.status === 'error') {
       setMediaError(pick.message);

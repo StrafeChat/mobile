@@ -23,7 +23,7 @@ export interface PendingAttachmentsProps {
 
 const TILE = 76;
 
-export function PendingAttachments({ items, onRemove }: PendingAttachmentsProps) {
+export const PendingAttachments = memo(function PendingAttachments({ items, onRemove }: PendingAttachmentsProps) {
   if (items.length === 0) return null;
   return (
     <HorizontalGestureOwner>
@@ -44,7 +44,7 @@ export function PendingAttachments({ items, onRemove }: PendingAttachmentsProps)
       </ScrollView>
     </HorizontalGestureOwner>
   );
-}
+});
 
 const RemoveButton = ({ att, onRemove }: { att: PendingAttachment; onRemove: (id: string) => void }) => (
   <View style={{ position: 'absolute', top: 2, end: 2 }}>

@@ -47,3 +47,22 @@ export function recoveryCodeComplete(value: string): boolean {
 /** The legacy PIN must have at least six digits (the web's rule). */
 export const LEGACY_PIN_MIN = 6;
 export const LEGACY_PIN_MAX = 12;
+
+/**
+ * What the PIN field keeps of what was typed: digits only, with the Arabic-Indic, Extended
+ * Arabic-Indic (Persian/Urdu) and fullwidth digits some keyboards' number pads produce turned
+ * into ASCII - the same mapping legacyBackup.ts applies before PBKDF2, so the PIN that set
+ * the backup up on a desktop opens it from such a keyboard. Dropping them instead (a bare
+ * `\D` filter) left the field empty however many digits were typed.
+ */
+export function normalizePinInput(raw: string): string {
+  let out = '';
+  for (const ch of raw) {
+    const cp = ch.codePointAt(0)!;
+    if (cp >= 0x30 && cp <= 0x39) out += ch;
+    else if (cp >= 0x0660 && cp <= 0x0669) out += String.fromCharCode(0x30 + cp - 0x0660);
+    else if (cp >= 0x06f0 && cp <= 0x06f9) out += String.fromCharCode(0x30 + cp - 0x06f0);
+    else if (cp >= 0xff10 && cp <= 0xff19) out += String.fromCharCode(0x30 + cp - 0xff10);
+  }
+  return out;
+}

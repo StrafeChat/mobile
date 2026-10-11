@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
@@ -20,24 +22,92 @@ import androidx.core.app.NotificationCompat
  * The call itself runs in JavaScript and WebRTC; this service only holds the ongoing
  * notification that tells Android the microphone/camera are in use, which is what stops
  * the OS from cutting them off once the app leaves the screen (Android 11+, enforced
- * from 14). Started and stopped by StrafeCallServiceModule from the voice runtime.
+ * from 14). Started, updated and stopped by StrafeCallServiceModule from the voice runtime.
+ *
+ * The notification carries Mute / Unmute and Hang up. Pressing one comes back here as an
+ * intent with ACTION_MUTE / ACTION_HANG_UP and is handed to JavaScript (the module's
+ * event), which runs the voice store's toggleMute / leaveVoiceRoom and then updates or
+ * stops this service - the call's state lives in JavaScript, not here.
  */
 class StrafeCallService : Service() {
+  /** What the notification shows; replaced by every start and update. */
+  private data class Content(
+    val title: String,
+    val text: String,
+    val channelName: String,
+    val camera: Boolean,
+    val muted: Boolean,
+    /** Label of the mute button, or null for none (a moderator's mute, no Speak permission). */
+    val muteLabel: String?,
+    /** Label of the hang-up button, or null for none. */
+    val hangUpLabel: String?,
+  ) {
+    companion object {
+      fun from(intent: Intent?): Content {
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Strafe"
+        return Content(
+          title = title,
+          text = intent?.getStringExtra(EXTRA_TEXT) ?: "",
+          channelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME) ?: title,
+          camera = intent?.getBooleanExtra(EXTRA_CAMERA, false) ?: false,
+          muted = intent?.getBooleanExtra(EXTRA_MUTED, false) ?: false,
+          muteLabel = intent?.getStringExtra(EXTRA_MUTE_LABEL),
+          hangUpLabel = intent?.getStringExtra(EXTRA_HANG_UP_LABEL),
+        )
+      }
+    }
+  }
+
+  @Volatile private var inForeground = false
+  private var content: Content? = null
+
   override fun onBind(intent: Intent?): IBinder? = null
 
+  override fun onCreate() {
+    super.onCreate()
+    current = this
+  }
+
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Strafe"
-    val text = intent?.getStringExtra(EXTRA_TEXT) ?: ""
-    val channelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME) ?: title
-    val camera = intent?.getBooleanExtra(EXTRA_CAMERA, false) ?: false
-    ensureChannel(channelName)
-    val notification = buildNotification(title, text)
-    if (!startInForeground(notification, camera) && !(camera && startInForeground(notification, false))) {
+    when (intent?.action) {
+      ACTION_MUTE, ACTION_HANG_UP -> {
+        val hangUp = intent.action == ACTION_HANG_UP
+        val delivered = StrafeCallServiceModule.emitAction(if (hangUp) "hangup" else "mute")
+        // A button of a notification whose service is gone (or whose JavaScript is gone,
+        // for hang-up: no call can be running without it) only needs the notification gone.
+        if (!inForeground || (hangUp && !delivered)) {
+          stopForegroundCompat()
+          stopSelf()
+        }
+        return START_NOT_STICKY
+      }
+    }
+    val next = Content.from(intent)
+    content = next
+    ensureChannel(next.channelName)
+    val notification = buildNotification(next)
+    inForeground = startInForeground(notification, next.camera) || (next.camera && startInForeground(notification, false))
+    if (!inForeground) {
       // Not allowed (started from the background, or a permission missing): give up
-      // quietly; the call carries on for as long as the app is in front.
+      // quietly; the call carries on for as long as the app is in front, and the voice
+      // runtime hears about it (the module's "stopped" event) and tries again later.
       stopSelf()
     }
     return START_NOT_STICKY
+  }
+
+  /** New labels or mute state for the running notification (no new foreground start). */
+  private fun applyUpdate(intent: Intent) {
+    if (!inForeground) return
+    val next = Content.from(intent).copy(camera = content?.camera ?: false)
+    content = next
+    ensureChannel(next.channelName)
+    try {
+      val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      manager.notify(NOTIFICATION_ID, buildNotification(next))
+    } catch (e: Exception) {
+      Log.w(TAG, "could not update the call notification", e)
+    }
   }
 
   /** The app was swiped away: the JavaScript holding the call is gone with it. */
@@ -48,7 +118,10 @@ class StrafeCallService : Service() {
   }
 
   override fun onDestroy() {
+    if (current === this) current = null
+    inForeground = false
     stopForegroundCompat()
+    StrafeCallServiceModule.emitStopped()
     super.onDestroy()
   }
 
@@ -90,14 +163,20 @@ class StrafeCallService : Service() {
     manager.createNotificationChannel(channel)
   }
 
-  private fun buildNotification(title: String, text: String): Notification {
+  /** A notification button's intent: back to this service with `action`. */
+  private fun actionIntent(action: String, requestCode: Int): PendingIntent {
+    val intent = Intent(this, StrafeCallService::class.java).setAction(action)
+    return PendingIntent.getService(this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
+
+  private fun buildNotification(c: Content): Notification {
     val open = packageManager.getLaunchIntentForPackage(packageName)?.let {
       it.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
       PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
-    return NotificationCompat.Builder(this, CHANNEL_ID)
-      .setContentTitle(title)
-      .setContentText(text)
+    val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+      .setContentTitle(c.title)
+      .setContentText(c.text)
       // A platform microphone glyph: monochrome, as a status-bar icon must be.
       .setSmallIcon(android.R.drawable.ic_btn_speak_now)
       .setOngoing(true)
@@ -106,7 +185,23 @@ class StrafeCallService : Service() {
       .setSilent(true)
       .setShowWhen(false)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-      .build()
+    c.muteLabel?.let { label ->
+      builder.addAction(
+        NotificationCompat.Action.Builder(
+          if (c.muted) android.R.drawable.ic_lock_silent_mode_off else android.R.drawable.ic_lock_silent_mode,
+          label,
+          actionIntent(ACTION_MUTE, 1),
+        )
+          .setSemanticAction(if (c.muted) NotificationCompat.Action.SEMANTIC_ACTION_UNMUTE else NotificationCompat.Action.SEMANTIC_ACTION_MUTE)
+          .build(),
+      )
+    }
+    c.hangUpLabel?.let { label ->
+      builder.addAction(
+        NotificationCompat.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, label, actionIntent(ACTION_HANG_UP, 2)).build(),
+      )
+    }
+    return builder.build()
   }
 
   companion object {
@@ -117,5 +212,24 @@ class StrafeCallService : Service() {
     const val EXTRA_TEXT = "text"
     const val EXTRA_CHANNEL_NAME = "channelName"
     const val EXTRA_CAMERA = "camera"
+    const val EXTRA_MUTED = "muted"
+    const val EXTRA_MUTE_LABEL = "muteLabel"
+    const val EXTRA_HANG_UP_LABEL = "hangUpLabel"
+    const val ACTION_MUTE = "strafe.callservice.MUTE"
+    const val ACTION_HANG_UP = "strafe.callservice.HANG_UP"
+
+    /** The running service (set and cleared on the main thread). */
+    @Volatile private var current: StrafeCallService? = null
+
+    /**
+     * Re-post the running service's notification with the intent's content (labels, mute
+     * state). Returns false when no service is in the foreground - start it instead.
+     */
+    fun update(intent: Intent): Boolean {
+      val main = Handler(Looper.getMainLooper())
+      val running = current?.inForeground == true
+      main.post { current?.applyUpdate(intent) }
+      return running
+    }
   }
 }

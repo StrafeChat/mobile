@@ -1,27 +1,22 @@
 /**
- * The room area's own sheets that other code opens: a room's notification settings, the
- * create-thread form, a members list for a pushed screen, and a one-field text prompt (the
- * web's window.prompt, which a phone does not have). Plain subscribable values, no React -
- * the hosts in RoomHosts render them, and any area can call the open functions.
+ * The room area's own sheets that other code opens: the create-thread form, a members list
+ * for a pushed screen, and a one-field text prompt (the web's window.prompt, which a phone
+ * does not have). Plain subscribable values, no React - the hosts in RoomHosts render them,
+ * and any area can call the open functions. A room's notification settings are the settings
+ * area's Notifications page; openRoomNotifySheet is the one way there from a conversation.
  */
+import { openRoomSettings } from '@/features/settings';
 import { createExternalStore } from '@/ui';
 
 // ---- notification settings ------------------------------------------------------------------
 
-export interface NotifySheetTarget {
-  roomId: string;
-  spaceId: string | null;
-}
-
-export const notifySheetStore = createExternalStore<NotifySheetTarget | null>(null);
-
-/** A room's notification settings (mode + mute) as a bottom sheet. */
-export function openRoomNotifySheet(roomId: string, spaceId?: string | null): void {
-  notifySheetStore.set({ roomId, spaceId: spaceId ?? null });
-}
-
-export function closeRoomNotifySheet(): void {
-  notifySheetStore.set(null);
+/**
+ * A room's notification settings (mode + mute): the room settings' Notifications page, which
+ * serves PMs, groups, channels and threads alike. `spaceId` is accepted for callers that have
+ * it; the page finds the room itself.
+ */
+export function openRoomNotifySheet(roomId: string, _spaceId?: string | null): void {
+  openRoomSettings(roomId, 'notifications');
 }
 
 // ---- create a thread ---------------------------------------------------------------------------
@@ -32,7 +27,13 @@ export interface CreateThreadRequest {
   roomId: string;
   /** Started from this message (its preview suggests the name; the thread takes its id). */
   starterMessageId?: string;
-  /** Preselect "Private thread" (the browser's Private button). */
+  /**
+   * The same, the way the web's CreateThreadModal takes it (the chat's message actions): the
+   * message's id and the one-line preview already built for it. Its id wins over
+   * `starterMessageId`; an empty preview is rebuilt from the loaded message.
+   */
+  starter?: { id: string; preview: string } | null;
+  /** Preselect "Private thread" (the browser's Private button; never for a started thread). */
   privateDefault?: boolean;
 }
 
@@ -45,7 +46,11 @@ let createThreadSeq = 0;
  * thread browser's New / Private buttons. Creating opens the new thread.
  */
 export function openCreateThread(request: CreateThreadRequest): void {
-  createThreadStore.set({ ...request, id: ++createThreadSeq });
+  const next = { ...request, id: ++createThreadSeq };
+  const starterMessageId = request.starter?.id || request.starterMessageId;
+  if (starterMessageId) next.starterMessageId = starterMessageId;
+  else delete next.starterMessageId;
+  createThreadStore.set(next);
 }
 
 export function closeCreateThread(): void {

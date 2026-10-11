@@ -4,7 +4,7 @@
  * the Friends page), whether notifications show message text, link previews in encrypted
  * chats (off by default: making one sends the link to the server), and showing your birthday.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '@web/i18n/t';
 import { unblockUser } from '@web/api/relationships';
 import { removeRelationshipLocally } from '@web/stores/relationships';
@@ -57,10 +57,13 @@ export function PrivacyScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // A flip made before the profile arrived wins over that (older) answer.
+  const touched = useRef(false);
+
   useEffect(() => {
     let live = true;
     getMe()
-      .then((me) => live && setBirthdayOptIn(me.birthday_opt_in === true))
+      .then((me) => live && !touched.current && setBirthdayOptIn(me.birthday_opt_in === true))
       .catch(() => undefined);
     return () => {
       live = false;
@@ -68,6 +71,7 @@ export function PrivacyScreen() {
   }, []);
 
   async function toggleBirthday(next: boolean) {
+    touched.current = true;
     setBusy(true);
     setError('');
     try {

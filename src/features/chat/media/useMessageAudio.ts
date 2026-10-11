@@ -56,15 +56,19 @@ export function useMessageAudio(uri: string | null): MessageAudio {
       return;
     }
     if (ended) {
-      void player.seekTo(0).then(() => playExclusive(player));
+      // A player released under the row (recycled, unmounted) rejects: nothing to do then.
+      player
+        .seekTo(0)
+        .then(() => playExclusive(player))
+        .catch(() => undefined);
       return;
     }
-    void playExclusive(player);
+    playExclusive(player).catch(() => undefined);
   }, [player, status.playing, ended]);
 
   const seekFraction = useCallback(
     (f: number) => {
-      if (status.duration > 0) void player.seekTo(Math.max(0, Math.min(1, f)) * status.duration);
+      if (status.duration > 0) player.seekTo(Math.max(0, Math.min(1, f)) * status.duration).catch(() => undefined);
     },
     [player, status.duration],
   );
@@ -72,7 +76,7 @@ export function useMessageAudio(uri: string | null): MessageAudio {
   const step = useCallback(
     (s: number) => {
       const d = status.duration;
-      if (d > 0) void player.seekTo(Math.max(0, Math.min(d, status.currentTime + s)));
+      if (d > 0) player.seekTo(Math.max(0, Math.min(d, status.currentTime + s))).catch(() => undefined);
     },
     [player, status.duration, status.currentTime],
   );

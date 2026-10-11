@@ -10,7 +10,8 @@
  * - Add people (the nav area's sheet: your friends not already in it) and Leave group.
  */
 import { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { updateRoom } from '@web/api/rooms';
@@ -144,7 +145,12 @@ export function GroupScreen() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Header title={info.name} subtitle={t('mobile.room.groupDetails')} leadingIcon="user-group" onBack={goBack} />
       <ReadableWidth>
-        <ScrollView contentContainerStyle={{ paddingVertical: 16, gap: 20, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
+        {/* The name field sits above the Save row: keep both clear of the keyboard. */}
+        <KeyboardAwareScrollView
+          bottomOffset={96}
+          contentContainerStyle={{ paddingVertical: 16, gap: 20, paddingBottom: insets.bottom + 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
           {isCreator ? (
             <ListSection title={t('room.groupSettings.title')} footer={t('room.groupSettings.description')}>
               <View style={{ padding: 16, gap: 12 }}>
@@ -223,7 +229,7 @@ export function GroupScreen() {
           <ListSection>
             <ListRow title={t('contextMenu.leaveGroup')} icon="right-from-bracket" destructive onPress={() => void leaveGroup(roomId, info.name)} />
           </ListSection>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </ReadableWidth>
     </View>
   );

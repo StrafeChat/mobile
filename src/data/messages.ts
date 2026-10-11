@@ -15,7 +15,7 @@
  * enterRoomView/leaveRoomView (see stores/messages) - that belongs to the list component.
  */
 import { createComputed, createSignal, untrack } from 'solid-js';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   messages,
   setMessages,
@@ -40,7 +40,7 @@ import {
 import { snapshot, useSolid } from '@/bridge/solid';
 import { deepEqual, sameArray, useDerived } from './derived';
 import { useSolidScope } from './scope';
-import { buildMessageList, type MessageListModel } from './messageListModel';
+import { buildMessageList, stableRowKeys, type MessageListModel } from './messageListModel';
 import { findSpaceRoom, spaceIdOfRoom } from './rooms';
 import { isSnowflakeId } from './constants';
 
@@ -222,7 +222,7 @@ export function useEntrySnapshot(roomId: string): EntrySnapshot {
 /**
  * The rendered rows (see messageListModel.ts): messages plus day/NEW/E2EE dividers, intro and
  * history edges, oldest first - or newest first with `inverted` for an inverted FlashList.
- * Re-renders on structure changes only.
+ * Re-renders on structure changes only. No NEW divider before auth.hydrated (see below).
  */
 export function useMessageList(roomId: string, entry: EntrySnapshot, opts: { inverted?: boolean } = {}): MessageListModel {
   const inverted = opts.inverted === true;
@@ -230,23 +230,30 @@ export function useMessageList(roomId: string, entry: EntrySnapshot, opts: { inv
     `msgList:${roomId}:${entry.lastReadMessageId ?? ''}:${entry.maxMessageIdWhenEntered ?? ''}:${inverted ? 1 : 0}`,
     () => {
       const blocked = new Set(relationships.relationships.filter((r) => r.type === RelType.Blocked).map((r) => r.user.id));
+      const mapped = (messages.byRoom[roomId] ?? []).map((m) => ({
+        id: m.id,
+        sender_id: m.sender_id,
+        created_at: m.created_at,
+        ...(m.reply_to_id ? { reply_to_id: m.reply_to_id } : {}),
+        ...(m.system_type ? { system_type: m.system_type } : {}),
+        ...(m.notEncrypted ? { notEncrypted: true } : {}),
+        ...(m.pending ? { pending: true } : {}),
+        ...(m.mention_everyone ? { mention_everyone: true } : {}),
+        ...(m.mentions?.length ? { mentions: [...m.mentions] } : {}),
+      }));
+      const currentUserId = auth.user?.id ?? null;
       const model = buildMessageList({
-        messages: (messages.byRoom[roomId] ?? []).map((m) => ({
-          id: m.id,
-          sender_id: m.sender_id,
-          created_at: m.created_at,
-          ...(m.reply_to_id ? { reply_to_id: m.reply_to_id } : {}),
-          ...(m.system_type ? { system_type: m.system_type } : {}),
-          ...(m.notEncrypted ? { notEncrypted: true } : {}),
-          ...(m.pending ? { pending: true } : {}),
-          ...(m.mention_everyone ? { mention_everyone: true } : {}),
-          ...(m.mentions?.length ? { mentions: [...m.mentions] } : {}),
-        })),
-        currentUserId: auth.user?.id ?? null,
+        messages: mapped,
+        // A sent message keeps its optimistic row's key, so the row isn't remounted when the
+        // server's copy replaces it (no flicker, images and playing clips survive).
+        rowKeys: stableRowKeys(roomId, mapped, currentUserId),
+        currentUserId,
         isBlocked: (id) => blocked.has(id),
         lastReadMessageId: entry.lastReadMessageId,
         maxMessageIdWhenEntered: entry.maxMessageIdWhenEntered,
-        newHeaderDismissed: newHeaderDismissed.byRoom[roomId] === true,
+        // Until the session has hydrated the entry cursor is null, which reads as "everything
+        // is unread": no NEW divider until it is known (the web's pages don't render before).
+        newHeaderDismissed: newHeaderDismissed.byRoom[roomId] === true || !auth.hydrated,
         hasMoreOlder: messages.hasMoreOlder[roomId],
         hasMoreNewer: messages.hasMoreNewer[roomId],
       });
@@ -270,7 +277,7 @@ export function useUnreadBanner(roomId: string, entry: EntrySnapshot, nearBottom
   return useDerived(
     `unreadBanner:${roomId}:${entry.lastReadMessageId ?? ''}:${entry.maxMessageIdWhenEntered ?? ''}:${nearBottom ? 1 : 0}`,
     () => {
-      if (newHeaderDismissed.byRoom[roomId] || nearBottom) return null;
+      if (newHeaderDismissed.byRoom[roomId] || nearBottom || !auth.hydrated) return null;
       const uid = auth.user?.id;
       if (!uid) return null;
       const list = (messages.byRoom[roomId] ?? []).map((m) => ({ id: m.id, sender_id: m.sender_id, created_at: m.created_at }));
@@ -350,15 +357,34 @@ export function useReplyReference(roomId: string, messageId: string): ReplyRefer
  * Load a room's history the first time it is shown, as the room pages do: the tail when
  * nothing is cached (unless a jump is already loading a window around its target), and mark a
  * cached room as possibly having older history. Mount on the conversation screen.
+ *
+ * `failed`: that first load failed and nothing is cached - the screen offers `retry` instead
+ * of a skeleton that would otherwise never go (platform/rooms also retries on reconnect).
  */
-export function useEnsureRoomHistory(roomId: string): void {
+export function useEnsureRoomHistory(roomId: string): { failed: boolean; retry: () => void } {
+  const [failedFor, setFailedFor] = useState<string | null>(null);
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+  const load = useCallback(() => {
+    setFailedFor(null);
+    loadMessages(roomId).catch((e: unknown) => {
+      console.warn('[messages] could not load', roomId, e);
+      if (live.current && messages.byRoom[roomId] === undefined) setFailedFor(roomId);
+    });
+  }, [roomId]);
   useEffect(() => {
     const cached = messages.byRoom[roomId];
     if (cached === undefined) {
       if (hasPendingJump(roomId)) return;
-      void loadMessages(roomId);
+      load();
       return;
     }
     if (cached.length > 0 && messages.hasMoreOlder[roomId] === undefined) setMessages('hasMoreOlder', roomId, true);
-  }, [roomId]);
+  }, [roomId, load]);
+  return { failed: failedFor === roomId, retry: load };
 }

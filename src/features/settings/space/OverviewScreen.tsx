@@ -273,7 +273,7 @@ function Overview({ data, setError }: { data: SpaceSettingsData; setError: (m: s
 
   async function upload(kind: 'icon' | 'banner') {
     if (!canManage) return;
-    const pick = await pickImage({ title: kind === 'icon' ? t('spaceSettings.uploadIcon') : t('spaceSettings.overview.uploadBanner') });
+    const pick = await pickImage({ title: kind === 'icon' ? t('spaceSettings.uploadIcon') : t('spaceSettings.overview.uploadBanner'), ...(kind === 'icon' ? { crop: { aspect: [1, 1] } } : {}) });
     if (pick.status === 'cancelled') return;
     if (pick.status === 'error') {
       setError(pick.message);

@@ -5,6 +5,7 @@
  */
 export default {
   listLabel: 'Nachrichten',
+  loadFailed: 'Nachrichten konnten nicht geladen werden.',
   messageHint: 'Lange drücken für Aktionen, nach links wischen zum Antworten',
   openProfile: 'Öffnet das Profil',
   jumpToUnread: 'Springt zur ersten ungelesenen Nachricht',

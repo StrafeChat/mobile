@@ -9,19 +9,42 @@
  * encryptor returns as its ciphertext) and is otherwise the web's request: same endpoint,
  * fields, auth header, progress fraction, cancellation and ApiError on failure.
  *
+ * Also `searchMessages`: the web asks the server first even in an end-to-end encrypted room,
+ * which answers `searchable: false` - but only after it has been told the search terms. Here a
+ * room known to be encrypted gets that answer locally, so its terms never leave the device
+ * (lib/messageSearch then searches the decrypted history, exactly as before).
+ *
  * Two mobile additions: an encrypted upload's ciphertext temp file is deleted once the
  * request settles, and on success the sender's plaintext is filed in the decrypted cache (see
  * src/platform/media/uploadSeeds.ts). Hermes has no DOMException, so cancellation rejects
  * with an Error named 'AbortError' - the web's own abort shape, which is all callers test.
  */
 import { ApiError, getApiUrl } from '@web/api/client';
-import type { Attachment, UploadAttachmentOptions } from '@web-original/api/messages';
+import type { Attachment, SearchMessagesParams, SearchMessagesResult, UploadAttachmentOptions } from '@web-original/api/messages';
+import { searchMessages as searchMessagesOnServer } from '@web-original/api/messages';
+import { rooms } from '@web/stores/rooms';
+import { spaces } from '@web/stores/spaces';
 import { seedDecryptedAttachment } from '../../../media/attachmentCache';
 import { deleteFileQuietly } from '../../../media/files';
 import type { LocalFile } from '../../../media/types';
 import { takeUploadSeed } from '../../../media/uploadSeeds';
 
 export * from '@web-original/api/messages';
+
+/** End-to-end encrypted, as far as the stores know (PM/group copies and space channel lists). */
+function knownEncrypted(roomId: string): boolean {
+  if (rooms.rooms.find((r) => r.id === roomId)?.e2ee_enabled === true) return true;
+  for (const list of Object.values(spaces.spaceRoomsBySpaceId)) {
+    const room = list.find((r) => r.id === roomId);
+    if (room) return room.e2ee_enabled === true;
+  }
+  return false;
+}
+
+export function searchMessages(roomId: string, params: SearchMessagesParams): Promise<SearchMessagesResult> {
+  if (knownEncrypted(roomId)) return Promise.resolve({ searchable: false, messages: [] });
+  return searchMessagesOnServer(roomId, params);
+}
 
 function abortError(): Error {
   const DOMExceptionCtor = (globalThis as { DOMException?: new (message: string, name: string) => Error }).DOMException;

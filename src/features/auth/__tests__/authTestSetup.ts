@@ -136,6 +136,7 @@ jest.mock('@/platform/session', () => {
     ),
     completeSignIn: jest.fn(),
     signOut: jest.fn(async () => undefined),
+    verifySession: jest.fn(async () => ({ state: 'invalid', reason: 'revoked' })),
     switchAccount: jest.fn(async () => undefined),
     addAccount: jest.fn(async () => undefined),
     forgetAccount: jest.fn(async () => undefined),

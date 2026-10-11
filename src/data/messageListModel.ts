@@ -77,6 +77,49 @@ export interface BuildMessageListInput {
   newHeaderDismissed: boolean;
   hasMoreOlder: boolean | undefined;
   hasMoreNewer: boolean | undefined;
+  /**
+   * The list key of a message row (and of the dividers attached to it); its id when absent.
+   * Pass stableRowKeys' map so a sent message keeps its optimistic row's key.
+   */
+  rowKeys?: ReadonlyMap<string, string>;
+}
+
+const TEMP_PREFIX = 'temp-';
+
+/** Per room: the row key of every message in the last list built for it. */
+const rowKeysByRoom = new Map<string, Map<string, string>>();
+
+/**
+ * Row keys that survive a send. stores/messages swaps an optimistic message (id
+ * `temp-...`) for the server's copy in place - a new id, the same row - and a list keyed by
+ * id unmounts the row and mounts another: the bubble flickers, its images reload and a
+ * playing voice clip stops. Here a confirmed message of yours that appears in the same
+ * update as one of your optimistic rows disappears takes over that row's key (paired
+ * oldest first, as the store replaces them). A failed send only removes its row, so nothing
+ * inherits from it. Every other row is keyed by its id.
+ */
+export function stableRowKeys(roomId: string, list: readonly ListMessage[], currentUserId: string | null): Map<string, string> {
+  const prev = rowKeysByRoom.get(roomId);
+  const next = new Map<string, string>();
+  if (list.length === 0) {
+    rowKeysByRoom.delete(roomId);
+    return next;
+  }
+  let vanished: string[] = [];
+  if (prev) {
+    const present = new Set(list.map((m) => m.id));
+    for (const [id, key] of prev) if (id.startsWith(TEMP_PREFIX) && !present.has(id)) vanished.push(key);
+  }
+  for (const m of list) {
+    const known = prev?.get(m.id);
+    if (known !== undefined) next.set(m.id, known);
+    else if (vanished.length > 0 && currentUserId !== null && m.sender_id === currentUserId && !m.id.startsWith(TEMP_PREFIX)) {
+      next.set(m.id, vanished[0]!);
+      vanished = vanished.slice(1);
+    } else next.set(m.id, m.id);
+  }
+  rowKeysByRoom.set(roomId, next);
+  return next;
 }
 
 export function shouldShowHeader(msg: ListMessage, prev: ListMessage | undefined): boolean {
@@ -163,16 +206,17 @@ export function buildMessageList(input: BuildMessageListInput): MessageListModel
   for (let i = 0; i < visible.length; i++) {
     const msg = visible[i]!;
     const prev = i > 0 ? visible[i - 1] : undefined;
+    const key = input.rowKeys?.get(msg.id) ?? msg.id;
     const isUnread = i === unreadIdx;
     const isNewDay = shouldShowDateHeader(msg, prev);
-    if (isNewDay) items.push({ kind: 'dateDivider', key: `d:${msg.id}`, date: msg.created_at, newMessages: isUnread });
-    else if (isUnread) items.push({ kind: 'newDivider', key: `n:${msg.id}` });
-    if (i === firstPlaintext) items.push({ kind: 'e2eeDivider', key: `p:${msg.id}`, encrypted: false });
-    if (i === firstEncryptedAfterPlaintext) items.push({ kind: 'e2eeDivider', key: `e:${msg.id}`, encrypted: true });
+    if (isNewDay) items.push({ kind: 'dateDivider', key: `d:${key}`, date: msg.created_at, newMessages: isUnread });
+    else if (isUnread) items.push({ kind: 'newDivider', key: `n:${key}` });
+    if (i === firstPlaintext) items.push({ kind: 'e2eeDivider', key: `p:${key}`, encrypted: false });
+    if (i === firstEncryptedAfterPlaintext) items.push({ kind: 'e2eeDivider', key: `e:${key}`, encrypted: true });
     const showHeader = shouldShowHeader(msg, prev);
     items.push({
       kind: 'message',
-      key: msg.id,
+      key,
       id: msg.id,
       senderId: msg.sender_id,
       showHeader,

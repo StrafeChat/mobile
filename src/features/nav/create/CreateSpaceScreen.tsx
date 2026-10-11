@@ -39,7 +39,7 @@ function CreateForm() {
     try {
       const space = await createSpace({ name: n, description: description.trim() || undefined });
       addOrUpdateSpace(space);
-      goToSpace(space.id);
+      goToSpace(space.id, { fromScreen: true });
     } catch (err) {
       setError(errorMessage(err, 'createSpace.failed'));
       setLoading(false);

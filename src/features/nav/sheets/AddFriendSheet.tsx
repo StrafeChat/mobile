@@ -48,14 +48,17 @@ export function AddFriendSheet({ open, onRequestClose, onClosed }: AddFriendShee
     setLoading(true);
     try {
       await sendFriendRequest(h);
-      await loadRelationships();
-      setLoading(false);
-      toast.success(t('mobile.nav.requestSent'));
-      onRequestClose();
     } catch (err) {
       setError(translateCaughtApiError(err, t).join(' ') || t('friends.errors.sendFailed'));
       setLoading(false);
+      return;
     }
+    // Sent: reloading the list to show it is best effort (a failure there is not a failed
+    // request, and sending again would only meet "request already sent").
+    await loadRelationships().catch(() => undefined);
+    setLoading(false);
+    toast.success(t('mobile.nav.requestSent'));
+    onRequestClose();
   }
 
   return (

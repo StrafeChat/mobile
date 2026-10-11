@@ -30,8 +30,7 @@ import {
   withAlpha,
 } from '@/ui';
 import { copyText } from '../actions';
-import { openAccountSwitcher, openSettings } from '../links';
-import { openAdminDashboard } from '../navigation';
+import { openAccountSwitcher, openAdminDashboard, openSettings } from '../links';
 import { openCustomStatusSheet } from '../sheets/store';
 import { setOwnStatus, STATUS_OPTIONS } from './ownPresence';
 
@@ -154,7 +153,8 @@ export function YouPanel({ bottomInset = 0 }: { bottomInset?: number }) {
           <ListRow title={t('userArea.editProfile')} icon="fa-pen" chevron onPress={() => openSettings('account')} />
           <ListRow title={t('desktop.accounts.switch')} icon="fa-users" chevron onPress={() => openAccountSwitcher()} />
           {inst.instanceAdmin ? (
-            <ListRow title={t('userArea.adminDashboard')} icon="fa-shield-halved" chevron onPress={openAdminDashboard} />
+            // A wrapper, not the function itself: onPress would hand it the press event as the tab.
+            <ListRow title={t('userArea.adminDashboard')} icon="fa-shield-halved" chevron onPress={() => openAdminDashboard()} />
           ) : null}
           <ListRow title={t('userArea.copyUsername')} icon="fa-copy" value={me.username} onPress={() => void copyText(me.username)} />
           <ListRow title={t('userArea.copyUserId')} icon="fa-id-card" onPress={() => void copyText(me.id)} />

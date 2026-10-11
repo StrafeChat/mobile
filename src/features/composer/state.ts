@@ -34,7 +34,8 @@ export interface ComposerRoomState {
   draft: string;
   /** Why the last send failed ('' = none); the composer offers a retry beside it. */
   sendError: string;
-  /** Bumped to ask the composer to focus its input (a reply or an edit was started). */
+  /** Bumped to ask the composer to focus its input (a reply or an edit was started); the
+   * composer acts on it through takeFocusRequest. */
   focusRequest: number;
 }
 
@@ -49,6 +50,33 @@ const EMPTY: ComposerRoomState = {
 };
 
 const [state, setState] = createStore<Record<string, ComposerRoomState>>({});
+
+/**
+ * A focus request is acted on by the composer that is mounted when it is made, or - when the
+ * room is still opening (a push notification's "Reply" opens the room and asks for the
+ * keyboard) - by the composer that mounts within this window. An older request is never
+ * replayed: coming back to a room later must not pop the keyboard.
+ */
+export const FOCUS_REQUEST_TTL_MS = 5000;
+/** When each room's latest focus request was made, and which one its composer took. */
+const focusRequestedAt = new Map<string, number>();
+const focusTaken = new Map<string, number>();
+
+function bumpFocus(roomId: string, s: ComposerRoomState): void {
+  s.focusRequest += 1;
+  focusRequestedAt.set(roomId, Date.now());
+}
+
+/**
+ * For the composer of `roomId` (on mount and whenever `focusRequest` changes): whether there is
+ * a focus request it has not acted on yet, made recently enough to honour. Marks it taken.
+ */
+export function takeFocusRequest(roomId: string, now: number = Date.now()): boolean {
+  const n = state[roomId]?.focusRequest ?? 0;
+  if (n === 0 || focusTaken.get(roomId) === n) return false;
+  focusTaken.set(roomId, n);
+  return now - (focusRequestedAt.get(roomId) ?? 0) < FOCUS_REQUEST_TTL_MS;
+}
 
 /** The composer state of a room (a fresh empty one when it has none). */
 export function composerFor(roomId: string): ComposerRoomState {
@@ -72,7 +100,7 @@ export function startReply(roomId: string, messageId: string, mention = true): v
     s.replyMention = mention;
     s.editing = null;
     s.editText = null;
-    s.focusRequest += 1;
+    bumpFocus(roomId, s);
   });
 }
 
@@ -95,7 +123,7 @@ export function startEdit(roomId: string, messageId: string): void {
     if (s.editing !== messageId) s.editText = null;
     s.editing = messageId;
     s.replyTo = null;
-    s.focusRequest += 1;
+    bumpFocus(roomId, s);
   });
 }
 
@@ -133,7 +161,7 @@ export function setSendError(roomId: string, message: string): void {
 /** Ask the composer of `roomId` to focus its input (opens the keyboard). */
 export function requestComposerFocus(roomId: string): void {
   update(roomId, (s) => {
-    s.focusRequest += 1;
+    bumpFocus(roomId, s);
   });
 }
 
@@ -163,6 +191,8 @@ export function restoreAfterFailedSend(roomId: string, failed: { text: string; r
 
 /** Sign-out / account switch reloads the app, but a room that went away clears its state. */
 export function forgetComposer(roomId: string): void {
+  focusRequestedAt.delete(roomId);
+  focusTaken.delete(roomId);
   setState(
     produce((all) => {
       delete all[roomId];

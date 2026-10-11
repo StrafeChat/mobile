@@ -749,8 +749,13 @@ export class MegolmDecryptionError extends Error {
   free(): void {}
 }
 
+/**
+ * A failed decrypt, back as the package's MegolmDecryptionError. Recognised by name, or by its
+ * numeric `code`: the engine throws it as a plain object whose class name is all the page has
+ * to report it by, and a page bundle minified without keepNames reports a mangled one.
+ */
 function decryptErrorFromWire(w: { name: string; message: string; data?: Record<string, unknown> }): Error {
-  if (w.name === 'MegolmDecryptionError') return new MegolmDecryptionError(w.message, w.data);
+  if (w.name === 'MegolmDecryptionError' || typeof w.data?.code === 'number') return new MegolmDecryptionError(w.message, w.data);
   return fromWireError(w);
 }
 

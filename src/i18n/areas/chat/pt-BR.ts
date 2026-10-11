@@ -5,6 +5,7 @@
  */
 export default {
   listLabel: 'Mensagens',
+  loadFailed: 'Não foi possível carregar as mensagens.',
   messageHint: 'Toque e segure para ver ações; deslize para a esquerda para responder',
   openProfile: 'Abre o perfil',
   jumpToUnread: 'Vai para a primeira mensagem não lida',

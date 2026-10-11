@@ -123,7 +123,10 @@ describe('pure screen rules', () => {
     expect(roleDraftDirty(r, draft)).toBe(false);
     expect(roleDraftDirty(r, { ...draft, name: '  ' })).toBe(false);
     expect(roleDraftDirty(r, { ...draft, permissions: PermKickMembers | PermSendMessages })).toBe(true);
-    expect(rolePatch(r, { ...draft, name: 'Moderators' })).toEqual({ permissions: PermKickMembers, color: 0x1abc9c, hoist: false, mentionable: false, name: 'Moderators' });
+    // Unchanged permissions stay out of the body (the server checks every bit sent against what
+    // the editor may grant); changed ones go.
+    expect(rolePatch(r, { ...draft, name: 'Moderators' })).toEqual({ color: 0x1abc9c, hoist: false, mentionable: false, name: 'Moderators' });
+    expect(rolePatch(r, { ...draft, permissions: PermSendMessages }).permissions).toBe(PermSendMessages);
     expect(rolePatch({ ...r, name: '@everyone' }, { ...draft, name: 'x' }).name).toBeUndefined();
   });
 

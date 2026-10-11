@@ -87,4 +87,23 @@ describe('withStrafeCallService', () => {
     const js = readFileSync(path.join(__dirname, 'callService.ts'), 'utf8');
     expect(js).toContain('StrafeCallService?: CallServiceModule');
   });
+
+  it('wires the notification buttons to the event callService.ts listens for', () => {
+    const dir = path.resolve(__dirname, '../../../plugins/strafe-call-service/android');
+    const module = readFileSync(path.join(dir, 'StrafeCallServiceModule.kt'), 'utf8');
+    const service = readFileSync(path.join(dir, 'StrafeCallService.kt'), 'utf8');
+    const js = readFileSync(path.join(__dirname, 'callService.ts'), 'utf8');
+    const event = /const val EVENT = "([^"]+)"/.exec(module)?.[1];
+    expect(event).toBeTruthy();
+    expect(js).toContain(`CALL_SERVICE_EVENT = '${event}'`);
+    // Both buttons come back to the service and out as the actions the runtime handles.
+    expect(service).toContain('actionIntent(ACTION_MUTE');
+    expect(service).toContain('actionIntent(ACTION_HANG_UP');
+    expect(service).toMatch(/emitAction\(if \(hangUp\) "hangup" else "mute"\)/);
+    // Every option the JS side sends is read by the module.
+    for (const key of ['title', 'text', 'channelName', 'camera', 'muted', 'muteLabel', 'hangUpLabel']) {
+      expect(module).toMatch(new RegExp(`\\("${key}"\\)`));
+    }
+    expect(module).toContain('fun update(options: ReadableMap');
+  });
 });

@@ -185,3 +185,55 @@ describe('incoming calls', () => {
     expect(store.acceptIncomingCall).not.toHaveBeenCalled();
   });
 });
+
+describe('right after a cold start (a push Answer as soon as the session is READY)', () => {
+  const { loadInstanceInfo } = require('@web/stores/instance') as { loadInstanceInfo: jest.Mock<() => Promise<void>> };
+
+  test('waits for the instance to say voice is on instead of refusing on the default', async () => {
+    setInstance({ voiceEnabled: false });
+    loadInstanceInfo.mockImplementationOnce(async () => {
+      expect(joiningStore.get()).toBe('p1'); // a second tap meanwhile is not a second join
+      setInstance({ voiceEnabled: true });
+    });
+    expect(await joinVoiceFromUi('p1', { spaceId: null })).toBe(true);
+    expect(store.joinVoiceRoom).toHaveBeenCalledWith('p1', { video: false });
+  });
+
+  test('gives up after a while when the instance never answers', async () => {
+    jest.useFakeTimers();
+    try {
+      setInstance({ voiceEnabled: false });
+      loadInstanceInfo.mockImplementationOnce(() => new Promise<void>(() => undefined));
+      const pending = joinVoiceFromUi('p1', { spaceId: null });
+      await jest.advanceTimersByTimeAsync(8_000);
+      expect(await pending).toBe(false);
+      expect(store.joinVoiceRoom).not.toHaveBeenCalled();
+      expect(joiningStore.get()).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('the join still happens when the navigator is not there to show the call screen yet', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (router.push as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('Attempted to navigate before mounting the Root Layout component');
+    });
+    expect(await joinVoiceFromUi('p1', { spaceId: null })).toBe(true);
+    expect(store.joinVoiceRoom).toHaveBeenCalledWith('p1', { video: false });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('incoming calls without call encryption', () => {
+  test('accept is refused before anything changes; the ring stays up for Decline', async () => {
+    (callEncryptionSupported as jest.Mock<() => boolean>).mockReturnValue(false);
+    setVoice('incoming', { roomId: 'p9', startedBy: 'a', since: 1 });
+    expect(await acceptIncomingFromUi(false)).toBe(false);
+    expect(store.acceptIncomingCall).not.toHaveBeenCalled();
+    expect(stopRingtone).not.toHaveBeenCalled();
+    expect(voice.incoming?.roomId).toBe('p9');
+    expect(lastToast()?.message).toEqual(expect.stringContaining("can't encrypt calls"));
+  });
+});

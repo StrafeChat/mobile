@@ -14,7 +14,7 @@ import { reorderBody, scopeIds, scopeOf, stepOrder } from '../reorder';
 import { friendSections, friendSubtitle, hasAnyRelationship, incomingCount, normalizeHandle } from '../friendsModel';
 import { hasRemoteListings, isJoinedListing, matchesDiscover, visibleListings } from '../discover/model';
 import { greetingKey } from '../HomeLanding';
-import { railItems } from '../rail/SpaceRail';
+import { railItems, viewingRoomFor } from '../rail/SpaceRail';
 import { notificationRows, spaceIdFromHref } from '../notifications/NotificationsPanel';
 import { decodeInviteParam, memberSpaceId } from '../invite/InviteScreen';
 import { defaultParentSection } from '../sheets/CreateRoomSheet';
@@ -216,6 +216,15 @@ describe('small helpers', () => {
   test('the rail: home, unread PMs, divider, spaces, divider, add, discover', () => {
     expect(railItems(['p1'], ['s1', 's2']).map((i) => i.kind)).toEqual(['home', 'dm', 'divider', 'space', 'space', 'divider', 'add', 'discover']);
     expect(railItems([], []).map((i) => i.kind)).toEqual(['home', 'divider', 'add', 'discover']);
+  });
+
+  test("only the open room's own space leaves it out of its badges", () => {
+    const active = { roomId: 't1', spaceId: 's1' };
+    expect(viewingRoomFor('s1', active)).toBe('t1');
+    expect(viewingRoomFor('s2', active)).toBeNull();
+    // Opened without its space named: every space leaves it out, as before.
+    expect(viewingRoomFor('s2', { roomId: 't1', spaceId: null })).toBe('t1');
+    expect(viewingRoomFor('s1', { roomId: null, spaceId: null })).toBeNull();
   });
 
   test('the default parent section follows the room type', () => {

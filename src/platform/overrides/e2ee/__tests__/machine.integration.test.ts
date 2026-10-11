@@ -76,7 +76,9 @@ Object.defineProperty(globalThis, 'localStorage', {
 // Object.keys(localStorage) in forgetLocalDeviceIdentities reads own keys; not exercised here.
 
 // eslint-disable-next-line import/first
-import { E2eeStoreUnusableError, getCurrentDeviceId, getMachine, resetLocalE2eeStore } from '../machine';
+import { E2eeStoreUnusableError, forgetLocalDeviceIdentities, getCurrentDeviceId, getMachine, importRoomKeys, resetLocalE2eeStore } from '../machine';
+// eslint-disable-next-line import/first
+import { keyBackupActivity } from '../backupActivity';
 
 jest.setTimeout(60_000);
 
@@ -169,4 +171,40 @@ test('a store whose passphrase is gone is unusable, not silently replaced', asyn
   const err = await getMachine(USER).catch((e: unknown) => e);
   expect(err).toBeInstanceOf(E2eeStoreUnusableError);
   expect((err as E2eeStoreUnusableError).detail).toMatch(/passphrase/);
+});
+
+test('an open overtaken by a host crash hands its caller the reopen, not the crash', async () => {
+  // The device bootstrap is the first caller of a session and runs once: a WebView that died
+  // while the store was opening used to fail it, and the backup flow never ran.
+  const OTHER = '301';
+  channel.hold();
+  const opening = getMachine(OTHER);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(cryptoHost.crashed('renderer killed by the system')).toBe(true);
+  channel.release();
+  channel.startPage(pkg);
+  const machine = await opening;
+  expect(machine.userId.toString()).toBe(`@${OTHER}:strafe.internal`);
+  expect(await getMachine(OTHER)).toBe(machine);
+});
+
+test('a legacy key import reports its start and end for the PIN sheet', async () => {
+  const machine = await getMachine('301');
+  const settled = keyBackupActivity.settled;
+  const failing = importRoomKeys(machine, 'not a key export');
+  expect(keyBackupActivity.running).toBe('legacyImport');
+  await expect(failing).rejects.toBeTruthy();
+  expect(keyBackupActivity).toMatchObject({ running: null, settled: settled + 1, lastOutcome: 'failed' });
+  expect(await importRoomKeys(machine, '[]')).toBe(0);
+  expect(keyBackupActivity).toMatchObject({ running: null, settled: settled + 2, lastOutcome: 'succeeded' });
+});
+
+test('forgetting device identities finds the ids in a storage whose keys are not own properties', async () => {
+  // The app's localStorage (MMKV) enumerates through key(i) only, like this test's.
+  expect(Object.keys(localStorage)).not.toContain('strafe_e2ee_device_id:301');
+  expect(mockLocal.get('strafe_e2ee_device_id:301')).toBeDefined();
+  mockLocal.set('unrelated', 'kept');
+  await forgetLocalDeviceIdentities('301');
+  expect([...mockLocal.keys()].filter((k) => k.startsWith('strafe_e2ee_'))).toEqual([]);
+  expect(mockLocal.get('unrelated')).toBe('kept');
 });

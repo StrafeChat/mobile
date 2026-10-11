@@ -9,6 +9,8 @@ import { t } from '@web/i18n/t';
 import { ackAllSpaceRooms, deleteSpaceRoom, leaveSpace } from '@web/api/spaces';
 import { removeRoomParticipant } from '@web/api/rooms';
 import { joinThread, leaveThread } from '@web/api/threads';
+import { putRelationship } from '@web/api/relationships';
+import { RelType, setRelationships } from '@web/stores/relationships';
 import { spaces, removeSpace, setSpaceRooms } from '@web/stores/spaces';
 import { removeRoom, rooms } from '@web/stores/rooms';
 import { ackRoomOptimistic } from '@web/stores/readState';
@@ -167,6 +169,22 @@ export async function leaveGroupFlow(roomId: string): Promise<void> {
   } catch (err) {
     toast.error(errorMessage(err));
   }
+}
+
+/**
+ * Accept a friend request. The gateway's RELATIONSHIP_ADD makes them a friend; the request is
+ * turned into a friendship here too, so it leaves the requests at once even when that event is
+ * late. Never removed locally (the web's Notifications panel does): the event can land before
+ * this response, and removing then would drop the new friend from the list.
+ */
+export async function acceptFriendRequest(userId: string): Promise<void> {
+  await putRelationship(userId);
+  setRelationships(
+    'relationships',
+    (r) => r.user.id === userId && r.type === RelType.IncomingRequest,
+    'type',
+    RelType.Friend,
+  );
 }
 
 export function setThreadJoined(threadId: string, join: boolean): void {

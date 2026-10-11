@@ -34,6 +34,7 @@ import { removeTyping } from '@web/stores/typing';
 import { auth } from '@web/stores/auth';
 import { dismissNewHeader } from '@web/stores/newHeaderDismissed';
 import { startSlowmode } from '@web/stores/slowmode';
+import { settings } from '@web/stores/settings';
 import type { GifResult } from '@web/lib/gif/providers';
 import { serializeDraft } from '@web/lib/utils/mentions';
 import { t } from '@web/i18n/t';
@@ -55,11 +56,12 @@ import {
   setDraft,
   setEditText,
   setSendError,
+  takeFocusRequest,
 } from './state';
 import { attachmentQueueFor } from './attachmentQueues';
 import { handlePick, openAttachMenu } from './attach';
 import { computeCompletion, spliceText, type Candidate } from './logic/completion';
-import { createTypingEmitter, hasContent, retryAfterSeconds, sendErrorText } from './logic/sending';
+import { NotSentError, createTypingEmitter, hasContent, retryAfterSeconds, sendErrorText } from './logic/sending';
 import { readableToWire, wireToReadable } from './logic/wireText';
 import { useComposerContext } from './hooks/useComposerContext';
 import { useEmojiCatalog } from './hooks/useEmojiCatalog';
@@ -140,6 +142,9 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
   const theme = useTheme();
   const info = useRoomInfo(roomId, spaceId);
   const st = useSolid(() => composerFor(roomId), [roomId]);
+  // The web's composer spellcheck setting (Settings > Keybinds): on a phone it is the
+  // keyboard's own spellcheck and autocorrect.
+  const spellcheck = useSolid(() => settings.spellcheck);
   const sending = useSolid(() => messages.sending[roomId] ?? false, [roomId]);
   const slowmodeLeft = useSlowmodeRemaining(roomId);
   const ctx = useComposerContext(roomId, spaceId, customEmojiSpaceId);
@@ -154,7 +159,9 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
 
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
-  const [voiceError, setVoiceError] = useState('');
+  // A failure that Retry can't redo (a voice take that didn't start, a GIF that didn't go):
+  // shown like a send error, but without the Retry, which would send the draft instead.
+  const [localError, setLocalError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [picker, setPicker] = useState<{ open: boolean; tab: ExpressionTab }>({ open: false, tab: 'emoji' });
   const dragX = useSharedValue(0);
@@ -230,13 +237,12 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     setEditText(roomId, readable);
   }, [st.editing, st.editText, editTarget, ctx.catalog, roomId]);
 
-  // ---- focus when a reply or an edit starts (never on entering a room) --------------------
-  const lastFocusRequest = useRef(st.focusRequest);
+  // ---- focus when a reply or an edit starts, or on request (never just for entering a room).
+  // A request made just before this composer mounted counts too: a push's "Reply" opens the
+  // room and asks for the keyboard before the conversation panel has rendered it.
   useEffect(() => {
-    if (st.focusRequest === lastFocusRequest.current) return;
-    lastFocusRequest.current = st.focusRequest;
-    inputRef.current?.focus();
-  }, [st.focusRequest]);
+    if (takeFocusRequest(roomId)) inputRef.current?.focus();
+  }, [st.focusRequest, roomId]);
 
   // Android can kill the app while the photo picker is up; recover the pick on return.
   useEffect(() => {
@@ -267,12 +273,20 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     [focused, text, caret, ctx, canMentionEveryone, emojiCatalog, skinTone],
   );
 
-  const pickCompletion = (c: Candidate) => {
-    if (!completion) return;
+  // Stable identities for the memoised rows (suggestions, queued files): the body re-renders
+  // on every keystroke and 10 times a second while recording.
+  const completionRef = useRef(completion);
+  completionRef.current = completion;
+  const writeTextRef = useRef(writeText);
+  writeTextRef.current = writeText;
+  const pickCompletion = useCallback((c: Candidate) => {
+    const open = completionRef.current;
+    if (!open) return;
     haptics.selection();
-    const next = spliceText(textRef.current, completion.queryStart, completion.cursorEnd, c.insertText);
-    writeText(next.text, next.caret);
-  };
+    const next = spliceText(textRef.current, open.queryStart, open.cursorEnd, c.insertText);
+    writeTextRef.current(next.text, next.caret);
+  }, []);
+  const removeQueued = useCallback((localId: string) => queue.remove(localId), [queue]);
 
   const insertAtCaret = (insert: string) => {
     const { start, end } = selection.current;
@@ -296,10 +310,10 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     textRef.current = '';
     setText('');
     clearAfterSend(roomId);
-    setVoiceError('');
+    setLocalError('');
     try {
       const sent = await sendMessage(roomId, wire, replyTo ?? undefined, asWebPendingAttachments(files));
-      if (sent === null) throw new Error('not sent');
+      if (sent === null) throw new NotSentError();
       dismissNewHeader(roomId);
       if (inSpace) startSlowmode(roomId, slowmodeSeconds);
     } catch (err) {
@@ -325,7 +339,8 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     }
     setSavingEdit(true);
     try {
-      await editMessage(roomId, id, readableToWire(raw, ctx.catalog));
+      // null: the store refused before trying (the room or the session is gone) - not saved.
+      if ((await editMessage(roomId, id, readableToWire(raw, ctx.catalog))) === null) throw new NotSentError();
       finishEdit(roomId);
       setSendError(roomId, '');
     } catch (err) {
@@ -340,15 +355,18 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
   const sendGif = (gif: GifResult) => {
     setPicker((p) => ({ ...p, open: false }));
     if (sending || slowmodeLeft > 0) return;
+    setLocalError('');
     sendMessage(roomId, gif.url)
-      .then(() => {
+      .then((sent) => {
+        if (sent === null) throw new NotSentError();
         dismissNewHeader(roomId);
         if (inSpace) startSlowmode(roomId, slowmodeSeconds);
       })
       .catch((err: unknown) => {
         console.warn('[composer] GIF send failed', err);
         startSlowmode(roomId, retryAfterSeconds(err));
-        setSendError(roomId, sendErrorText(err));
+        setLocalError(sendErrorText(err));
+        haptics.error();
       });
   };
 
@@ -361,12 +379,15 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
   const recorder = useVoiceRecorder({
     onClip: (clip: VoiceRecording, reason) => {
       if (reason === 'max') toast(t('attachments.voice.maxReached'));
-      void queue.addFiles([clip.file]).then(() => {
-        // The take joins anything already queued (and the typed text) in one message.
-        if (queue.items().some((p) => p.file.uri === clip.file.uri)) void sendRef.current();
-      });
+      queue
+        .addFiles([clip.file])
+        .then(() => {
+          // The take joins anything already queued (and the typed text) in one message.
+          if (queue.items().some((p) => p.file.uri === clip.file.uri)) void sendRef.current();
+        })
+        .catch(() => setLocalError(t('attachments.voice.failed')));
     },
-    onError: (message) => setVoiceError(message),
+    onError: (message) => setLocalError(message),
   });
   const recording = recorder.state.phase !== 'idle';
 
@@ -382,7 +403,7 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
         : info.kind === 'group' || info.kind === 'notes'
           ? t('room.messageRoom', { name: info.name })
           : t('room.messageSpaceRoom', { name: info.name });
-  const errorText = st.sendError || queueError || voiceError;
+  const errorText = st.sendError || queueError || localError;
   const voiceSupported = isVoiceRecordingSupported();
 
   let action;
@@ -410,7 +431,7 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
           onDismiss={() => {
             setSendError(roomId, '');
             queue.setError('');
-            setVoiceError('');
+            setLocalError('');
           }}
         />
       ) : null}
@@ -457,7 +478,7 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
               testID="composer-reply-strip"
             />
           ) : null}
-          {!editing ? <PendingAttachments items={queued} onRemove={(id) => queue.remove(id)} /> : null}
+          {!editing ? <PendingAttachments items={queued} onRemove={removeQueued} /> : null}
           {recording ? (
             <RecordingBar state={recorder.state} dragX={dragX} rtl={I18nManager.isRTL} onCancel={recorder.cancel} />
           ) : (
@@ -481,8 +502,8 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
                 multiline
                 scrollEnabled
                 textAlignVertical="center"
-                autoCorrect
-                spellCheck
+                autoCorrect={spellcheck}
+                spellCheck={spellcheck}
                 autoCapitalize="sentences"
                 accessibilityLabel={placeholder}
                 testID="composer-input"

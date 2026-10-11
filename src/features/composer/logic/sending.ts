@@ -42,8 +42,20 @@ export function retryAfterSeconds(err: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/**
+ * The messages store answered null: it refused before sending (the room isn't known here, or
+ * there is no session), so there is no server reason to show - just "couldn't send".
+ */
+export class NotSentError extends Error {
+  constructor() {
+    super('not sent');
+    this.name = 'NotSentError';
+  }
+}
+
 /** Why a send failed, in the user's language (slowmode, rate limit, automod, verification). */
 export function sendErrorText(err: unknown): string {
+  if (err instanceof NotSentError) return t('room.sendFailed');
   return translateCaughtApiError(err, t).join(' ') || t('room.sendFailed');
 }
 

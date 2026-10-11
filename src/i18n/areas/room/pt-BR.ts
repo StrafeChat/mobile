@@ -42,5 +42,6 @@ export default {
   searchIn: 'Pesquisar em {{name}}',
   showArchived: 'Mostra os tópicos arquivados',
   undo: 'Desfazer',
+  pinsLoadFailed: 'Não foi possível carregar as mensagens fixadas.',
   unpinned: 'Mensagem desafixada',
 };

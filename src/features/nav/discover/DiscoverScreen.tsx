@@ -195,7 +195,7 @@ export function DiscoverScreen() {
       const card = e.space;
       if (!card) return;
       if (isJoinedListing(e, mine)) {
-        goToSpace(card.id);
+        goToSpace(card.id, { fromScreen: true });
         return;
       }
       setJoining(card.id);
@@ -203,7 +203,7 @@ export function DiscoverScreen() {
       try {
         const joined = await joinDiscoverSpace(card.id, card.origin_domain);
         addOrUpdateSpace(await getSpace(joined.id));
-        goToSpace(joined.id);
+        goToSpace(joined.id, { fromScreen: true });
       } catch (err) {
         setError(translateCaughtApiError(err, t)[0] ?? t('discover.joinFailed'));
       } finally {
@@ -281,6 +281,10 @@ export function DiscoverScreen() {
             )
           }
           contentContainerStyle={styles.listContent}
+          // The search field lives in the list header: a tap on a card's button works with the
+          // keyboard up, and scrolling puts the keyboard away.
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

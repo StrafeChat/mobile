@@ -11,7 +11,7 @@
 import type { RoomParticipant } from '@web/api/rooms';
 import type { Relationship } from '@web/api/relationships';
 import { auth } from '@web/stores/auth';
-import { presence, isPresentStatus, type UserPresence } from '@web/stores/presence';
+import { presence, isPresentStatus, isVisibleStatus, type UserPresence } from '@web/stores/presence';
 import { relationships, relationshipType, RelType } from '@web/stores/relationships';
 import { rooms } from '@web/stores/rooms';
 import { spaceRoles } from '@web/stores/spaces';
@@ -64,7 +64,8 @@ export function useIsBlocked(userId: string | null | undefined): boolean {
 export type FriendsFilter = 'online' | 'all' | 'pending' | 'blocked';
 
 /** The Friends screen's tabs: ids (the other user's) in the store's order. 'pending' holds
- * incoming then outgoing requests; 'online' is friends who are online, idle or dnd. */
+ * incoming then outgoing requests; 'online' is FriendsPage's onlineFriends: online or idle
+ * (isVisibleStatus - dnd is not listed) by the live presence or the relationship's own. */
 export function friendIds(filter: FriendsFilter): string[] {
   const list = relationships.relationships;
   const ids = (pred: (r: Relationship) => boolean) => list.filter(pred).map((r) => r.user.id);
@@ -72,7 +73,11 @@ export function friendIds(filter: FriendsFilter): string[] {
     case 'all':
       return ids((r) => r.type === RelType.Friend);
     case 'online':
-      return ids((r) => r.type === RelType.Friend && isPresentStatus(presence.byUser[r.user.id]?.status ?? r.user.presence?.status));
+      return ids(
+        (r) =>
+          r.type === RelType.Friend &&
+          (isVisibleStatus(presence.byUser[r.user.id]?.status) || isVisibleStatus(r.user.presence?.status)),
+      );
     case 'pending':
       return [
         ...ids((r) => r.type === RelType.IncomingRequest),

@@ -32,6 +32,10 @@ import {
 import { ApiError } from '@web/api/ApiError';
 import { E2eeUnavailableError } from '@web/lib/e2ee/subtle';
 import { getMachine } from './machine';
+import { trackKeyBackupOperation } from './backupActivity';
+
+/** When a restore started here has finished - for the recovery sheet's spinner. */
+export { keyBackupActivity, type KeyBackupActivity, type KeyBackupOperation } from './backupActivity';
 
 /** The recovery code did not open this backup: wrong code, or the wrong account's code. */
 export class RecoveryCodeMismatchError extends Error {
@@ -309,7 +313,11 @@ function countSessions(body: string): number {
  *
  * Returns how many sessions were new to this device.
  */
-export async function restoreKeyBackup(userId: string, code: string): Promise<number> {
+export function restoreKeyBackup(userId: string, code: string): Promise<number> {
+  return trackKeyBackupOperation('restore', () => runRestore(userId, code));
+}
+
+async function runRestore(userId: string, code: string): Promise<number> {
   const info = await getBackupRecovery();
   if (!info.exists || !info.version || !info.wrapped_private_key || !info.salt || !info.auth_data?.public_key) {
     throw new NoBackupError();

@@ -56,9 +56,9 @@ export function SpaceRoomList({ spaceId, bottomInset = 0 }: { spaceId: string; b
     ({ item }: { item: SpaceRoomTreeItem }) => {
       switch (item.kind) {
         case 'channel':
-          return <ChannelRow spaceId={spaceId} roomId={item.roomId} activeRoomId={activeRoomId} />;
+          return <ChannelRow spaceId={spaceId} roomId={item.roomId} active={activeRoomId === item.roomId} />;
         case 'thread':
-          return <ThreadRow spaceId={spaceId} roomId={item.roomId} activeRoomId={activeRoomId} />;
+          return <ThreadRow spaceId={spaceId} roomId={item.roomId} active={activeRoomId === item.roomId} />;
         case 'voiceUser':
           return <VoiceOccupantRow spaceId={spaceId} roomId={item.roomId} userId={item.userId} indent={38} />;
         case 'section':

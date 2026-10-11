@@ -16,21 +16,21 @@ import { channelMenuEntries } from '../menus';
 import { pressVoiceRoom } from '../voiceRooms';
 import { RoomTypeIcon } from './RoomTypeIcon';
 
+/** `active`: the room on screen (a boolean, so a room switch re-renders two rows, not all). */
 export const ChannelRow = memo(function ChannelRow({
   spaceId,
   roomId,
-  activeRoomId,
+  active,
 }: {
   spaceId: string;
   roomId: string;
-  activeRoomId: string | null;
+  active: boolean;
 }) {
   const theme = useTheme();
-  const row = useChannelRow(spaceId, roomId, activeRoomId);
+  const row = useChannelRow(spaceId, roomId, active ? roomId : null);
   const name = row?.name || t('space.unnamed');
   const menu = useLongPressActions(() => channelMenuEntries(spaceId, roomId), { title: name });
   if (!row) return null;
-  const active = activeRoomId === roomId;
   const fg = row.bold || active ? theme.colors.foreground : theme.colors.mutedForeground;
   const label = [
     name,

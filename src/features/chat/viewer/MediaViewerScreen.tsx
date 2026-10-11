@@ -41,11 +41,22 @@ function guessType(item: MediaViewerItem): string {
   return 'image/jpeg';
 }
 
+/** A short stable hash of a URL (FNV-1a), so two images never share an id. */
+function urlHash(url: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < url.length; i++) {
+    h ^= url.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
 /** A viewer item as an attachment for the platform's save/share (a local file is its own preview). */
 export function viewerItemAsAttachment(item: MediaViewerItem): AttachmentView {
   const local = /^(file|content):/i.test(item.url);
   return {
-    id: `viewer-${item.url.length}-${item.url.slice(-24)}`,
+    // Keyed by the whole URL: CDN paths of one length ending in the same "image.png" collided.
+    id: `viewer-${urlHash(item.url)}-${item.url.length}`,
     url: item.url,
     filename: item.filename || 'image',
     contentType: guessType(item),
@@ -117,6 +128,15 @@ export function MediaViewerScreen() {
     pagerIndex.current = index;
     pager.current?.scrollToIndex({ index, animated: !theme.reduceMotion });
   }, [index, items.length, theme.reduceMotion]);
+
+  // Rotation (or a fold) changes the page width: keep the same image in view.
+  const lastWidth = useRef(width);
+  useEffect(() => {
+    if (lastWidth.current === width) return;
+    lastWidth.current = width;
+    if (index < items.length) pager.current?.scrollToIndex({ index, animated: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width]);
 
   const onPageEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / width);

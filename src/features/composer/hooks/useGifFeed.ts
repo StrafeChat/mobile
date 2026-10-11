@@ -63,7 +63,11 @@ export function useGifFeed(provider: GifProviderId, query: string, enabled = tru
         });
         if (mine !== reqId.current) return;
         offset.current = page.nextOffset;
-        const next = reset ? page.results : [...itemsRef.current, ...page.results];
+        // Trending shifts between requests, so a later page can repeat a GIF already shown;
+        // the grid keys tiles by id, so a repeat is dropped rather than shown twice.
+        const seen = new Set(reset ? [] : itemsRef.current.map((g) => g.id));
+        const fresh = page.results.filter((g) => !seen.has(g.id) && (seen.add(g.id), true));
+        const next = reset ? fresh : [...itemsRef.current, ...fresh];
         itemsRef.current = next;
         setItems(next);
         const finished = page.results.length === 0 || page.nextOffset >= page.totalCount;

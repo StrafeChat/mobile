@@ -4,7 +4,7 @@
  * controls - each choice saved at once as the default for next time. Android only (the
  * button is gated on screenShareSupported); can't be dismissed while the share is starting.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { setScreenShareEnabled, voice } from '@web/stores/voice';
@@ -29,6 +29,11 @@ export function ScreenShareSheetHost() {
   const active = useSolid(() => voice.session.status !== 'idle');
   const [busy, setBusy] = useState(false);
   const quality = useSolid(() => ({ resolution: voiceSettings.screenShareResolution, fps: voiceSettings.screenShareFps }));
+  // The call ended with the picker open: forget it, or it would pop up by itself the next
+  // time a call starts.
+  useEffect(() => {
+    if (!active) closeScreenShareSheet();
+  }, [active]);
 
   async function share() {
     if (busy) return;

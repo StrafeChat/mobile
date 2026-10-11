@@ -77,7 +77,6 @@ export default {
   notifPermDefault: 'Dein Telefon fragt nach der Erlaubnis, wenn du das einschaltest.',
   openSystemSettings: 'Systemeinstellungen öffnen',
   notifWhileOpenHint: 'Auch für die angezeigte Unterhaltung benachrichtigen, während die App geöffnet ist.',
-  notifNoPush: 'Benachrichtigungen kommen an, solange Strafe läuft. Deine Instanz sendet keine Push-Benachrichtigungen an die geschlossene App.',
   notifSoundsTitle: 'Töne und Vibration',
   notifSoundHint: 'Nutzt Benachrichtigungston und -lautstärke deines Telefons.',
   notifPms: 'Private Nachrichten',
@@ -85,6 +84,8 @@ export default {
 
   restoreLast: 'Beim Start die letzte Unterhaltung öffnen',
   spellcheckHint: 'Rechtschreibprüfung und Autokorrektur im Eingabefeld.',
+  swipeReply: 'Zum Antworten über eine Nachricht wischen',
+  swipeReplyHint: 'Wische eine Nachricht nach links, um darauf zu antworten. Wenn aus, öffnet ein Wischen nach links irgendwo im Gespräch die Mitgliederliste; antworte über das Menü der Nachricht.',
   keybindsWebOnly: 'Tastenkürzel werden in Strafe auf einem Computer festgelegt.',
 
   useDeviceLanguage: 'Gerätesprache verwenden',

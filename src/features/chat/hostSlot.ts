@@ -1,5 +1,5 @@
 /**
- * Sheets the message list owns (the reaction picker, delete confirmation, create-thread) are
+ * Sheets the message list owns (the reaction picker, delete confirmation) are
  * driven by small module stores and drawn by a host inside the list. More than one list can be
  * mounted at once - the conversation in the shell and a thread screen on top of it - so only
  * the most recently mounted list draws them; the one beneath takes over again when the top

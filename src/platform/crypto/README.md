@@ -68,7 +68,9 @@ Errors cross as `{name, message, stack, data}` with **name and message verbatim*
 `machine.ts` recovers from a device mismatch by regex-parsing the engine's initialize error
 (`expected @u:server:DEVICE`), and the reset dialog prints `name: message`. The engine's
 `MegolmDecryptionError` (not an Error) crosses with its `code`/`withheldCode` in `data` and is
-rebuilt as the facade's `MegolmDecryptionError`.
+rebuilt as the facade's `MegolmDecryptionError` (recognised by its name or its numeric `code`).
+Such a throwable is named by its constructor, so the page is bundled with esbuild's
+`keepNames` - plain minification renames the class to two letters.
 
 Values cross as data. Ids are strings, enums their numbers, bigints decimal strings. Maps
 and Sets are explicit: `receiveSyncChanges`'s one-time-key counts go as entries - **an empty
@@ -115,6 +117,11 @@ backup's private key never exists in the app:
   machine. Decrypted sessions never cross the bridge. A session the app abandons is freed
   after ten minutes.
 
+`keyBackupActivity` (`overrides/e2ee/backupActivity.ts`, re-exported by keyBackup.ts) says
+when a restore, or machine.ts's legacy PIN-backup import, is running and bumps a counter when
+one ends. The web's flow says nothing when a restore succeeds - its dialog closed at submit -
+so this is what lets the phone's recovery sheet keep its spinner exactly as long as the work.
+
 Version tracking, the sync loop, 404 adoption, status and the bootstrap claim are the web's,
 unchanged.
 
@@ -135,7 +142,9 @@ Same exports and device-identity rules as the web. Differences:
   whose device id record is lost → the marker's device is reused if still registered, no
   orphan device is provisioned.
 - One machine per store: the page closes any machine still on a store before opening it
-  again, and opens are serialised per store. The app side supersedes stale opens.
+  again, and opens are serialised per store. The app side supersedes stale opens, and a
+  `getMachine` caller whose open was overtaken by a host restart is handed the reopen rather
+  than the crash (the device bootstrap runs once per session and must not lose to it).
 
 ## Lifecycle
 

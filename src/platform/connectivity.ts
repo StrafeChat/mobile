@@ -14,7 +14,8 @@
  *   app deliberately has no global `document`. Its 'online' path runs the same check, so
  *   coming back after a while dispatches that.
  * - The web flushes the read position with a keepalive request at page unload. The app's
- *   equivalent moment is going to the background, after which the OS may end it.
+ *   equivalent moment is going to the background; the lib/viewportAck override sends it
+ *   (only when it is ahead of the read cursor), so it is not sent here a second time.
  *
  * Also retries the instance info (GET /) when the network or the app comes back, if it
  * could not be read before (see overrides/runtime/instance.ts).
@@ -22,8 +23,6 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { AppState, type AppStateStatus } from 'react-native';
 import { createSignal } from 'solid-js';
-import { ackRoomKeepalive } from '@web/api/rooms';
-import { getPendingAck } from '@web/stores/pendingAck';
 import { instanceInfoFailed, retryInstanceInfoNow } from './overrides/runtime/instance';
 import { refreshActiveRoomQuietly } from './rooms';
 import { reportOnline } from './shims/window';
@@ -57,11 +56,6 @@ function applyNetwork(state: Pick<NetInfoState, 'isConnected' | 'isInternetReach
   if (next && instanceInfoFailed()) retryInstanceInfoNow();
 }
 
-function flushPendingAck(): void {
-  const pending = getPendingAck();
-  if (pending) ackRoomKeepalive(pending.roomId, pending.messageId);
-}
-
 function onForeground(awayMs: number): void {
   if (instanceInfoFailed()) retryInstanceInfoNow();
   if (awayMs >= LONG_ABSENCE_MS && online()) {
@@ -92,7 +86,6 @@ export function startConnectivity(): () => void {
     }
     // iOS passes through 'inactive' (a pulled-down notification centre) on the way out.
     if (!awaySince) awaySince = Date.now();
-    if (state === 'background') flushPendingAck();
   });
 
   stop = () => {

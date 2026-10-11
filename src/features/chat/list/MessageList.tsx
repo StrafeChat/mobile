@@ -13,12 +13,18 @@
  * - landing, once per entry as soon as rows exist: a pending jump (centred, flashed) > the
  *   saved position for this session (not at bottom) > the first unread row on the room's
  *   first view, 96 px from the top > the bottom (the only landing that follows new messages).
- *   The list stays invisible until it has landed, so it never visibly jumps;
+ *   The list stays invisible until it has landed, so it never visibly jumps. Until the
+ *   session has hydrated the read cursor is unknown (everything would read as unread), so
+ *   such an early landing goes to the bottom and leaves the first-view landing for later;
  * - following: only a user scroll turns "stick to bottom" on (ending within 24 px of it) or off.
  *   A live message follows only while sticking and not mid-scroll; the viewer's own send and
  *   "jump to present" always go to the bottom; content growing (images, previews) re-pins;
  * - paging: within 400 px of either loaded edge the next page loads (older always, newer only
- *   in a jumped-to window); skeleton groups stand in past the edge meanwhile;
+ *   in a jumped-to window); skeleton groups stand in past the edge meanwhile, as the list's
+ *   header / footer (never as rows: see ListRow for why the anchoring needs that). The
+ *   position is read from the list itself, which knows about its own anchoring corrections
+ *   (its scroll events are muted while it makes them), and nothing pages while unmeasured or
+ *   mid-landing; a check the reader did not prompt pages at most once (edgesToLoad);
  * - jumps while in the room (a reply, a pin, a search hit): consumed, polled up to 2 s for the
  *   row (the nearest newer one if it's gone), centred, smooth only if already loaded;
  * - "You're viewing older messages / Jump to present" while the window isn't the live tail;
@@ -26,7 +32,7 @@
  * - the unread banner ("N new messages since…", Mark As Read) while away from the bottom;
  * - the read cursor follows the bottom-most visible message (lib/viewportAck, 450 ms).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   Platform,
@@ -40,6 +46,7 @@ import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/
 import { formatDate, t } from '@web/i18n/t';
 import { jumpToPresent, loadNewerMessages, loadOlderMessages, messages as messageStore } from '@web/stores/messages';
 import { recallScrollPosition } from '@web/lib/scrollPositions';
+import { auth } from '@web/stores/auth';
 import { ackRoomOptimistic } from '@web/stores/readState';
 import { dismissNewHeader } from '@web/stores/newHeaderDismissed';
 import {
@@ -55,14 +62,12 @@ import {
   useScrollSignals,
   useSettings,
   useUnreadBanner,
-  type MessageListItem,
 } from '@/data';
 import { useSolid } from '@/bridge/solid';
 import { enterRoom, spaceIdOfRoom, type RoomEntry } from '@/platform/rooms';
 import { createRoomViewportAck } from '@/platform/overrides/lib/viewportAck';
 import { useTheme } from '@/theme';
-import { Button, haptics, Icon, Text, Touchable, withAlpha } from '@/ui';
-import { CreateThreadHost } from '../actions/CreateThreadSheet';
+import { Button, EmptyState, haptics, Icon, Text, Touchable, withAlpha } from '@/ui';
 import { DeleteMessageHost } from '../actions/DeleteMessageSheet';
 import { flashMessage } from '../flash';
 import { ReactionPickerHost } from '../reactions/ReactionPicker';
@@ -74,22 +79,29 @@ import {
   ACK_DEBOUNCE_MS,
   BOTTOM_THRESHOLD_PX,
   JUMP_ROW_WAIT_MS,
+  PAGE_SETTLE_MS,
   SETTLE_DELAY_MS,
   UNREAD_LANDING_OFFSET,
   USER_SCROLL_IDLE_MS,
   bottomVisibleMessageId,
+  buildRows,
   chooseLanding,
   distanceToBottom,
   edgesToLoad,
   indexOfMessage,
   itemType,
   resolveJumpRow,
+  sameRow,
   topVisibleMessage,
+  type DividerItem,
+  type ListRow,
   type ViewTokenLike,
 } from './listLogic';
 
 /** Rooms whose first-view landing (on the first unread) has happened this session. */
 const roomsWithInitialScrollDone = new Set<string>();
+/** The list reveals itself (landing as best it can) if its onLoad has not come by then. */
+const LAND_FALLBACK_MS = 1200;
 
 export interface MessageListProps {
   roomId: string;
@@ -102,26 +114,39 @@ export function MessageList(props: MessageListProps) {
   return <RoomMessageList key={props.roomId} {...props} />;
 }
 
-function renderItem({ item }: ListRenderItemInfo<MessageListItem>) {
+function Divider({ item }: { item: DividerItem }) {
   switch (item.kind) {
-    case 'message':
-      return <MessageRow item={item} />;
     case 'dateDivider':
       return <DateDivider date={item.date} newMessages={item.newMessages} />;
     case 'newDivider':
       return <NewDivider />;
-    case 'e2eeDivider':
-      return <E2eeDivider encrypted={item.encrypted} />;
-    case 'historyEdge':
-      return <HistoryEdge side={item.side} />;
-    case 'intro':
-      return <ListIntro />;
     default:
-      return null;
+      return <E2eeDivider encrypted={item.encrypted} />;
   }
 }
 
-const keyExtractor = (item: MessageListItem) => item.key;
+/** A message and the dividers above it (one FlashList row; see ListRow). */
+const MessageListRow = memo(
+  function MessageListRow({ row }: { row: Extract<ListRow, { kind: 'message' }> }) {
+    return (
+      <>
+        {row.dividers.map((d) => (
+          <Divider key={d.key} item={d} />
+        ))}
+        <MessageRow item={row.item} />
+      </>
+    );
+  },
+  (a, b) => sameRow(a.row, b.row),
+);
+
+function renderItem({ item }: ListRenderItemInfo<ListRow>) {
+  return item.kind === 'intro' ? <ListIntro /> : <MessageListRow row={item} />;
+}
+
+const keyExtractor = (item: ListRow) => item.key;
+const OLDER_EDGE = <HistoryEdge side="older" />;
+const NEWER_EDGE = <HistoryEdge side="newer" />;
 const viewabilityConfig = { itemVisiblePercentThreshold: 1, minimumViewTime: 0 };
 /** Chat mode: first render at the bottom; prepends keep the reader's row still (v2's default). */
 const keepPosition = { startRenderingFromBottom: true };
@@ -137,7 +162,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     return () => entry.leave(position.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
-  useEnsureRoomHistory(roomId);
+  const history = useEnsureRoomHistory(roomId);
 
   const ack = useRef<ReturnType<typeof createRoomViewportAck> | null>(null);
   useEffect(() => {
@@ -152,13 +177,14 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   // ---- data ---------------------------------------------------------------------------------------
   const entrySnap = useEntrySnapshot(roomId);
   const model = useMessageList(roomId, entrySnap);
-  const items = model.items;
+  const { rows, olderEdge, newerEdge } = useMemo(() => buildRows(model.items), [model.items]);
   const paging = useMessagePaging(roomId);
   const gates = useRoomGates(roomId, spaceId);
   const settings = useSettings();
   const allowLinkPreviews = useLinkPreviewsAllowed(roomId);
   const jump = useJumpTarget(roomId);
   const signals = useScrollSignals(roomId);
+  const hydrated = useSolid(() => auth.hydrated);
   const hasMessages = model.visibleIds.length > 0;
 
   const ctx = useMemo<ListContextValue>(
@@ -177,19 +203,36 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   );
 
   // ---- scroll state (refs: none of it renders) --------------------------------------------------------
-  const listRef = useRef<FlashListRef<MessageListItem>>(null);
+  const listRef = useRef<FlashListRef<ListRow>>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const stick = useRef(true);
   const dragging = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Content and viewport heights (native), and the last offset a scroll event reported. */
   const metrics = useRef({ offset: 0, content: 0, viewport: 0 });
   const [landed, setLanded] = useState(false);
   const landedRef = useRef(false);
   const [nearBottom, setNearBottom] = useState(true);
   const nearRef = useRef(true);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const pagingRef = useRef(paging);
   pagingRef.current = paging;
+  const firstUnreadRef = useRef<string | null>(null);
+  // Before hydration the frozen read cursor is null and every message reads as unread.
+  firstUnreadRef.current = hydrated ? model.firstUnreadId : null;
+  const hydratedRef = useRef(hydrated);
+  hydratedRef.current = hydrated;
+  /** Programmatic scrolls (landing, jump, snap to bottom) still moving the list. */
+  const moving = useRef(0);
+  /** Pages loaded by checks the reader did not prompt, since their last drag (edgesToLoad). */
+  const unprompted = useRef(0);
   const reduceMotion = theme.reduceMotion;
 
   const updateNear = useCallback((near: boolean) => {
@@ -198,38 +241,144 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     setNearBottom(near);
   }, []);
 
+  /** The list's own offset: it includes the anchoring corrections it applies after a page
+   * arrives, during which it mutes its scroll events (so `metrics.offset` would be stale). */
+  const readOffset = useCallback((): number => {
+    try {
+      const o = listRef.current?.getAbsoluteLastScrollOffset?.();
+      if (typeof o === 'number' && Number.isFinite(o)) return o;
+    } catch {
+      /* no layout yet */
+    }
+    return metrics.current.offset;
+  }, []);
+
   const settleTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** Ends the snap's "moving" mark; cancelling the snap must still end it. */
+  const settleEnd = useRef<(() => void) | null>(null);
   const cancelSettle = () => {
     for (const tm of settleTimers.current) clearTimeout(tm);
     settleTimers.current = [];
+    const end = settleEnd.current;
+    settleEnd.current = null;
+    end?.();
   };
   useEffect(() => () => {
     cancelSettle();
     if (idleTimer.current) clearTimeout(idleTimer.current);
   }, []);
 
+  // ---- paging -----------------------------------------------------------------------------------------
+  const maybeLoadEdges = useCallback(
+    (source: 'scroll' | 'settle') => {
+      if (!landedRef.current || !mounted.current) return;
+      const m = metrics.current;
+      const p = pagingRef.current;
+      const offset = readOffset();
+      const want = edgesToLoad({
+        offset,
+        distanceToBottom: distanceToBottom(m.content, offset, m.viewport),
+        viewport: m.viewport,
+        content: m.content,
+        hasMessages: (messageStore.byRoom[roomId]?.length ?? 0) > 0,
+        hasMoreOlder: p.hasMoreOlder,
+        loadingOlder: p.loadingOlder,
+        hasMoreNewer: p.hasMoreNewer,
+        loadingNewer: p.loadingNewer,
+        moving: moving.current > 0,
+        source,
+        unprompted: unprompted.current,
+      });
+      if ((want.older || want.newer) && source === 'settle') unprompted.current += 1;
+      if (want.older) void loadOlderMessages(roomId).catch(() => undefined);
+      if (want.newer) void loadNewerMessages(roomId).catch(() => undefined);
+    },
+    [roomId, readOffset],
+  );
+
+  // After the landing, and after a page arrived (or the window changed), look again once the
+  // list has laid the change out and corrected its position for it.
+  const settleCheck = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleEdgeCheck = useCallback(() => {
+    if (settleCheck.current) clearTimeout(settleCheck.current);
+    settleCheck.current = setTimeout(() => {
+      settleCheck.current = null;
+      maybeLoadEdges('settle');
+    }, PAGE_SETTLE_MS);
+  }, [maybeLoadEdges]);
+  useEffect(() => () => {
+    if (settleCheck.current) clearTimeout(settleCheck.current);
+  }, []);
+  useEffect(() => {
+    if (landed) scheduleEdgeCheck();
+  }, [landed, rows.length, paging.loadingOlder, paging.loadingNewer, scheduleEdgeCheck]);
+
+  /** Mark the list as being moved by us until the returned end is called (once); then look
+   * at the edges again. */
+  const beginMove = useCallback(() => {
+    moving.current += 1;
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      moving.current = Math.max(0, moving.current - 1);
+      if (mounted.current && landedRef.current) scheduleEdgeCheck();
+    };
+  }, [scheduleEdgeCheck]);
+  const track = useCallback(
+    (done: Promise<unknown> | undefined) => {
+      const end = beginMove();
+      void Promise.resolve(done)
+        .catch(() => undefined)
+        .finally(end);
+    },
+    [beginMove],
+  );
+
   /** Snap to the newest row now, then again as late layout (images, previews) settles. */
   const scrollToBottomSettled = useCallback(() => {
     cancelSettle();
     const snap = () => listRef.current?.scrollToEnd({ animated: false });
     snap();
-    settleTimers.current.push(setTimeout(snap, 16), setTimeout(snap, SETTLE_DELAY_MS));
+    const end = beginMove();
+    settleEnd.current = end;
+    settleTimers.current.push(
+      setTimeout(snap, 16),
+      setTimeout(() => {
+        snap();
+        settleEnd.current = null;
+        end();
+      }, SETTLE_DELAY_MS),
+    );
     updateNear(true);
-  }, [updateNear]);
+  }, [updateNear, beginMove]);
 
   /** Remember where the reader is (scroll idle, after ack publishes): the row at the top and its offset. */
   const topRow = useRef<{ index: number; id: string } | null>(null);
   const stashPosition = useCallback(() => {
     if (!landedRef.current) return;
     const top = topRow.current;
-    const layout = top ? listRef.current?.getLayout(top.index) : undefined;
+    // topRow is from the last viewability report; the rows may have changed since (a jump
+    // replaced the window, a page was trimmed). Look the row up again by id, and ask FlashList
+    // only for an index it has laid out - getLayout throws "not enough layouts" otherwise.
+    const rows = rowsRef.current;
+    const at = top ? rows[top.index] : undefined;
+    const index = !top ? -1 : at?.kind === 'message' && at.id === top.id ? top.index : rows.findIndex((r) => r.kind === 'message' && r.id === top.id);
+    let layout: { y: number } | undefined;
+    if (index >= 0) {
+      try {
+        layout = listRef.current?.getLayout(index) ?? undefined;
+      } catch {
+        layout = undefined;
+      }
+    }
     const first = listRef.current?.getFirstItemOffset() ?? 0;
     position.current = {
       anchorId: top?.id ?? null,
       atBottom: stick.current,
-      ...(layout ? { top: Math.round(layout.y + first - metrics.current.offset) } : {}),
+      ...(layout ? { top: Math.round(layout.y + first - readOffset()) } : {}),
     };
-  }, []);
+  }, [readOffset]);
 
   // ---- jumps ----------------------------------------------------------------------------------------
   const pendingJump = useRef<{ id: string; smooth: boolean; started: number } | null>(null);
@@ -239,7 +388,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     (allowSmooth: boolean): boolean => {
       const pj = pendingJump.current;
       if (!pj) return true;
-      const hit = resolveJumpRow(itemsRef.current, pj.id);
+      const hit = resolveJumpRow(rowsRef.current, pj.id);
       const waited = Date.now() - pj.started;
       if (!hit) {
         // Nothing to land on yet; give up quietly after the wait.
@@ -253,15 +402,17 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
       pendingJump.current = null;
       cancelSettle();
       stick.current = false;
+      updateNear(false);
       const animated = allowSmooth && pj.smooth && !reduceMotion;
-      void listRef.current?.scrollToIndex({ index: hit.index, viewPosition: 0.5, animated });
+      track(listRef.current?.scrollToIndex({ index: hit.index, viewPosition: 0.5, animated }));
       if (hit.exact) flashMessage(hit.id);
       return true;
     },
-    [reduceMotion],
+    [reduceMotion, track, updateNear],
   );
 
-  // A jump while in the room (reply, pin, search hit); on entry the landing consumes it first.
+  // A jump while in the room (reply, pin, search hit, a notification opened over the room);
+  // before the landing it is only recorded - the landing takes it first.
   useEffect(() => {
     if (!jump) return;
     takeJumpTarget(roomId);
@@ -276,59 +427,70 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     if (applyJump(true)) return undefined;
     const timer = setTimeout(() => setJumpPoll((n) => n + 1), 100);
     return () => clearTimeout(timer);
-  }, [jumpPoll, items, applyJump]);
+  }, [jumpPoll, rows, landed, applyJump]);
 
   // ---- landing --------------------------------------------------------------------------------------
+  /** The landing has started (it runs once per entry); `landedRef` = it has finished. */
+  const landingRef = useRef(false);
   const land = useCallback(() => {
-    if (landedRef.current) return;
+    if (landingRef.current) return;
     const list = listRef.current;
     if (!list) return;
-    const firstView = !roomsWithInitialScrollDone.has(roomId);
-    roomsWithInitialScrollDone.add(roomId);
+    landingRef.current = true;
+    const ready = hydratedRef.current;
     const choice = chooseLanding({
-      items: itemsRef.current,
+      items: rowsRef.current,
       jumpTargetId: pendingJump.current?.id ?? null,
       saved: recallScrollPosition(roomId),
-      firstView,
-      firstUnreadId: model.firstUnreadId,
+      firstView: ready && !roomsWithInitialScrollDone.has(roomId),
+      firstUnreadId: firstUnreadRef.current,
     });
+    // As the web: the first view is used up once the landing gets past the jump and the saved
+    // position - and only once the read cursor is known.
+    if (ready && (choice.kind === 'unread' || choice.kind === 'bottom')) roomsWithInitialScrollDone.add(roomId);
+    // Revealed (and acking, paging, following) only once in place.
     const done = () => {
+      if (!mounted.current || landedRef.current) return;
       landedRef.current = true;
       setLanded(true);
     };
     switch (choice.kind) {
       case 'jump':
         if (pendingJump.current) pendingJump.current.smooth = false;
-        landedRef.current = true;
+        done();
         if (!applyJump(false)) setJumpPoll((n) => n + 1);
-        setLanded(true);
         return;
       case 'saved':
         stick.current = false;
         updateNear(false);
-        void list.scrollToIndex({ index: choice.index, animated: false, viewOffset: -choice.top }).finally(done);
+        track(list.scrollToIndex({ index: choice.index, animated: false, viewOffset: -choice.top }).finally(done));
         return;
       case 'unread':
         stick.current = false;
         updateNear(false);
-        void list.scrollToIndex({ index: choice.index, animated: false, viewOffset: -UNREAD_LANDING_OFFSET }).finally(done);
+        track(list.scrollToIndex({ index: choice.index, animated: false, viewOffset: -UNREAD_LANDING_OFFSET }).finally(done));
         return;
       default:
         stick.current = true;
         scrollToBottomSettled();
         done();
     }
-  }, [roomId, model.firstUnreadId, applyJump, scrollToBottomSettled, updateNear]);
+  }, [roomId, applyJump, scrollToBottomSettled, updateNear, track]);
 
-  // Safety net: never leave the list invisible if a landing callback is lost.
+  // Safety net: never leave the list invisible if the list's onLoad is lost. Counted from
+  // when the list itself is mounted (not the skeleton), and it still lands properly.
+  const showSkeleton = !hasMessages && (paging.loading || !paging.cached);
   useEffect(() => {
-    if (landed) return undefined;
+    if (landed || showSkeleton) return undefined;
     const timer = setTimeout(() => {
-      landedRef.current = true;
-      setLanded(true);
-    }, 1200);
+      land();
+      if (!landedRef.current) {
+        landedRef.current = true;
+        setLanded(true);
+      }
+    }, LAND_FALLBACK_MS);
     return () => clearTimeout(timer);
-  }, [landed]);
+  }, [landed, showSkeleton, land]);
 
   // ---- following ------------------------------------------------------------------------------------
   const prevTick = useRef(signals.tick);
@@ -348,45 +510,28 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     scrollToBottomSettled();
   }, [signals.force, scrollToBottomSettled]);
 
-  const onContentSizeChange = useCallback((_w: number, h: number) => {
-    metrics.current.content = h;
-    if (landedRef.current && stick.current && !dragging.current && !pendingJump.current) {
-      listRef.current?.scrollToEnd({ animated: false });
-    }
-  }, []);
+  /** Re-pin while following the live bottom; a jumped-to window's bottom is not live (its
+   * footer pages newer in, and pinning to it would page on down to the present by itself). */
+  const followsLive = useCallback(
+    () => landedRef.current && stick.current && !dragging.current && !pendingJump.current && !pagingRef.current.hasMoreNewer,
+    [],
+  );
+
+  const onContentSizeChange = useCallback(
+    (_w: number, h: number) => {
+      metrics.current.content = h;
+      if (followsLive()) listRef.current?.scrollToEnd({ animated: false });
+    },
+    [followsLive],
+  );
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;
     const grew = h !== metrics.current.viewport;
     metrics.current.viewport = h;
     // The keyboard (or a banner) resized the list: keep the newest message in view.
-    if (grew && landedRef.current && stick.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
-  }, []);
-
-  // ---- paging -----------------------------------------------------------------------------------------
-  const maybeLoadEdges = useCallback(() => {
-    if (!landedRef.current) return;
-    const m = metrics.current;
-    const p = pagingRef.current;
-    const want = edgesToLoad({
-      offset: m.offset,
-      distanceToBottom: distanceToBottom(m.content, m.offset, m.viewport),
-      hasMessages: messageStore.byRoom[roomId]?.length ? true : false,
-      hasMoreOlder: p.hasMoreOlder,
-      loadingOlder: p.loadingOlder,
-      hasMoreNewer: p.hasMoreNewer,
-      loadingNewer: p.loadingNewer,
-    });
-    if (want.older) void loadOlderMessages(roomId).catch(() => undefined);
-    if (want.newer) void loadNewerMessages(roomId).catch(() => undefined);
-  }, [roomId]);
-
-  // A page arrived (or the first landing happened) on a list still short of the edge: keep going.
-  useEffect(() => {
-    if (!landed) return undefined;
-    const timer = setTimeout(maybeLoadEdges, 50);
-    return () => clearTimeout(timer);
-  }, [landed, items.length, paging.loadingOlder, paging.loadingNewer, maybeLoadEdges]);
+    if (grew && followsLive()) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+  }, [followsLive]);
 
   // ---- scroll events ------------------------------------------------------------------------------------
   const onScroll = useCallback(
@@ -397,7 +542,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
       // Only the user's own scrolling starts or stops following the newest message.
       if (dragging.current) stick.current = near;
       updateNear(near);
-      maybeLoadEdges();
+      maybeLoadEdges(dragging.current ? 'scroll' : 'settle');
     },
     [maybeLoadEdges, updateNear],
   );
@@ -406,6 +551,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     idleTimer.current = null;
     dragging.current = true;
+    unprompted.current = 0;
     cancelSettle();
   }, []);
   const userScrollMaybeEnd = useCallback(() => {
@@ -425,7 +571,12 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   }, []);
   const publish = useCallback(() => {
     if (ackTimer.current) clearTimeout(ackTimer.current);
-    ackTimer.current = setTimeout(() => {
+    ackTimer.current = setTimeout(function fire() {
+      // Not while a landing or jump is still carrying the list past rows it will not stop at.
+      if (moving.current > 0) {
+        ackTimer.current = setTimeout(fire, ACK_DEBOUNCE_MS);
+        return;
+      }
       ackTimer.current = null;
       ack.current?.setBottomVisibleMessageId(bottomId.current);
       stashPosition();
@@ -447,7 +598,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     if (!landed) return;
     listRef.current?.recomputeViewableItems();
     publish();
-  }, [landed, items, publish]);
+  }, [landed, rows, publish]);
 
   // ---- overlays -----------------------------------------------------------------------------------------
   const banner = useUnreadBanner(roomId, entrySnap, nearBottom);
@@ -460,10 +611,10 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   const jumpToUnread = () => {
     const id = model.firstUnreadId;
     if (!id) return;
-    const index = indexOfMessage(itemsRef.current, id);
+    const index = indexOfMessage(rowsRef.current, id);
     if (index < 0) return;
     stick.current = false;
-    void listRef.current?.scrollToIndex({ index, animated: !reduceMotion, viewOffset: -UNREAD_LANDING_OFFSET });
+    track(listRef.current?.scrollToIndex({ index, animated: !reduceMotion, viewOffset: -UNREAD_LANDING_OFFSET }));
   };
   const toBottom = () => {
     stick.current = true;
@@ -472,22 +623,30 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   };
 
   // ---- render ---------------------------------------------------------------------------------------------
-  const showSkeleton = !hasMessages && (paging.loading || !paging.cached);
 
   return (
     <ListContext.Provider value={ctx}>
       <View style={styles.fill} onLayout={onLayout}>
-        {showSkeleton ? (
+        {showSkeleton && history.failed && !paging.loading ? (
+          <EmptyState
+            size="page"
+            icon="fa-solid fa-triangle-exclamation"
+            body={t('mobile.chat.loadFailed')}
+            action={<Button title={t('common.retry')} size="sm" variant="outline" onPress={history.retry} />}
+          />
+        ) : showSkeleton ? (
           <RoomSkeleton compact={ctx.compact} />
         ) : (
           <View style={[styles.fill, { opacity: landed ? 1 : 0 }]}>
             <FlashList
               ref={listRef}
-              data={items}
+              data={rows}
               renderItem={renderItem}
               keyExtractor={keyExtractor}
               getItemType={itemType}
               maintainVisibleContentPosition={keepPosition}
+              ListHeaderComponent={olderEdge ? OLDER_EDGE : null}
+              ListFooterComponent={newerEdge ? NEWER_EDGE : null}
               onLoad={land}
               onScroll={onScroll}
               scrollEventThrottle={32}
@@ -561,7 +720,6 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
 
         <ReactionPickerHost />
         <DeleteMessageHost />
-        <CreateThreadHost />
       </View>
     </ListContext.Provider>
   );

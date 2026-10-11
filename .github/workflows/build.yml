@@ -1,0 +1,105 @@
+# Builds installable apps: run by hand (Actions → Build apps → Run workflow) or by pushing a
+# `v*` tag. Unlike CI's debug APK, which loads its JavaScript from a dev server, these carry
+# the bundle and run on their own.
+#
+# - Android: a release APK. Signed with the publisher's upload key when the repository has the
+#   ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS /
+#   ANDROID_KEY_PASSWORD secrets (plugins/withReleaseSigning.js), otherwise with the debug key -
+#   fine to sideload, not for a store.
+# - iOS: a Release build for the iOS Simulator (zipped Strafe.app). A build for devices or
+#   TestFlight has to be signed with the publisher's Apple certificate and provisioning
+#   profiles, which this workflow does not hold.
+#
+# Push notifications: the gateway the build registers with comes from the PUSH_GATEWAY
+# repository variable (default https://push.strafe.chat), and Android gets Firebase only when
+# the STRAFE_FCM_* variables are set (otherwise it is a UnifiedPush-only, Google-free build).
+# See docs/PUSH.md in StrafeChat/deploy.
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+env:
+  EXPO_PUBLIC_PUSH_GATEWAY: ${{ vars.PUSH_GATEWAY }}
+  STRAFE_FCM_PROJECT_ID: ${{ vars.STRAFE_FCM_PROJECT_ID }}
+  STRAFE_FCM_APP_ID: ${{ vars.STRAFE_FCM_APP_ID }}
+  STRAFE_FCM_API_KEY: ${{ vars.STRAFE_FCM_API_KEY }}
+  STRAFE_FCM_SENDER_ID: ${{ vars.STRAFE_FCM_SENDER_ID }}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run build:crypto-host
+      - name: Upload key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+            echo "STRAFE_ANDROID_KEYSTORE=$RUNNER_TEMP/upload.keystore" >> "$GITHUB_ENV"
+            echo "Signing with the repository's upload key."
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: the APK is signed with the debug key (sideloading only)."
+          fi
+      - run: npx expo prebuild --platform android --no-install
+      - name: Build release APK
+        working-directory: android
+        env:
+          STRAFE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          STRAFE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STRAFE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Name the APK after the version
+        run: |
+          version=$(node -p "require('./app.json').expo.version")
+          mv android/app/build/outputs/apk/release/app-release.apk "strafe-$version-${GITHUB_SHA::7}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strafe-android-release
+          path: strafe-*.apk
+          retention-days: 30
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:crypto-host
+      - run: npx expo prebuild --platform ios
+      - name: Build Release for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/Strafe.xcworkspace -scheme Strafe -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build | tail -n 200
+      - name: Package Strafe.app
+        run: |
+          version=$(node -p "require('./app.json').expo.version")
+          ditto -c -k --sequesterRsrc --keepParent ios/build/Build/Products/Release-iphonesimulator/Strafe.app \
+            "strafe-$version-${GITHUB_SHA::7}-simulator.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strafe-ios-simulator
+          path: strafe-*-simulator.zip
+          retention-days: 30

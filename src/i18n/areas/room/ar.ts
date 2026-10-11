@@ -46,5 +46,6 @@ export default {
   searchIn: 'البحث في {{name}}',
   showArchived: 'يعرض السلاسل المؤرشفة',
   undo: 'تراجع',
+  pinsLoadFailed: 'تعذّر تحميل الرسائل المثبتة.',
   unpinned: 'تم إلغاء تثبيت الرسالة',
 };

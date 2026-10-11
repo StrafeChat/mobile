@@ -52,6 +52,10 @@ src/platform/            shims, overrides, crypto host, notifications, boot
 src/bridge/              Solid ↔ React
 src/theme/               theme from the web's appearance store (useTheme)
 src/i18n/locales/        mobile-only strings (six locales, `mobile.` prefix)
+modules/strafe-push/     push notifications, native half (Kotlin + Swift, Expo module):
+                         device keys, FCM / UnifiedPush / APNs, decrypt and render
+plugins/                 config plugins (call service, push: Android manifest, iOS
+                         Notification Service Extension target)
 web/                     the web client (submodule, pinned) - do not edit from here
 ```
 
@@ -87,6 +91,21 @@ web/                     the web client (submodule, pinned) - do not edit from h
   need macOS (CI workflow).
 - Before calling anything done: `npm run typecheck`, `npm run lint`, `npm test`,
   `npm run check:i18n`, `npm run check:overrides`.
+
+## Push notifications
+
+Instances send standard Web Push, encrypted to a key that only the device holds
+(`deploy/docs/PUSH.md` in StrafeChat/deploy has the protocol). `src/platform/push/` registers
+each signed-in account. iOS goes through APNs; Android goes through FCM when the build has
+`STRAFE_FCM_*`, or through UnifiedPush. Each device token is registered with the build's
+gateway (`EXPO_PUBLIC_PUSH_GATEWAY`), and the resulting endpoint plus the device's public key
+are sent to the instance. Decryption and rendering are native (the JS app may not be running).
+Android handles it in the module itself; iOS uses the Notification Service Extension under
+`plugins/strafe-push-ios`. While the app is in the foreground, the open account's pushes are
+suppressed, because the app's own notification logic covers them. In the background it's the
+other way round. Never put message content in a log, and never show more than
+"Encrypted message" for an end-to-end encrypted room. To test the whole chain on the emulator
+without Google, use the gateway's debug transport (PUSH.md, *Development*).
 
 ## Bumping the web submodule
 

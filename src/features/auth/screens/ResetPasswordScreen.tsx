@@ -4,18 +4,19 @@
  * with it. Without a token (the link opened in the browser, or "I have the link") it asks for
  * the link first.
  *
- * The server ends every session of the account on success. If this device is signed in, the
- * way on is a sign-out (which restarts the app on the sign-in screen); otherwise back to
- * sign in.
+ * The server ends every session of the account on success. If this device is signed in to
+ * that account, the way on is a sign-out (which restarts the app on the sign-in screen); if
+ * it is signed in to another one (the link was for a second account), its session is still
+ * good and it goes back into the app; signed out, back to sign in.
  */
 import { useRef, useState } from 'react';
 import { View, type TextInput } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { resetPassword } from '@web/api/auth';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
 import { useSolid } from '@/bridge/solid';
-import { signOut } from '@/platform/session';
+import { signOut, verifySession } from '@/platform/session';
 import { Button, Input, haptics } from '@/ui';
 import { AuthIconChip, AuthScaffold } from '../components/AuthScaffold';
 import { FormErrors } from '../components/FormErrors';
@@ -92,9 +93,15 @@ export function ResetPasswordScreen() {
           loading={leaving}
           onPress={() => {
             if (signedIn) {
-              // Every session of the account was just ended, this one included.
               setLeaving(true);
-              void signOut();
+              // Every session of the reset account was just ended - this one too, unless the
+              // link was for another account. Unknown (offline) counts as ended.
+              void verifySession().then((check) => {
+                if (check.state === 'valid') {
+                  setLeaving(false);
+                  router.replace('/' as Href);
+                } else void signOut();
+              });
             } else {
               returnToAuth(AUTH_PATHS.signIn);
             }

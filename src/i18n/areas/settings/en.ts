@@ -85,7 +85,6 @@ export default {
   notifPermDefault: 'Your phone will ask for permission when you turn this on.',
   openSystemSettings: 'Open system settings',
   notifWhileOpenHint: 'Also notify for the conversation on screen while the app is open.',
-  notifNoPush: 'Notifications arrive while Strafe is running. Your instance does not send push notifications to a closed app.',
   notifSoundsTitle: 'Sounds & haptics',
   notifSoundHint: "Uses your phone's notification sound and volume.",
   notifPms: 'Private messages',
@@ -94,6 +93,8 @@ export default {
   // Behaviour
   restoreLast: 'Open the last conversation on launch',
   spellcheckHint: 'Spellcheck and autocorrect in the message composer.',
+  swipeReply: 'Swipe a message to reply',
+  swipeReplyHint: 'Swipe left on a message to reply to it. When off, swiping left anywhere in a conversation opens the member list; reply from a message\'s menu.',
   keybindsWebOnly: 'Keyboard shortcuts are set in Strafe on a computer.',
 
   // Language

@@ -42,5 +42,6 @@ export default {
   searchIn: 'Buscar en {{name}}',
   showArchived: 'Muestra los hilos archivados',
   undo: 'Deshacer',
+  pinsLoadFailed: 'No se pudieron cargar los mensajes fijados.',
   unpinned: 'Mensaje desfijado',
 };

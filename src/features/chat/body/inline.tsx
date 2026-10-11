@@ -11,6 +11,7 @@ import { PixelRatio, Text as RNText, type TextStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { t } from '@web/i18n/t';
 import { appearance } from '@web/stores/appearance';
+import { accessibility } from '@web/stores/accessibility';
 import { getEmojiProvider } from '@web/lib/emoji/providers';
 import { spaces } from '@web/stores/spaces';
 import { spaceRoleColorHex } from '@web/lib/spacePermissions';
@@ -282,7 +283,24 @@ export function TimestampPill({ unix, style }: { unix: number; style: TimestampS
   );
 }
 
-/** A link in text: opens through the external-link guard; long-press for open / copy / share. */
+/**
+ * Settings → Accessibility → Underline links (the web's `html.underline-links a`): every link
+ * gets an underline, including the ones that otherwise show only colour (preview titles).
+ */
+export function useUnderlineLinks(): boolean {
+  return useSolid(() => accessibility.underlineLinks);
+}
+
+/** The underline a link-styled text takes when the reader asked for it. */
+export function linkUnderline(on: boolean): TextStyle | null {
+  return on ? { textDecorationLine: 'underline' } : null;
+}
+
+/**
+ * A link in text: opens through the external-link guard; long-press for open / copy / share.
+ * Always underlined, as the web's message links are (and so whatever the accessibility
+ * setting says).
+ */
 export function LinkText({ href, children }: { href: string; children: ReactNode }) {
   const theme = useTheme();
   return (

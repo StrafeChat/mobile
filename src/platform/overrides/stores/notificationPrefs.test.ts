@@ -21,6 +21,7 @@ jest.mock('@web/desktop/env', () => ({ isDesktop: () => true }));
 jest.mock('@web/desktop/native', () => mockNative);
 jest.mock('../desktop/native', () => mockNative);
 jest.mock('../../notifications', () => ({ showLocalNotification: (n: Record<string, unknown>) => mockShowLocal(n) }));
+jest.mock('../../rooms', () => ({ spaceIdOfRoom: (id: string) => (id === '456' ? '9' : null) }));
 jest.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Light: 'light' },
   impactAsync: (style: string) => mockImpact(style),
@@ -60,9 +61,14 @@ describe('showDesktopNotification', () => {
       body: 'hi',
       tag: 'room:123',
       onPress: onClick,
-      data: { roomId: '123' },
+      data: { roomId: '123', spaceId: '' },
       sound: false,
     });
+  });
+
+  it("names a channel's space, so a tap that cold-starts the app opens it in its space", () => {
+    prefs.showDesktopNotification({ title: 'Alice', tag: 'room:456' });
+    expect(mockShowLocal.mock.calls[0]![0]).toMatchObject({ data: { roomId: '456', spaceId: '9' } });
   });
 
   it('leaves out room data for a tag that is not a room', () => {

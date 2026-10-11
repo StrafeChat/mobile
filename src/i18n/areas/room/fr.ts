@@ -42,5 +42,6 @@ export default {
   searchIn: 'Rechercher dans {{name}}',
   showArchived: 'Affiche les fils archivés',
   undo: 'Annuler',
+  pinsLoadFailed: 'Impossible de charger les messages épinglés.',
   unpinned: 'Message désépinglé',
 };

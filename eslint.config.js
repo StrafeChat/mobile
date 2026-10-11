@@ -16,6 +16,8 @@ module.exports = defineConfig([
       'src/features/auth/captcha/vendor/scripts.js',
       'dist/**',
       '.expo/**',
+      'modules/*/android/build/**',
+      'modules/*/ios/.build/**',
     ],
   },
   {

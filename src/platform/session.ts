@@ -23,6 +23,10 @@
  *   restarts the JS (reloadApp), like every other session change: the stores, the
  *   gateway, the E2EE engine and the voice session belong to one account, and the web's
  *   logout() leaves most of them populated.
+ * - **An account leaving the device takes its push registration with it**: the instance
+ *   is told to stop pushing here while the session can still say so, and the account's
+ *   push keys and notifications go (setAccountLeavingHook: the push lifecycle installs
+ *   push/registration.ts forgetPushAccount, so this module does not load push itself).
  */
 import { createComputed, createEffect, createRoot, createSignal } from 'solid-js';
 import { api } from '@web/api/client';
@@ -80,6 +84,8 @@ const RECENTLY_VALID_MS = 30_000;
 const LOGOUT_TIMEOUT_MS = 5_000;
 const ACCOUNT_WRITE_TIMEOUT_MS = 3_000;
 const INSTANCE_PROBE_TIMEOUT_MS = 8_000;
+/** Unsubscribing from push must not hold a sign-out up when the instance is slow. */
+const ACCOUNT_LEAVING_TIMEOUT_MS = 4_000;
 
 // ---- small helpers ---------------------------------------------------------------------------
 
@@ -109,6 +115,30 @@ function settleWithin(p: Promise<unknown>, ms: number): Promise<void> {
 }
 
 // ---- leaving the session ----------------------------------------------------------------------
+
+/**
+ * Called before an account leaves this device. `server`: its session can still speak for
+ * it (sign-out, forgetting another account), so the instance can be told too.
+ */
+export type AccountLeavingHook = (accountId: string, opts: { server: boolean }) => Promise<void>;
+
+let accountLeavingHook: AccountLeavingHook | null = null;
+
+export function setAccountLeavingHook(hook: AccountLeavingHook | null): void {
+  accountLeavingHook = hook;
+}
+
+/** Run the hook for an account, bounded: leaving must not wait on a slow instance. */
+function accountLeaving(accountId: string | null, opts: { server: boolean }): Promise<void> {
+  if (!accountId || !accountLeavingHook) return Promise.resolve();
+  let run: Promise<void>;
+  try {
+    run = accountLeavingHook(accountId, opts);
+  } catch {
+    return Promise.resolve();
+  }
+  return settleWithin(run, ACCOUNT_LEAVING_TIMEOUT_MS);
+}
 
 /**
  * Set once the session is being left (sign-out, expiry, switch, add): the app restarts
@@ -207,6 +237,8 @@ export async function expireSession(reason: SignOutReason): Promise<void> {
   if (leaving) return;
   setLeaving(true);
   noteSessionEnded(reason);
+  // The session is gone, and its push subscription with it on the instance's side.
+  await accountLeaving(activeDesktopAccountId() ?? knownAccountId, { server: false });
   await endSession();
 }
 
@@ -219,6 +251,7 @@ export async function expireSession(reason: SignOutReason): Promise<void> {
 export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void> {
   if (leaving) return;
   setLeaving(true);
+  await accountLeaving(activeDesktopAccountId() ?? knownAccountId, { server: !!auth.token });
   if (auth.token) {
     await settleWithin(api(opts.everywhere ? '/auth/logout_all' : '/auth/logout', { method: 'POST' }), LOGOUT_TIMEOUT_MS);
   }
@@ -262,6 +295,7 @@ export async function forgetAccount(id: string): Promise<void> {
   if (id === activeDesktopAccountId()) return signOut();
   const acc = desktopAccounts().find((a) => a.id === id);
   if (!acc) return;
+  await accountLeaving(id, { server: true });
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), LOGOUT_TIMEOUT_MS);
   try {
@@ -564,6 +598,9 @@ export async function chooseInstance(raw: string, signal?: AbortSignal): Promise
   if (auth.token) throw new Error('chooseInstance: a session is active; use addAccount() to reach another instance');
   const found = await resolveInstance(raw, signal);
   const cdnUrl = await advertisedCdnUrl(found.apiUrl, signal);
+  // A lookup the person has typed past must not become the chosen instance after all (the
+  // CDN probe swallows the abort).
+  if (signal?.aborted) throw new Error('chooseInstance: superseded');
   const inst: DesktopInstance = {
     domain: found.domain,
     apiUrl: found.apiUrl,

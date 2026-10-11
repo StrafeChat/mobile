@@ -29,7 +29,7 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
-import { BackHandler, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { BackHandler, Keyboard, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@web/i18n/t';
@@ -104,6 +104,14 @@ export function Sheet({
   const presented = useRef(false);
   const notified = useRef(true);
 
+  // Close with the keyboard first: a sheet's text field unmounts with the sheet, and once it
+  // is gone Keyboard.dismiss() has nothing to blur - the Android keyboard then stays up over
+  // the app (keyboardBlurBehavior "restore" does not cover a programmatic dismiss).
+  const dismissSheet = useCallback(() => {
+    Keyboard.dismiss();
+    ref.current?.dismiss();
+  }, []);
+
   const notifyClosed = useCallback(() => {
     presented.current = false;
     if (notified.current) return;
@@ -119,23 +127,23 @@ export function Sheet({
       return;
     }
     if (!presented.current) return;
-    ref.current?.dismiss();
+    dismissSheet();
     // A dismissal that never reports back (provider gone, animation interrupted) must not
     // leave the caller - or a presenter's promise - waiting forever.
     const timer = setTimeout(notifyClosed, 900);
     return () => clearTimeout(timer);
-  }, [open, notifyClosed]);
+  }, [open, notifyClosed, dismissSheet]);
 
   // Android back: closes this sheet (or is swallowed while it may not close). Listeners run
   // newest-first, so the top-most sheet answers before the shell behind it.
   useEffect(() => {
     if (!open) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (dismissible) ref.current?.dismiss();
+      if (dismissible) dismissSheet();
       return true;
     });
     return () => sub.remove();
-  }, [open, dismissible]);
+  }, [open, dismissible, dismissSheet]);
 
   const renderBackdrop = useCallback(
     (p: BottomSheetBackdropProps) => (
@@ -169,7 +177,7 @@ export function Sheet({
     <SheetContext.Provider value={true}>
       {closeButton ? (
         <View style={{ position: 'absolute', top: padded ? 0 : 4, end: padded ? 12 : 8, zIndex: 1 }}>
-          <IconButton icon="xmark" label={t('common.close')} onPress={() => (dismissible ? ref.current?.dismiss() : undefined)} disabled={!dismissible} />
+          <IconButton icon="xmark" label={t('common.close')} onPress={() => (dismissible ? dismissSheet() : undefined)} disabled={!dismissible} />
         </View>
       ) : null}
       {headerNode ? <View style={padded ? { paddingTop: 4 } : { paddingHorizontal: 20, paddingTop: 4 }}>{headerNode}</View> : null}

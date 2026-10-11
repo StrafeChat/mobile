@@ -12,21 +12,21 @@ import { useTheme } from '@/theme';
 import { Badge, Icon, Text, Touchable, useLongPressActions, withAlpha } from '@/ui';
 import { threadMenuEntries } from '../menus';
 
+/** `active`: the room on screen (a boolean, so a room switch re-renders two rows, not all). */
 export const ThreadRow = memo(function ThreadRow({
   spaceId,
   roomId,
-  activeRoomId,
+  active,
 }: {
   spaceId: string;
   roomId: string;
-  activeRoomId: string | null;
+  active: boolean;
 }) {
   const theme = useTheme();
-  const row = useThreadRow(spaceId, roomId, activeRoomId);
+  const row = useThreadRow(spaceId, roomId, active ? roomId : null);
   const name = row?.name || t('space.unnamed');
   const menu = useLongPressActions(() => threadMenuEntries(spaceId, roomId), { title: name });
   if (!row) return null;
-  const active = activeRoomId === roomId;
   const fg = row.highlight || active ? theme.colors.foreground : theme.colors.mutedForeground;
   const label = [
     name,

@@ -152,10 +152,13 @@ jest.mock('@/platform/voice', () => {
   const { createSignal } = require('solid-js');
   const [cameraFacing] = createSignal('user');
   const [speakerphone, setSpeakerphone] = createSignal(true);
+  const [audioSessionActive, setAudioSessionActive] = createSignal(false);
   return {
     cameraFacing,
     speakerphone,
     __setSpeakerphone: setSpeakerphone,
+    audioSessionActive,
+    __setAudioSessionActive: setAudioSessionActive,
     setPushToTalkHeld: jest.fn(),
     switchCamera: jest.fn(async () => undefined),
     screenShareSupported: jest.fn(() => true),
@@ -199,7 +202,7 @@ jest.mock('@web/stores/auth', () => ({ auth: { user: { id: 'me', username: 'me' 
 jest.mock('@web/stores/instance', () => {
   const { createStore } = require('solid-js/store');
   const [instance, setInstance] = createStore({ voiceEnabled: true, loaded: true });
-  return { instance, setInstance };
+  return { instance, setInstance, loadInstanceInfo: jest.fn(async () => undefined) };
 });
 
 jest.mock('@web/stores/rooms', () => {

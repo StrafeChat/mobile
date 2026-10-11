@@ -11,7 +11,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { t } from '@web/i18n/t';
-import { putRelationship, removeRelationship } from '@web/api/relationships';
+import { removeRelationship } from '@web/api/relationships';
 import { friendDisplayName, loadRelationships, relationships, removeRelationshipLocally } from '@web/stores/relationships';
 import { presence } from '@web/stores/presence';
 import { formatHandle } from '@web/stores/instance';
@@ -36,7 +36,7 @@ import {
   toast,
   useLongPressActions,
 } from '@/ui';
-import { copyText, errorMessage } from './actions';
+import { acceptFriendRequest, copyText, errorMessage } from './actions';
 import { ContentHeader } from './ContentHeader';
 import { FRIENDS_TABS, friendSections, friendSubtitle, hasAnyRelationship, incomingCount, type FriendsSection, type FriendsTab } from './friendsModel';
 import { openPmWith } from './navigation';
@@ -161,7 +161,7 @@ const PersonRow = memo(function PersonRow({
         />
       ) : kind === 'incoming' ? (
         <View style={styles.actions}>
-          <Button title={t('friends.actions.accept')} size="sm" loading={busy} disabled={busy} onPress={() => void run(() => putRelationship(userId))} />
+          <Button title={t('friends.actions.accept')} size="sm" loading={busy} disabled={busy} onPress={() => void run(() => acceptFriendRequest(userId))} />
           <Button
             title={t('friends.actions.decline')}
             size="sm"
@@ -206,7 +206,9 @@ export function FriendsView() {
   const [tab, setTab] = useState<FriendsTab>('all');
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const loading = useSolid(() => relationships.loading);
+  // Only the first load replaces the list with a spinner: a reload (pull to refresh, a sent
+  // request) keeps the list on screen - unmounting it would drop the pull-to-refresh too.
+  const loading = useSolid(() => relationships.loading && !relationships.hydrated);
   const sections = useDerived(
     `friendsSections:${tab}`,
     () => friendSections(relationships.relationships, tab, (id) => presence.byUser[id]),

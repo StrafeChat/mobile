@@ -14,7 +14,7 @@ export { createAttachmentDraft, type AttachmentDraft, type PendingAttachment } f
 export { useAttachmentDraft, asWebPendingAttachments } from './useAttachmentDraft';
 
 // Picking files.
-export { pickFromLibrary, takePhoto, recordVideo, pickDocuments, recoverPendingPick, type PickResult } from './pickers';
+export { pickFromLibrary, takePhoto, recordVideo, pickDocuments, recoverPendingPick, type CropOptions, type PickResult } from './pickers';
 
 // Voice messages (lib/voiceRecorder override).
 export {

@@ -42,5 +42,6 @@ export default {
   searchIn: 'Search {{name}}',
   showArchived: 'Shows the archived threads',
   undo: 'Undo',
+  pinsLoadFailed: "Couldn't load the pinned messages.",
   unpinned: 'Message unpinned',
 };

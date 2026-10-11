@@ -18,7 +18,7 @@ import { useSession } from '@/data';
 import { useTheme } from '@/theme';
 import { Banner, Button, EmptyState, Header, Spinner, Text } from '@/ui';
 import { errorMessage } from '../actions';
-import { backToShell, goBack, goToSpace, replaceRoute } from '../navigation';
+import { closeScreenToShell, goBack, goToSpace, replaceRoute } from '../navigation';
 import { SpaceIcon } from '../SpaceIcon';
 
 /** The route segment as typed in a link: a federated code's "@" may be percent-encoded. */
@@ -89,7 +89,7 @@ export function InviteScreen({ code }: { code: string }) {
     try {
       const space = await joinSpaceByInvite(code);
       addOrUpdateSpace(space);
-      goToSpace(space.id);
+      goToSpace(space.id, { fromScreen: true });
     } catch (err) {
       setError(errorMessage(err, 'invite.joinFailed'));
     } finally {
@@ -112,7 +112,7 @@ export function InviteScreen({ code }: { code: string }) {
         icon="fa-solid fa-link-slash"
         title={t('invite.invalidTitle')}
         body={t('invite.invalidBody')}
-        action={<Button title={t('invite.goHome')} variant="outline" onPress={backToShell} />}
+        action={<Button title={t('invite.goHome')} variant="outline" onPress={closeScreenToShell} />}
       />
     );
   } else {
@@ -160,7 +160,7 @@ export function InviteScreen({ code }: { code: string }) {
           ) : memberOf ? (
             <View style={styles.actions}>
               <Text tone="muted">{t('invite.alreadyMember')}</Text>
-              <Button title={t('invite.openSpace')} fullWidth onPress={() => goToSpace(memberOf)} />
+              <Button title={t('invite.openSpace')} fullWidth onPress={() => goToSpace(memberOf, { fromScreen: true })} />
             </View>
           ) : (
             <Button title={t('invite.joinNamed', { name })} fullWidth loading={joining} onPress={() => void join()} />

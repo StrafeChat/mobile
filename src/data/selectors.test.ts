@@ -244,12 +244,14 @@ describe('member lists and people', () => {
       relationships: [
         { id: 'a', type: RelType.Friend, user: { ...user('a'), presence: { status: 'online' } } },
         { id: 'b', type: RelType.Friend, user: user('b') },
+        // Do not disturb is not "online" on the web's Friends tab (isVisibleStatus).
+        { id: 'f', type: RelType.Friend, user: { ...user('f'), presence: { status: 'dnd' } } },
         { id: 'c', type: RelType.IncomingRequest, user: user('c') },
         { id: 'd', type: RelType.OutgoingRequest, user: user('d') },
         { id: 'e', type: RelType.Blocked, user: user('e') },
       ],
     });
-    expect(friendIds('all')).toEqual(['a', 'b']);
+    expect(friendIds('all')).toEqual(['a', 'b', 'f']);
     expect(friendIds('online')).toEqual(['a']);
     expect(friendIds('pending')).toEqual(['c', 'd']);
     expect(friendIds('blocked')).toEqual(['e']);

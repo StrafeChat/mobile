@@ -113,6 +113,9 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
   };
 
   const canCall = info.callable && instance.voiceEnabled;
+  // Manage Roles opens a room's settings too: its permission overrides live there (the web's
+  // rule, and the room list's menu).
+  const canOpenSettings = abilities.canManageRooms || abilities.canManageRoles;
   const hero: ReactNode =
     info.kind === 'pm' && info.otherUserId ? (
       <UserAvatar userId={info.otherUserId} name={info.name} size="xl" ringColor={theme.colors.card} />
@@ -233,12 +236,12 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
           </ListSection>
         ) : null}
 
-        {info.kind === 'text' && spaceId ? (
+        {info.kind === 'text' && spaceId && (gates?.canCreatePublicThreads || canOpenSettings) ? (
           <ListSection>
             {gates?.canCreatePublicThreads ? (
               <ListRow title={t('threads.new')} icon="plus" onPress={then(() => openCreateThread({ spaceId, roomId: info.id }))} />
             ) : null}
-            {abilities.canManageRooms ? (
+            {canOpenSettings ? (
               <ListRow title={t('mobile.room.roomSettings')} icon="gear" chevron onPress={then(() => openRoomSettings(info.id))} />
             ) : null}
           </ListSection>
@@ -251,7 +254,7 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
                 title={`#${info.parentName}`}
                 icon="hashtag"
                 chevron
-                onPress={then(() => openParentChannel(info.parentId!, spaceId, mode))}
+                onPress={then(() => openParentChannel(info.parentId!, spaceId))}
               />
             ) : null}
             {threadRows.map((item) => (

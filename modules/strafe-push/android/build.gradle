@@ -1,0 +1,45 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'chat.strafe'
+version = '1.0.0'
+
+android {
+  namespace "chat.strafe.push"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+  }
+  testOptions {
+    unitTests.all { test ->
+      testLogging {
+        events "passed", "failed", "skipped"
+        showExceptions true
+        showCauses true
+      }
+    }
+  }
+}
+
+dependencies {
+  // The same versions expo-notifications brings, so the app resolves one copy of each.
+  implementation 'androidx.core:core:1.17.0'
+  implementation 'androidx.lifecycle:lifecycle-process:2.9.3'
+  implementation 'com.google.firebase:firebase-messaging:25.0.1'
+  // GoogleApiAvailability; firebase-messaging only brings it in at runtime scope.
+  implementation 'com.google.android.gms:play-services-base:18.5.0'
+  // UnifiedPush (AND_3). We hand it our own KeyManager, so its Web Push keys are the slot
+  // keys (PushStore) and every transport decrypts through the same code.
+  implementation 'org.unifiedpush.android:connector:3.3.5'
+
+  testImplementation 'junit:junit:4.13.2'
+  // The android.jar on the unit-test classpath only has stubs of org.json.
+  testImplementation 'org.json:json:20240303'
+
+  // On-device end to end (keystore, decrypt, notifications): ./gradlew :strafe-push:connectedDebugAndroidTest
+  androidTestImplementation 'androidx.test:runner:1.6.2'
+  androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
