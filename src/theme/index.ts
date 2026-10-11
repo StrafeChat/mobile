@@ -8,6 +8,8 @@
  * sizes.
  */
 import { appearance, activeTheme, type CornerStyle, type FontScale, type UiDensity } from '@web/stores/appearance';
+import { accessibility } from '@web/stores/accessibility';
+import { saturateHex } from './saturate';
 import type { ThemeColors } from '@web/theme/themes';
 import { useMemo } from 'react';
 import { useSolid } from '@/bridge/solid';
@@ -104,6 +106,8 @@ const ROW_PADDING: Record<UiDensity, number> = { compact: 4, default: 8, spaciou
 
 export function buildTheme(input: {
   colors: ThemeColors;
+  /** Accessibility -> Saturation, 0..100 (100 = untouched); the web filters the whole page. */
+  saturation?: number;
   appearance: 'dark' | 'light';
   fontScale: FontScale;
   corners: CornerStyle;
@@ -113,20 +117,23 @@ export function buildTheme(input: {
 }): Theme {
   const dark = input.appearance === 'dark';
   const scale = FONT_SCALE[input.fontScale] ?? 1;
+  const sat = input.saturation ?? 100;
+  const tone = (hex: string) => (sat >= 100 ? hex : saturateHex(hex, sat));
+  const base = Object.fromEntries(Object.entries(input.colors).map(([k, v]) => [k, tone(v)])) as ThemeColors;
   return {
     dark,
     code: dark ? CODE_DARK : CODE_LIGHT,
     colors: {
-      ...input.colors,
-      online: '#3ba55d',
-      idle: '#faa81a',
-      dnd: '#ed4245',
-      offline: dark ? '#80848e' : '#9aa0a6',
-      mention: input.colors.primary,
+      ...base,
+      online: tone('#3ba55d'),
+      idle: tone('#faa81a'),
+      dnd: tone('#ed4245'),
+      offline: tone(dark ? '#80848e' : '#9aa0a6'),
+      mention: base.primary,
       mentionBackground: dark ? 'rgba(250, 168, 26, 0.10)' : 'rgba(250, 168, 26, 0.16)',
-      link: dark ? '#5aa9f7' : '#1a6fc4',
-      warning: '#f0b232',
-      success: '#3ba55d',
+      link: tone(dark ? '#5aa9f7' : '#1a6fc4'),
+      warning: tone('#f0b232'),
+      success: tone('#3ba55d'),
       overlay: dark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.35)',
     },
     radii: RADII[input.corners] ?? RADII.soft,
@@ -151,6 +158,7 @@ export function useTheme(): Theme {
       uiDensity: appearance.uiDensity,
       messageGroupSpacing: appearance.messageGroupSpacing,
       reduceMotion: appearance.reduceMotion,
+      saturation: accessibility.saturation,
     };
   });
   // `s` is a snapshot: same object until a setting changes, so this rebuilds only then.
@@ -168,5 +176,6 @@ export function currentTheme(): Theme {
     uiDensity: appearance.uiDensity,
     messageGroupSpacing: appearance.messageGroupSpacing,
     reduceMotion: appearance.reduceMotion,
+    saturation: accessibility.saturation,
   });
 }

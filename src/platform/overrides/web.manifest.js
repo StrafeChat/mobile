@@ -19,6 +19,8 @@
  */
 module.exports = {
   WEB_MODULE_OVERRIDES: {
+    // React Native's fetch words a dropped connection differently from browsers.
+    'lib/formatApiError': 'src/platform/overrides/lib/formatApiError.ts',
     // Notification decisions: the web's own, with a visibility-only `document` for the call.
     'lib/notifications': 'src/platform/overrides/lib/notifications.ts',
     // Prefs store kept; system notifications through expo-notifications, the chime on them.

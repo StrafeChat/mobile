@@ -26,19 +26,12 @@ import {
   submitRecoveryPrompt,
   type RecoveryPromptKind,
 } from '@web/stores/recoveryPrompt';
-import { isWellFormedRecoveryCode } from '@web/lib/e2ee/recoveryCode';
+import { formatRecoveryCode, isWellFormedRecoveryCode } from '@web/lib/e2ee/recoveryCode';
 import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
 import { useTheme } from '@/theme';
 import { Button, Checkbox, Input, Sheet, Spinner, Text, haptics, toast, withAlpha } from '@/ui';
-import {
-  LEGACY_PIN_MAX,
-  LEGACY_PIN_MIN,
-  caretAfterEdit,
-  recoveryCodeComplete,
-  reformatRecoveryInput,
-  type Selection,
-} from './recoveryInput';
+import { LEGACY_PIN_MAX, LEGACY_PIN_MIN, recoveryCodeComplete } from './recoveryInput';
 
 /** How long the "checking" state waits for the flow to come back before letting go. */
 const BUSY_TIMEOUT_MS = 30_000;
@@ -125,26 +118,24 @@ function ShowCodeView({ code }: { code: string }) {
 
 function EnterCodeView({ error, onSubmitted }: { error: string | null; onSubmitted: () => void }) {
   const [value, setValue] = useState('');
-  const [selection, setSelection] = useState<Selection>({ start: 0, end: 0 });
   const [malformed, setMalformed] = useState(false);
   const [checking, setChecking] = useState(false);
-  const prev = useRef({ value: '', selection: { start: 0, end: 0 } as Selection });
+  const caret = useRef({ start: 0, end: 0 });
   const complete = recoveryCodeComplete(value);
 
+  // Typing or pasting at the end (nearly every edit) re-groups into blocks of four as you go.
+  // An edit in the middle is left as typed until the field loses focus: re-grouping there
+  // means moving the caret from JS, and a controlled caret races fast typing on Android (the
+  // native caret has already moved on). Dashes are ignored when the code is read, so a
+  // half-grouped code still restores.
   function onChangeText(raw: string) {
-    const caret = caretAfterEdit(prev.current.value, prev.current.selection, raw);
-    const next = reformatRecoveryInput(raw, caret);
-    const sel = { start: next.caret, end: next.caret };
-    prev.current = { value: next.value, selection: sel };
-    setValue(next.value);
-    setSelection(sel);
+    const atEnd = caret.current.start >= value.length;
+    setValue(atEnd ? formatRecoveryCode(raw) : raw);
     setMalformed(false);
   }
 
   function onSelectionChange(e: TextInputSelectionChangeEvent) {
-    const sel = e.nativeEvent.selection;
-    prev.current = { ...prev.current, selection: sel };
-    setSelection(sel);
+    caret.current = e.nativeEvent.selection;
   }
 
   async function submit() {
@@ -171,9 +162,9 @@ function EnterCodeView({ error, onSubmitted }: { error: string | null; onSubmitt
       <Input
         label={t('recovery.code')}
         value={value}
-        selection={selection}
         onChangeText={onChangeText}
         onSelectionChange={onSelectionChange}
+        onBlur={() => setValue((v) => formatRecoveryCode(v))}
         placeholder={t('recovery.codePlaceholder')}
         autoCapitalize="characters"
         autoCorrect={false}

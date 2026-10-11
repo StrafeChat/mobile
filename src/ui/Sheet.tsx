@@ -203,7 +203,9 @@ export function Sheet({
       handleIndicatorStyle={{ backgroundColor: withAlpha(theme.colors.mutedForeground, 0.3), width: 40, height: 4 }}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
+      // The app runs under react-native-keyboard-controller, which keeps Android from resizing
+      // the window for the keyboard; 'adjustPan' tells the sheet to lift itself instead.
+      android_keyboardInputMode="adjustPan"
       enableBlurKeyboardOnGesture
       overrideReduceMotion={reduce ? ReduceMotion.Always : ReduceMotion.System}
       accessible={false}

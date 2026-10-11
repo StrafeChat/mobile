@@ -28,6 +28,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
 import { openContent, openNav, setMembersOpen, shell } from './state';
 import { useTheme } from '@/theme';
@@ -256,7 +257,7 @@ function PagerShell({ nav, content, members, width }: SwipeShellProps & { width:
                   style={StyleSheet.absoluteFill}
                   onPress={() => setMembersOpen(false)}
                   accessibilityRole="button"
-                  accessibilityLabel="Close member list"
+                  accessibilityLabel={t('room.hideMembers')}
                 />
               </Animated.View>
               <Animated.View
