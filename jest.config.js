@@ -9,6 +9,9 @@
 module.exports = {
   preset: 'jest-expo',
   resolver: '<rootDir>/jest/resolver.js',
+  // A suite's first test also pays for loading (and, on a cold cache as in CI, transforming)
+  // the shared stores it imports; under a full parallel run that alone can pass jest's 5 s.
+  testTimeout: 30000,
   testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/*.test.tsx', '<rootDir>/crypto-host/**/*.test.ts', '<rootDir>/plugins/**/*.test.js'],
   moduleNameMapper: {
     // @web-original/* is mapped to a marker path that jest/resolver.js turns into the real web

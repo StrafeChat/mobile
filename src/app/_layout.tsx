@@ -40,7 +40,9 @@ export default function RootLayout() {
   useEffect(() => {
     void startApp();
   }, []);
-  const segments = useSegments();
+  // Read as plain strings: the typed-routes tuple (generated under .expo/, absent in CI) would
+  // otherwise decide whether segments[1] even exists.
+  const segments: readonly string[] = useSegments();
   const group = segments[0];
   // Email verification and password reset links work signed in too (verifying a new address,
   // resetting from a mail link): opened while ready, they stay put.
