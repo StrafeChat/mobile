@@ -1,0 +1,114 @@
+{
+  "expo": {
+    "name": "Strafe",
+    "slug": "strafe",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "strafe",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#101216",
+    "ios": {
+      "bundleIdentifier": "chat.strafe.mobile",
+      "supportsTablet": true,
+      "icon": "./assets/images/icon.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Strafe uses the camera for video calls and to take photos you send.",
+        "NSMicrophoneUsageDescription": "Strafe uses the microphone for voice calls and voice messages.",
+        "NSPhotoLibraryUsageDescription": "Strafe lets you pick photos and videos to send.",
+        "NSPhotoLibraryAddUsageDescription": "Strafe saves images and videos you choose to keep.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "package": "chat.strafe.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#1b2b26",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "android.permission.WAKE_LOCK",
+        "android.permission.VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#101216",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Strafe uses the microphone for voice calls and voice messages."
+        }
+      ],
+      "expo-video",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "usesCleartextTraffic": true
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      "expo-localization",
+      "expo-sharing",
+      "expo-background-task",
+      [
+        "expo-notifications",
+        {
+          "color": "#5865F2"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Strafe lets you pick photos and videos to send.",
+          "cameraPermission": "Strafe uses the camera to take photos you send."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Strafe saves images and videos you choose to keep."
+        }
+      ],
+      "@livekit/react-native-expo-plugin",
+      "@config-plugins/react-native-webrtc",
+      "react-native-quick-crypto"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": false
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    }
+  }
+}
