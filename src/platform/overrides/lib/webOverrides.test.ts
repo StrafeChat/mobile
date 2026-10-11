@@ -55,12 +55,16 @@ describe('lib/userContextMenu', () => {
     const items = menu.buildUserMenuItems({ userId: '200', username: 'alice', displayName: 'Alice', homeDomain: 'b.example', currentUserId: '100' });
     const labels = items.map((i) => i.label);
     expect(labels).toEqual(['friends.addFriend', 'userArea.copyUsername', 'userArea.copyUserId', 'userMenu.block', 'profile.report']);
+    // The copy goes through the async clipboard: wait for it rather than for one tick, which
+    // is not enough on a slower machine (it failed that way in CI).
+    const clipboardBecomes = async (value: string) => {
+      for (let i = 0; i < 50 && mockClipboard.value !== value; i++) await new Promise((r) => setTimeout(r, 10));
+      expect(mockClipboard.value).toBe(value);
+    };
     items[1]!.onClick();
-    await Promise.resolve();
-    expect(mockClipboard.value).toBe('alice@b.example');
+    await clipboardBecomes('alice@b.example');
     items[2]!.onClick();
-    await Promise.resolve();
-    expect(mockClipboard.value).toBe('200');
+    await clipboardBecomes('200');
   });
 
   it('reports through the native report sheet', () => {
