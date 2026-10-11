@@ -57,13 +57,18 @@ jobs:
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: the APK is signed with the debug key (sideloading only)."
           fi
       - run: npx expo prebuild --platform android --no-install
+      # The generated project gives Gradle 2 GB of heap and 512 MB of metaspace; packaging a
+      # release of this app runs out of both on a runner (packageRelease failed that way).
+      - name: Give Gradle room
+        run: sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1536m/' android/gradle.properties
+      # Phones and current emulators; 32-bit x86 only ever ran on old emulators.
       - name: Build release APK
         working-directory: android
         env:
           STRAFE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           STRAFE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           STRAFE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
       - name: Name the APK after the version
         run: |
           version=$(node -p "require('./app.json').expo.version")

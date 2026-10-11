@@ -51,9 +51,11 @@ jobs:
       - run: npm ci
       - run: npm run build:crypto-host
       - run: npx expo prebuild --platform android --no-install
+      - name: Give Gradle room
+        run: sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1536m/' android/gradle.properties
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a,x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: strafe-android-debug
