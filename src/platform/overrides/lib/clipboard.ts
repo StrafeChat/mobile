@@ -13,7 +13,11 @@ interface TextClipboard {
   readText(): Promise<string>;
 }
 
-export const textClipboard: TextClipboard = {
+/** Marks a clipboard installed by this module (any instance of it). */
+const OURS = Symbol.for('strafe.textClipboard');
+
+export const textClipboard: TextClipboard & { [OURS]: true } = {
+  [OURS]: true,
   async writeText(text: string): Promise<void> {
     await Clipboard.setStringAsync(String(text));
   },
@@ -22,11 +26,17 @@ export const textClipboard: TextClipboard = {
   },
 };
 
-/** Install `navigator.clipboard` unless something already provides it. Idempotent. */
+/**
+ * Install `navigator.clipboard` unless something else already provides it. Idempotent. One
+ * installed by another instance of this module (a Fast Refresh, or another jest test file on
+ * a Node whose built-in `navigator` is shared between them) is replaced: that instance may
+ * be bound to a clipboard module that is no longer the live one.
+ */
 export function installClipboard(): void {
-  const g = globalThis as unknown as { navigator?: Record<string, unknown> };
+  const g = globalThis as unknown as { navigator?: Record<string | symbol, unknown> };
   const nav = g.navigator ?? (g.navigator = {});
-  if (!nav.clipboard) nav.clipboard = textClipboard;
+  const existing = nav.clipboard as Record<symbol, unknown> | undefined;
+  if (!existing || existing[OURS] === true) nav.clipboard = textClipboard;
 }
 
 installClipboard();
