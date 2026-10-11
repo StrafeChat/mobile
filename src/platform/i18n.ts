@@ -22,14 +22,29 @@ import mAr from '@/i18n/locales/ar';
 import { RTL_LOCALES, getInitialLanguage } from '@web/i18n/config';
 import { bindI18nReactivity } from '@web/i18n/t';
 
-// The web's strings plus the mobile-only ones (all under `mobile.`, so nothing collides).
+type Tree = { [key: string]: string | Tree };
+
+/**
+ * The web's strings plus the mobile-only ones. A deep merge: the web locales already have a
+ * `mobile` block (its mobile layout's tab bar and You panel), and the app's own `mobile.*`
+ * keys must add to it, not replace it.
+ */
+function merge(base: Tree, extra: Tree): Tree {
+  const out: Tree = { ...base };
+  for (const [k, v] of Object.entries(extra)) {
+    const b = out[k];
+    out[k] = typeof v === 'object' && typeof b === 'object' ? merge(b, v) : v;
+  }
+  return out;
+}
+
 const resources = {
-  en: { translation: { ...en, ...mEn } },
-  es: { translation: { ...es, ...mEs } },
-  'pt-BR': { translation: { ...ptBR, ...mPtBR } },
-  fr: { translation: { ...fr, ...mFr } },
-  de: { translation: { ...de, ...mDe } },
-  ar: { translation: { ...ar, ...mAr } },
+  en: { translation: merge(en as Tree, mEn as Tree) },
+  es: { translation: merge(es as Tree, mEs as Tree) },
+  'pt-BR': { translation: merge(ptBR as Tree, mPtBR as Tree) },
+  fr: { translation: merge(fr as Tree, mFr as Tree) },
+  de: { translation: merge(de as Tree, mDe as Tree) },
+  ar: { translation: merge(ar as Tree, mAr as Tree) },
 };
 
 const initialLng = getInitialLanguage();

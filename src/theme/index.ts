@@ -20,8 +20,55 @@ export interface Radii {
   full: number;
 }
 
+/** Code-block syntax colours, one per CodeTokenRole (the web's --code-* tokens). */
+export interface CodeColors {
+  fg: string;
+  muted: string;
+  comment: string;
+  keyword: string;
+  string: string;
+  number: string;
+  literal: string;
+  title: string;
+  attr: string;
+  type: string;
+  deletion: string;
+  addition: string;
+}
+
+// From web/src/index.css (--code-*), dark and light.
+const CODE_DARK: CodeColors = {
+  fg: 'hsl(0, 0%, 85%)',
+  muted: 'hsl(0, 0%, 52%)',
+  comment: 'hsl(0, 0%, 52%)',
+  keyword: 'hsl(286, 60%, 72%)',
+  string: 'hsl(95, 38%, 62%)',
+  number: 'hsl(29, 54%, 61%)',
+  literal: 'hsl(187, 47%, 55%)',
+  title: 'hsl(207, 82%, 66%)',
+  attr: 'hsl(39, 67%, 69%)',
+  type: 'hsl(39, 67%, 69%)',
+  deletion: 'hsl(355, 65%, 65%)',
+  addition: 'hsl(95, 38%, 62%)',
+};
+const CODE_LIGHT: CodeColors = {
+  fg: 'hsl(0, 0%, 20%)',
+  muted: 'hsl(0, 0%, 45%)',
+  comment: 'hsl(0, 0%, 45%)',
+  keyword: 'hsl(286, 60%, 42%)',
+  string: 'hsl(119, 34%, 32%)',
+  number: 'hsl(29, 90%, 36%)',
+  literal: 'hsl(187, 80%, 30%)',
+  title: 'hsl(207, 82%, 40%)',
+  attr: 'hsl(29, 80%, 38%)',
+  type: 'hsl(29, 80%, 38%)',
+  deletion: 'hsl(355, 70%, 42%)',
+  addition: 'hsl(119, 34%, 32%)',
+};
+
 export interface Theme {
   dark: boolean;
+  code: CodeColors;
   colors: ThemeColors & {
     /** Status colours the web hardcodes in its utility classes. */
     online: string;
@@ -68,6 +115,7 @@ export function buildTheme(input: {
   const scale = FONT_SCALE[input.fontScale] ?? 1;
   return {
     dark,
+    code: dark ? CODE_DARK : CODE_LIGHT,
     colors: {
       ...input.colors,
       online: '#3ba55d',

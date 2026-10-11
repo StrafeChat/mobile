@@ -15,8 +15,15 @@
       ],
       "@web-original/*": [
         "./web/src/*"
+      ],
+      "@matrix-org/matrix-sdk-crypto-wasm": [
+        "./src/platform/crypto/matrixSdkCrypto.ts"
       ]
-    }
+    },
+    "types": [
+      "jest",
+      "node"
+    ]
   },
   "include": [
     "src/**/*.ts",

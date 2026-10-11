@@ -17,6 +17,8 @@ export interface LocalNotification {
   onPress?: () => void;
   /** Routing data that survives an app restart (a tap that launches the app). */
   data?: Record<string, string>;
+  /** Play the system notification sound (the person's "notification sound" setting). */
+  sound?: boolean;
 }
 
 const pressHandlers = new Map<string, () => void>();
@@ -28,10 +30,11 @@ function configure(): void {
   configured = true;
   Notifications.setNotificationHandler({
     // While the app is open the shared code has already decided this deserves attention.
-    handleNotification: async () => ({
+    handleNotification: async (n) => ({
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldPlaySound: false,
+      // Read from the notification itself: the handler can run before schedule resolves.
+      shouldPlaySound: (n.request.content.data as Record<string, unknown> | undefined)?.strafeSound === '1',
       shouldSetBadge: false,
     }),
   });
@@ -42,10 +45,19 @@ function configure(): void {
       vibrationPattern: [0, 120, 60, 120],
       lightColor: '#509b6b',
     });
+    // The person's "notification sound" setting decides per notification; Android fixes
+    // sound per channel, hence a silent twin of the messages channel.
+    void Notifications.setNotificationChannelAsync('messages-silent', {
+      name: 'Messages (silent)',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: null,
+      vibrationPattern: [0, 120, 60, 120],
+    });
+    // No `sound` key: the channel then uses the system default (a name here means a bundled
+    // custom sound file).
     void Notifications.setNotificationChannelAsync('calls', {
       name: 'Calls',
       importance: Notifications.AndroidImportance.MAX,
-      sound: 'default',
     });
   }
   Notifications.addNotificationResponseReceivedListener((response) => {
@@ -83,10 +95,10 @@ export async function showLocalNotification(n: LocalNotification): Promise<boole
       content: {
         title: n.title,
         ...(n.body ? { body: n.body } : {}),
-        data: n.data ?? {},
-        ...(Platform.OS === 'android' ? {} : { sound: false }),
+        data: { ...(n.data ?? {}), ...(n.sound ? { strafeSound: '1' } : {}) },
+        ...(Platform.OS === 'android' ? {} : { sound: n.sound ? 'default' : false }),
       },
-      trigger: Platform.OS === 'android' ? { channelId: 'messages' } : null,
+      trigger: Platform.OS === 'android' ? { channelId: n.sound ? 'messages' : 'messages-silent' } : null,
     });
     if (n.onPress) pressHandlers.set(id, n.onPress);
     return true;

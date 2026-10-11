@@ -18,6 +18,7 @@
     "@shopify/flash-list": "2.0.2",
     "emojibase-data": "^17.0.0",
     "expo": "~57.0.27",
+    "expo-asset": "~57.0.19",
     "expo-audio": "~57.0.5",
     "expo-background-task": "~57.0.21",
     "expo-blur": "~57.0.3",
@@ -72,6 +73,7 @@
     "solid-js": "^1.9.17"
   },
   "devDependencies": {
+    "@matrix-org/matrix-sdk-crypto-wasm": "18.9.0",
     "@testing-library/react-native": "^14.1.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
@@ -86,11 +88,13 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/typecheck.mjs",
     "test": "jest",
     "check:overrides": "node scripts/check-overrides.mjs",
     "build:crypto-host": "node crypto-host/build.mjs",
-    "check:i18n": "node scripts/check-i18n.mjs"
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "check:voice-drift": "node src/platform/overrides/voice/check-drift.mjs",
+    "postinstall": "node crypto-host/build.mjs"
   },
   "private": true,
   "license": "GPL-3.0-only"

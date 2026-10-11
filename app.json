@@ -44,8 +44,17 @@
         "android.permission.FOREGROUND_SERVICE_MICROPHONE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
         "android.permission.WAKE_LOCK",
-        "android.permission.VIBRATE"
-      ]
+        "android.permission.VIBRATE",
+        "android.permission.FOREGROUND_SERVICE_CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
+      "allowBackup": false
     },
     "plugins": [
       "expo-router",
@@ -96,12 +105,23 @@
       [
         "expo-media-library",
         {
-          "savePhotosPermission": "Strafe saves images and videos you choose to keep."
+          "savePhotosPermission": "Strafe saves images and videos you choose to keep.",
+          "granularPermissions": []
         }
       ],
-      "@livekit/react-native-expo-plugin",
       "@config-plugins/react-native-webrtc",
-      "react-native-quick-crypto"
+      "react-native-quick-crypto",
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication",
+            "enableScreenShareService": true
+          }
+        }
+      ],
+      "./plugins/withStrafeCallService",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

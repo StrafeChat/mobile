@@ -21,6 +21,9 @@ const WEB_SRC = path.join(ROOT, 'web', 'src');
 
 const config = getDefaultConfig(ROOT);
 
+// The E2EE engine's wasm ships as an asset the crypto WebView is fed (src/platform/crypto).
+config.resolver.assetExts.push('wasm');
+
 const webOverrides = new Map(
   Object.entries(WEB_MODULE_OVERRIDES).map(([rel, file]) => [rel, path.join(ROOT, file)]),
 );

@@ -8,7 +8,11 @@ import './crypto';
 import 'react-native-url-polyfill/auto';
 import './localStorage';
 import './window';
+// navigator.clipboard for the web's 'Copy …' menu actions.
+import '../overrides/lib/clipboard';
 import './env';
+// i18next needs Intl.PluralRules (and the timestamps RelativeTimeFormat) when it starts.
+import './intl';
 // Last: i18n reads the stored language (localStorage) and the device's (navigator).
 import '../i18n';
 

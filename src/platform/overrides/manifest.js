@@ -29,6 +29,14 @@ const WEB_MODULE_OVERRIDES = {
   'i18n/index': 'src/platform/overrides/i18n/index.ts',
 };
 
+/**
+ * Exports an override leaves out on purpose (web UI that cannot exist here). Anything not
+ * listed that the original exports and the override does not fails check:overrides.
+ */
+const OMITTED_EXPORTS = {
+  'i18n/index': ['AuthLanguageSwitcher', 'DocumentLangSync', 'useReactiveTranslate'],
+};
+
 const PACKAGE_OVERRIDES = {
   // desktop/accounts.ts (reused as-is) keeps its account list through invoke().
   '@tauri-apps/api/core': 'src/platform/overrides/packages/tauri-core.ts',
@@ -40,6 +48,7 @@ for (const file of fs.readdirSync(__dirname).sort()) {
   for (const [kind, target] of [
     ['WEB_MODULE_OVERRIDES', WEB_MODULE_OVERRIDES],
     ['PACKAGE_OVERRIDES', PACKAGE_OVERRIDES],
+    ['OMITTED_EXPORTS', OMITTED_EXPORTS],
   ]) {
     for (const [key, value] of Object.entries(area[kind] || {})) {
       if (target[key] && target[key] !== value) {
@@ -50,4 +59,4 @@ for (const file of fs.readdirSync(__dirname).sort()) {
   }
 }
 
-module.exports = { WEB_MODULE_OVERRIDES, PACKAGE_OVERRIDES };
+module.exports = { WEB_MODULE_OVERRIDES, PACKAGE_OVERRIDES, OMITTED_EXPORTS };

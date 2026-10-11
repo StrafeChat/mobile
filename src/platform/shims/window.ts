@@ -16,7 +16,7 @@
  *   visibility logic. Deliberately nothing else: a `document` that pretended to be a DOM
  *   would send library code down browser paths it cannot complete.
  */
-import { AccessibilityInfo, AppState, Appearance, Dimensions, type AppStateStatus } from 'react-native';
+import { AccessibilityInfo, AppState, Appearance, Dimensions, Linking, type AppStateStatus } from 'react-native';
 import { getDesktopInstance } from '@web/desktop/instanceOverride';
 
 type Listener = (ev: { type: string; [k: string]: unknown }) => void;
@@ -280,6 +280,17 @@ if (typeof g.matchMedia !== 'function') {
       removeListener: (l: MQListener) => state.listeners.delete(l),
       dispatchEvent: () => true,
     };
+  };
+}
+
+// ---- window.open -----------------------------------------------------------------------------------
+//
+// A few web paths fall back to window.open for links; in an app that is the system's handler.
+
+if (typeof g.open !== 'function') {
+  g.open = (url?: string | URL) => {
+    if (url) void Linking.openURL(String(url)).catch(() => undefined);
+    return null;
   };
 }
 

@@ -7,6 +7,7 @@
  */
 import * as Notifications from 'expo-notifications';
 import * as WebBrowser from 'expo-web-browser';
+import { Linking } from 'react-native';
 import { router } from 'expo-router';
 import { reloadApp } from '../../reload';
 import { showLocalNotification } from '../../notifications';
@@ -30,11 +31,19 @@ export function markDesktopReady(): Promise<void> {
 
 // ---- links and windows -----------------------------------------------------------------------
 
-/** External links open in an in-app browser tab (Custom Tabs / SFSafariViewController). */
+/**
+ * External links open in an in-app browser tab (Custom Tabs / SFSafariViewController), or in
+ * whatever handles the URL when that fails (a mailto:, a device without a browser tab). Never
+ * rejects: stores/externalLink falls back to window.open, which an app does not have.
+ */
 export async function openExternalUrl(url: string): Promise<void> {
-  await WebBrowser.openBrowserAsync(url, {
-    presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-  });
+  try {
+    await WebBrowser.openBrowserAsync(url, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    });
+  } catch {
+    await Linking.openURL(url).catch(() => undefined);
+  }
 }
 
 /**
