@@ -4,18 +4,18 @@
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
+import { memoryFs } from '../../../media/testing/memoryFileSystem';
+import { ApiError } from '@web/api/ApiError';
+import { encryptAttachment } from '../attachments/crypto';
+import { peekDecryptedAttachment } from '../../../media/attachmentCache';
+import * as messages from './messages';
+
 jest.mock('expo-file-system', () => require('../../../media/testing/memoryFileSystem'));
 jest.mock('@web/api/client', () => ({
   ApiError: (jest.requireActual('@web/api/ApiError') as { ApiError: unknown }).ApiError,
   getApiUrl: () => 'https://chat.test/api',
   api: jest.fn(),
 }));
-
-import { memoryFs } from '../../../media/testing/memoryFileSystem';
-import { ApiError } from '@web/api/ApiError';
-import { encryptAttachment } from '../attachments/crypto';
-import { peekDecryptedAttachment } from '../../../media/attachmentCache';
-import * as messages from './messages';
 
 type Part = [string, unknown];
 

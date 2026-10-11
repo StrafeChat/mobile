@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-jest.mock('expo-file-system', () => require('../../media/testing/memoryFileSystem'));
-
 import { memoryFs } from '../../media/testing/memoryFileSystem';
 import { bareMediaType, clearTypedClips, clipFormatFromName, readHead, sniffClipFormat, typedClip, typedClipUrl } from './clipFormat';
+
+jest.mock('expo-file-system', () => require('../../media/testing/memoryFileSystem'));
 
 const WEBM = [0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42];
 const OGG = [0x4f, 0x67, 0x67, 0x53, 0x00];

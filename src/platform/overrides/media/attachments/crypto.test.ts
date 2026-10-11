@@ -7,8 +7,6 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { createCipheriv } from 'node:crypto';
 import { Blob as NodeBlob } from 'node:buffer';
 
-jest.mock('expo-file-system', () => require('../../../media/testing/memoryFileSystem'));
-
 import { memoryFs } from '../../../media/testing/memoryFileSystem';
 import { File } from 'expo-file-system';
 import * as webCrypto from '@web-original/lib/attachments/crypto';
@@ -24,6 +22,8 @@ import {
   encryptBytes,
 } from './crypto';
 import { takeUploadSeed } from '../../../media/uploadSeeds';
+
+jest.mock('expo-file-system', () => require('../../../media/testing/memoryFileSystem'));
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

@@ -3,6 +3,12 @@
  */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
+import { memoryFs } from './testing/memoryFileSystem';
+// Instantiated here, so the per-boot module copies below share the file system and the
+// app storage (they outlive a restart); each boot gets its own auth store and lifecycle.
+import 'expo-file-system';
+import { appStorage } from '../storage';
+
 jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
 jest.mock('../storage', () => {
   const map = new Map<string, string>();
@@ -20,12 +26,6 @@ jest.mock('@web/stores/auth', () => {
   const [auth, setAuth] = createStore({ token: null as string | null, user: null as { id: string } | null });
   return { auth, setAuth };
 });
-
-import { memoryFs } from './testing/memoryFileSystem';
-// Instantiated here, so the per-boot module copies below share the file system and the
-// app storage (they outlive a restart); each boot gets its own auth store and lifecycle.
-import 'expo-file-system';
-import { appStorage } from '../storage';
 
 type Lifecycle = typeof import('./lifecycle');
 type AuthMock = { setAuth: (patch: Record<string, unknown>) => void };

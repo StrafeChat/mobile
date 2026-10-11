@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
-
 import { memoryFs } from './testing/memoryFileSystem';
 import { absoluteUrl, extensionOf, isInMediaRoot, mediaDirectory, normalizePickedFile, readHeadBytes, sanitizeFilename } from './files';
+
+jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
 
 beforeEach(() => memoryFs.reset());
 

@@ -199,7 +199,7 @@ export function peekDecryptedAttachment(att: Pick<AttachmentView, 'id' | 'encryp
 }
 
 let active = 0;
-const waiting: Array<() => void> = [];
+const waiting: (() => void)[] = [];
 
 async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
   if (active >= MAX_CONCURRENT_JOBS) await new Promise<void>((resolve) => waiting.push(resolve));

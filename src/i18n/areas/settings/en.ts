@@ -1,0 +1,181 @@
+/**
+ * Mobile strings for the settings area (en), read as t('mobile.settings.<key>'). All six locale files of
+ * an area define the same keys (npm run check:i18n); Arabic plurals use _zero/_one/_two/
+ * _few/_many/_other where the others use _one/_other.
+ */
+export default {
+  // Shell and shared
+  versionLine: 'Public beta · v{{version}}',
+  editProfileHint: 'Opens My Account',
+  noResults: 'No settings match "{{query}}".',
+  logOutConfirm: 'You will need to sign in again to use Strafe on this device.',
+  logOutEverywhere: 'Log out everywhere',
+  logOutEverywhereHint: 'Ends every session of this account, on every device.',
+  logOutEverywhereConfirm: 'Every device signed in to this account will be signed out, this one included.',
+  copyFailed: "Couldn't copy to the clipboard.",
+  genericError: 'Something went wrong. Please try again.',
+  share: 'Share',
+  change: 'Change',
+  copyId: 'Copy ID',
+  noPermission: "You don't have permission to change this.",
+  adminOnly: 'Only instance administrators can open this.',
+  unsavedHint: 'You have unsaved changes',
+  takePhoto: 'Take photo',
+  chooseFromLibrary: 'Choose from library',
+  increase: 'Increase',
+  decrease: 'Decrease',
+  seconds_one: '{{count}} second',
+  seconds_other: '{{count}} seconds',
+
+  // Section descriptions that differ on a phone
+  appearanceDescription: 'Themes, text size, corners, emoji and chat density.',
+  notificationsDescription: 'System notifications, sounds and what you get notified for.',
+  behaviourTitle: 'Behaviour',
+  behaviourDescription: 'Launch behaviour and composer options.',
+
+  privacyTitle: 'Privacy & safety',
+  privacyDescription: 'Blocked people, notification previews, link previews and your birthday.',
+  privacyControls: 'What others and the server see',
+  unblockConfirm: 'Unblock {{name}}? They will be able to message you and send friend requests again.',
+  blockHint: 'Block someone from their profile or a message. They are not told.',
+  // My Account
+  changeAvatar: 'Change avatar',
+  changeBanner: 'Change banner',
+  mediaHint: 'JPEG, PNG, GIF or WebP · up to 8 MB each',
+  bioHint: 'Markdown and basic HTML, shown on your full profile. Switch to Preview to see it.',
+  bioEmpty: 'Nothing to preview yet.',
+  profileSaved: 'Profile saved.',
+
+  // Security
+  totpSetupDescription: 'Scan the code with an authenticator app, or open it in one on this phone, then enter the 6-digit code it shows.',
+  totpQrLabel: 'QR code for your authenticator app',
+  openInAuthenticator: 'Open in authenticator app',
+  noAuthenticatorApp: 'No authenticator app on this phone opened the link. Copy the key instead.',
+  totpEnabled: 'Authenticator app turned on.',
+  passkeysAddOnWeb: 'Passkeys can be added from Strafe in a web browser. Ones you add there are listed here and can be removed.',
+  codesScreenshotWarning: 'Keep these somewhere safe and private - anyone with one of them and your password can get into your account.',
+
+  // Devices
+  devicesNote: 'These are the devices that hold your encryption keys, not your sign-in sessions.',
+
+  // Appearance and theme editor
+  appearanceWebOnly: 'Custom CSS, fonts and transparency effects apply only to Strafe on the web and desktop.',
+  themeActions: 'Theme options',
+  themeTools: 'Import & export',
+  themeSaved: 'Theme saved.',
+  pasteFromClipboard: 'Paste from clipboard',
+  clipboardEmpty: 'The clipboard is empty.',
+  colorPickerShow: 'Show colour picker',
+  colorPickerHide: 'Hide colour picker',
+  colorHue: 'Hue',
+  colorSaturation: 'Saturation',
+  colorBrightness: 'Brightness',
+
+  // Accessibility
+  haptics: 'Haptic feedback',
+  hapticsHint: 'Gentle vibrations when you flip a switch, long-press or get a result.',
+  systemTextSizeNote: "Strafe also follows your phone's text size setting.",
+
+  // Notifications
+  notifSystemTitle: 'System notifications',
+  notifSystem: 'Show notifications',
+  notifPermGranted: 'Strafe may show notifications on this device.',
+  notifPermDenied: "Notifications are turned off for Strafe in this phone's settings.",
+  notifPermUnsupported: "This device can't show notifications.",
+  notifPermDefault: 'Your phone will ask for permission when you turn this on.',
+  openSystemSettings: 'Open system settings',
+  notifWhileOpenHint: 'Also notify for the conversation on screen while the app is open.',
+  notifNoPush: 'Notifications arrive while Strafe is running. Your instance does not send push notifications to a closed app.',
+  notifSoundsTitle: 'Sounds & haptics',
+  notifSoundHint: "Uses your phone's notification sound and volume.",
+  notifPms: 'Private messages',
+  notifTestDisabled: 'Turn on sounds or notifications first.',
+
+  // Behaviour
+  restoreLast: 'Open the last conversation on launch',
+  spellcheckHint: 'Spellcheck and autocorrect in the message composer.',
+  keybindsWebOnly: 'Keyboard shortcuts are set in Strafe on a computer.',
+
+  // Language
+  useDeviceLanguage: 'Use device language',
+  rtlNote: 'Arabic lays the app out right to left; switching to or from it needs a restart.',
+  restartTitle: 'Restart to change the layout direction',
+  restartBody: 'The new language is already in use. Strafe needs to restart to lay itself out in its direction.',
+  restartNow: 'Restart now',
+  restartLater: 'Later',
+
+  // Voice & video
+  audioOutput: 'Audio output',
+  routeHint: 'Where call audio plays. Automatic follows what you connect.',
+  routeAppliesNow: 'Applies to the call you are in right away.',
+  routePicker: 'More outputs…',
+  route: {
+    auto: 'Automatic',
+    speaker: 'Speaker',
+    earpiece: 'Earpiece',
+    headset: 'Wired headset',
+    bluetooth: 'Bluetooth',
+  },
+  micTestInCall: 'You are in a call - this is how loud you come through right now.',
+  pttHint: 'Hold the talk button in the call to speak. Your microphone stays closed otherwise.',
+  noiseHint: "Uses your phone's own voice processing to filter out background noise.",
+  iosVoiceProcessing: 'On iPhone and iPad, echo cancellation and noise suppression run together; turning both off bypasses voice processing.',
+  cameraFlipNote: 'Switch between the front and back camera from the call screen.',
+
+  // Space settings
+  spaceGone: 'This space is no longer available.',
+  moderationDescription: 'Verification level and automod rules.',
+  widgetTitle: 'Space widget',
+  widgetEnable: 'Enable space widget',
+  newRole: 'New role',
+  editOrder: 'Edit order',
+  editOrderHint: 'Higher roles outrank lower ones. Move a role up or down, then save.',
+  saveOrder: 'Save order',
+  roleOrderSaved: 'Role order saved.',
+  roleMemberCount_one: '{{count}} member',
+  roleMemberCount_other: '{{count}} members',
+  moveUp: 'Move {{name}} up',
+  moveDown: 'Move {{name}} down',
+  roleGone: 'This role no longer exists.',
+  roleSaved: 'Role saved.',
+  deleteRoleConfirm: 'Delete the role "{{name}}"? Members who have it lose it.',
+  tabMembers: 'Members',
+  groupToggle: 'All {{group}} permissions',
+  addToRoleHint: 'Gives them {{role}}',
+  joinedOn: 'Joined {{date}}',
+  memberActionsHint: 'Shows actions for this member',
+  memberBanned: '{{name}} was banned.',
+  inviteCopied: 'Invite link copied.',
+
+  // Room settings
+  roomGone: 'This room is no longer available.',
+  roomNotifDescription: 'What you get notified for here, and muting it.',
+  roomNotifNote: 'These settings are yours alone and follow you to your other devices.',
+  notifyDefaultHint: 'Follows your notification settings: {{mode}}.',
+  effective: {
+    all: 'all messages',
+    mentions: 'only @mentions',
+    none: 'nothing',
+  },
+  mutedUntil: 'Muted until {{when}}',
+  mutedIndefinitely: 'Muted until you turn it back on',
+  muteSection: 'Mute every room in this section',
+  unmuteSection: 'Unmute every room in this section',
+  sectionMuteHint: 'Applies to each room in the section, only for you.',
+  slowmodeOff: 'Off',
+  roleOverrides: 'Roles',
+  memberOverrides: 'Members',
+  noOverrides: 'No overrides yet.',
+  addRoleOverride: 'Add a role',
+  addMemberOverride: 'Add a member',
+  overrideSummary: '{{allowed}} allowed · {{denied}} denied',
+  overrideAllow: 'Allow',
+  overrideDeny: 'Deny',
+  overrideInherit: 'Inherit',
+  everyoneOverrideHint: 'Applies to everyone in the space who has no other override here.',
+
+  // Admin dashboard
+  adminOverviewHint: 'Pull down to refresh. Registration mode and invite codes are in Settings → Instance.',
+  badgesHint: 'Tap a badge to grant or remove it. Changes are saved at once and shown on their profile.',
+  adminSpace: 'Space',
+};

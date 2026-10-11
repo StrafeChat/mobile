@@ -7,7 +7,7 @@ import { describe, expect, it } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const plugin = require('../../../plugins/withStrafeCallService') as {
   addCallServiceToManifest: (m: unknown, pkg: string) => unknown;
   addPackageToMainApplication: (contents: string, pkg: string) => string;

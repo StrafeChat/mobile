@@ -6,13 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
-
 import { memoryFs } from './testing/memoryFileSystem';
 import type { AttachmentView } from '@web-original/lib/attachments/types';
 import { encryptBytes } from '../overrides/media/attachments/crypto';
 import { clearAttachmentCache } from './attachmentCache';
 import { attachmentSourceSync, resolveAttachmentSource, useAttachmentSource } from './mediaSource';
+
+jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
 
 const OGG = [0x4f, 0x67, 0x67, 0x53, 0, 2];
 const FTYP = [0, 0, 0, 0x1c, 0x66, 0x74, 0x79, 0x70];

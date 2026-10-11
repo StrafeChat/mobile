@@ -5,13 +5,13 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Image } from 'react-native';
 
+import { memoryFs } from '../../../media/testing/memoryFileSystem';
+import { createAttachmentDraft } from './draft';
+
 jest.mock('expo-file-system', () => require('../../../media/testing/memoryFileSystem'));
 jest.mock('@web/i18n/t', () => ({
   t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key),
 }));
-
-import { memoryFs } from '../../../media/testing/memoryFileSystem';
-import { createAttachmentDraft } from './draft';
 
 const getSize = jest.spyOn(Image, 'getSize');
 

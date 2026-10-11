@@ -31,7 +31,7 @@ function sourceKey(source: MemberSource): string {
  * The people a source lists: a group's participants, or the space's members filtered to those
  * with View Channel in the open text channel/thread (SpacePage.visibleMembers).
  */
-export function sourceMembers(source: MemberSource): Array<RoomParticipant & { roles?: string[]; joined_at?: string }> {
+export function sourceMembers(source: MemberSource): (RoomParticipant & { roles?: string[]; joined_at?: string })[] {
   if ('pmRoomId' in source) return rooms.rooms.find((r) => r.id === source.pmRoomId)?.participants ?? [];
   const { spaceId, roomId } = source;
   const members: SpaceMember[] = spaceMembers.bySpaceId[spaceId] ?? [];

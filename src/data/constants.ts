@@ -25,7 +25,7 @@ export function isSnowflakeId(id: string): boolean {
  * each carry this same reduction inline.
  */
 export function latestSnowflakeId(
-  list: ReadonlyArray<{ id: string }> | undefined,
+  list: readonly { id: string }[] | undefined,
   fallback: string | null | undefined,
 ): string | null {
   let best: string | null = null;

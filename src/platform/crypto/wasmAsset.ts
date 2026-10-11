@@ -10,7 +10,7 @@
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const ENGINE_WASM = require('../../../assets/crypto/matrix_sdk_crypto_wasm_bg.wasm') as number;
 
 export async function loadEngineWasmBase64(): Promise<string> {

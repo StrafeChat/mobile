@@ -19,7 +19,7 @@ interface LocatedPackage {
   wasm: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const { locateMatrixSdkCryptoWasm } = require('../../../../crypto-host/locatePackage.cjs') as {
   locateMatrixSdkCryptoWasm(): LocatedPackage | null;
 };
@@ -50,7 +50,7 @@ export function ensureWebCrypto(): void {
 export function loadBindings(pkg: LocatedPackage): Sdk {
   let mod: Sdk | undefined;
   jest.isolateModules(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     mod = require(pkg.bindingsCjs) as Sdk;
   });
   return mod!;

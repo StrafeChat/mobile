@@ -1,0 +1,50 @@
+/**
+ * Mobile strings for the room area (ar), read as t('mobile.room.<key>'). All six locale files of
+ * an area define the same keys (npm run check:i18n); Arabic plurals use _zero/_one/_two/
+ * _few/_many/_other where the others use _one/_other.
+ */
+export default {
+  continueInBackground: 'المتابعة في الخلفية',
+  findPeople: 'البحث عن أشخاص',
+  friends: 'أصدقاء',
+  groupDetails: 'تفاصيل المجموعة',
+  has: {
+    link: 'روابط',
+    image: 'صور',
+    video: 'فيديوهات',
+    audio: 'صوت',
+    file: 'ملفات',
+  },
+  importingBackup: 'جارٍ استيراد نسختك الاحتياطية القديمة…',
+  jumpHint: 'يفتح المحادثة عند هذه الرسالة',
+  jumpToMessage: 'الانتقال إلى الرسالة',
+  keysPendingTitle: 'بعض الرسائل لا تزال مقفلة',
+  keysPendingBody:
+    'إنها بانتظار مفاتيح التشفير الخاصة بها. ستُفتح من تلقاء نفسها عندما يشارك أحد أجهزتك الأخرى المفاتيح، أو عندما تستعيد نسختك الاحتياطية برمز الاسترداد.',
+  leaveGroupBody: 'لن تصلك رسائل {{name}} بعد الآن. سيتعيّن على أحد أعضاء المجموعة إضافتك من جديد.',
+  messageFailed: 'تعذّر فتح المحادثة.',
+  mutualSpaces_zero: 'لا توجد مساحات مشتركة',
+  mutualSpaces_one: 'مساحة مشتركة واحدة',
+  mutualSpaces_two: 'مساحتان مشتركتان',
+  mutualSpaces_few: '{{count}} مساحات مشتركة',
+  mutualSpaces_many: '{{count}} مساحة مشتركة',
+  mutualSpaces_other: '{{count}} مساحة مشتركة',
+  noMembersMatch: 'لا أحد يطابق هذا الاسم.',
+  nothingOpenTitle: 'لا توجد محادثة مفتوحة',
+  nothingOpenBody: 'اختر غرفة أو رسالة خاصة لبدء الحديث.',
+  notifications: 'الإشعارات',
+  openCall: 'فتح المكالمة',
+  openRooms: 'عرض الغرف',
+  removeFriendBody: 'ستتم إزالة {{name}} من أصدقائك.',
+  removeMemberBody: 'لن يتلقى {{name}} الرسائل الجديدة من هذه المجموعة.',
+  requestSent: 'تم إرسال الطلب',
+  restoringMessages: 'جارٍ استعادة رسائلك…',
+  roomSettings: 'إعدادات الغرفة',
+  safetyRowHint: 'قارن رموز الأمان للتأكد من أن لا أحد غيركما يستمع.',
+  saveCode: 'حفظ',
+  saved: 'تم الحفظ',
+  searchIn: 'البحث في {{name}}',
+  showArchived: 'يعرض السلاسل المؤرشفة',
+  undo: 'تراجع',
+  unpinned: 'تم إلغاء تثبيت الرسالة',
+};

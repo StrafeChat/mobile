@@ -48,10 +48,6 @@ export default {
       offlineNotice: "Você está offline. Mostrando o que está neste dispositivo.",
     },
 
-    // Sign-in and accounts (src/features/auth).
-    auth: {
-      sessionExpiredNotice: "Sua sessão expirou. Entre novamente.",
-    },
 
     // The end-to-end encryption engine (src/platform/crypto).
     crypto: {

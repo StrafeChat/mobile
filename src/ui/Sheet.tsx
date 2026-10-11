@@ -66,7 +66,7 @@ export interface SheetProps {
   /** When false the sheet can't be swiped, tapped or backed away (a request in flight). */
   dismissible?: boolean;
   /** Fixed heights ('50%', 400...). Without them the sheet sizes to its content. */
-  snapPoints?: Array<string | number>;
+  snapPoints?: (string | number)[];
   /** Body scrolls (long lists, forms). */
   scrollable?: boolean;
   /** Pad the body (default). Off for edge-to-edge content such as action lists. */

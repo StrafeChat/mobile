@@ -24,6 +24,8 @@ import { UiProvider } from '@/ui';
 import { CryptoHost } from '@/platform/crypto';
 import { startApp, useBootState } from '@/platform/boot';
 import { installAppWiring } from '@/platform/wiring';
+import { AuthHosts } from '@/features/auth';
+import { installSettingsWiring } from '@/features/settings';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -34,17 +36,21 @@ export default function RootLayout() {
   const { state } = useBootState();
 
   useEffect(() => installAppWiring(), []);
+  useEffect(() => installSettingsWiring(), []);
   useEffect(() => {
     void startApp();
   }, []);
   const segments = useSegments();
   const group = segments[0];
+  // Email verification and password reset links work signed in too (verifying a new address,
+  // resetting from a mail link): opened while ready, they stay put.
+  const authLinkScreen = group === '(auth)' && (segments[1] === 'verify-email' || segments[1] === 'reset-password');
   useEffect(() => {
     if (state !== 'booting') SplashScreen.hideAsync().catch(() => undefined);
-    if (state === 'ready' && group !== '(main)') router.replace('/');
+    if (state === 'ready' && group !== '(main)' && !authLinkScreen) router.replace('/');
     else if (state === 'signed-out' && group !== '(auth)') router.replace('/sign-in');
     else if ((state === 'booting' || state === 'error') && group !== 'boot') router.replace('/boot');
-  }, [state, group]);
+  }, [state, group, authLinkScreen]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -53,6 +59,7 @@ export default function RootLayout() {
           <UiProvider>
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <CryptoHost />
+            <AuthHosts />
             <Stack
               screenOptions={{
                 headerShown: false,

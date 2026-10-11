@@ -1,0 +1,46 @@
+/**
+ * Mobile strings for the room area (de), read as t('mobile.room.<key>'). All six locale files of
+ * an area define the same keys (npm run check:i18n); Arabic plurals use _zero/_one/_two/
+ * _few/_many/_other where the others use _one/_other.
+ */
+export default {
+  continueInBackground: 'Im Hintergrund fortsetzen',
+  findPeople: 'Personen finden',
+  friends: 'Freunde',
+  groupDetails: 'Gruppendetails',
+  has: {
+    link: 'Links',
+    image: 'Bilder',
+    video: 'Videos',
+    audio: 'Audio',
+    file: 'Dateien',
+  },
+  importingBackup: 'Deine alte Sicherung wird importiert…',
+  jumpHint: 'Öffnet die Unterhaltung bei dieser Nachricht',
+  jumpToMessage: 'Zur Nachricht springen',
+  keysPendingTitle: 'Einige Nachrichten sind noch gesperrt',
+  keysPendingBody:
+    'Sie warten auf ihre Verschlüsselungsschlüssel. Sie werden von selbst entsperrt, wenn eines deiner anderen Geräte die Schlüssel teilt oder wenn du deine Sicherung mit dem Wiederherstellungscode wiederherstellst.',
+  leaveGroupBody: 'Du bekommst keine Nachrichten mehr von {{name}}. Jemand aus der Gruppe muss dich wieder hinzufügen.',
+  messageFailed: 'Die Unterhaltung konnte nicht geöffnet werden.',
+  mutualSpaces_one: '{{count}} gemeinsamer Space',
+  mutualSpaces_other: '{{count}} gemeinsame Spaces',
+  noMembersMatch: 'Niemand passt zu diesem Namen.',
+  nothingOpenTitle: 'Keine Unterhaltung geöffnet',
+  nothingOpenBody: 'Wähle einen Raum oder eine private Nachricht, um loszulegen.',
+  notifications: 'Benachrichtigungen',
+  openCall: 'Anruf öffnen',
+  openRooms: 'Räume anzeigen',
+  removeFriendBody: '{{name}} wird aus deinen Freunden entfernt.',
+  removeMemberBody: '{{name}} bekommt keine neuen Nachrichten aus dieser Gruppe mehr.',
+  requestSent: 'Anfrage gesendet',
+  restoringMessages: 'Deine Nachrichten werden wiederhergestellt…',
+  roomSettings: 'Raumeinstellungen',
+  safetyRowHint: 'Vergleiche die Sicherheitscodes, um sicherzugehen, dass niemand mithört.',
+  saveCode: 'Speichern',
+  saved: 'Gespeichert',
+  searchIn: 'In {{name}} suchen',
+  showArchived: 'Zeigt die archivierten Threads',
+  undo: 'Rückgängig',
+  unpinned: 'Nachricht losgelöst',
+};

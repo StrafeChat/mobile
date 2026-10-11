@@ -4,11 +4,11 @@
  */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
-
 import { memoryFs } from './testing/memoryFileSystem';
 import { encryptBytes } from '../overrides/media/attachments/crypto';
 import type { AttachmentView } from '@web-original/lib/attachments/types';
+
+jest.mock('expo-file-system', () => require('./testing/memoryFileSystem'));
 
 type Cache = typeof import('./attachmentCache');
 

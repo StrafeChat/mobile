@@ -419,7 +419,7 @@ cryptoHost.onRestart(() => {
   getMachine(userId)
     .then(() => {
       // Required lazily: the messages store imports this module.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const { retryPendingDecrypts } = require('@web/stores/messages') as typeof import('@web/stores/messages');
       return retryPendingDecrypts();
     })

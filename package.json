@@ -64,7 +64,7 @@
     "react-native-quick-crypto": "^1.1.8",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "~4.26.0",
+    "react-native-screens": "4.29.0",
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "~0.21.0",
@@ -73,11 +73,16 @@
     "solid-js": "^1.9.17"
   },
   "devDependencies": {
+    "@cap.js/widget": "0.1.58",
+    "@friendlycaptcha/sdk": "1.1.1",
     "@matrix-org/matrix-sdk-crypto-wasm": "18.9.0",
     "@testing-library/react-native": "^14.1.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
+    "altcha": "3.2.3",
     "esbuild": "^0.28.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.2",
     "fake-indexeddb": "^6.2.5",
     "jest": "^29.7.0",
     "jest-expo": "^57.0.5",
@@ -87,15 +92,23 @@
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "expo lint",
+    "lint": "eslint .",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "jest",
     "check:overrides": "node scripts/check-overrides.mjs",
     "build:crypto-host": "node crypto-host/build.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:voice-drift": "node src/platform/overrides/voice/check-drift.mjs",
-    "postinstall": "node crypto-host/build.mjs"
+    "postinstall": "node crypto-host/build.mjs && node src/features/auth/captcha/vendor/build.mjs",
+    "build:captcha": "node src/features/auth/captcha/vendor/build.mjs"
   },
   "private": true,
-  "license": "GPL-3.0-only"
+  "license": "GPL-3.0-only",
+  "expo": {
+    "install": {
+      "exclude": [
+        "react-native-screens"
+      ]
+    }
+  }
 }

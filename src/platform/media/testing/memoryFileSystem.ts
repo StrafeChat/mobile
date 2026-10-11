@@ -21,7 +21,7 @@ function norm(uri: string): string {
   return uri.replace(/\/+$/, '');
 }
 
-function join(parts: Array<string | MemFile | MemDirectory>): string {
+function join(parts: (string | MemFile | MemDirectory)[]): string {
   let out = '';
   for (const p of parts) {
     const s = typeof p === 'string' ? p : p.uri;
@@ -47,7 +47,7 @@ function requireDir(uri: string): void {
 export class MemFile {
   private path: string;
 
-  constructor(...uris: Array<string | MemFile | MemDirectory>) {
+  constructor(...uris: (string | MemFile | MemDirectory)[]) {
     this.path = join(uris);
   }
 
@@ -187,7 +187,7 @@ export class MemFile {
 export class MemDirectory {
   private path: string;
 
-  constructor(...uris: Array<string | MemFile | MemDirectory>) {
+  constructor(...uris: (string | MemFile | MemDirectory)[]) {
     this.path = join(uris);
   }
 
@@ -227,9 +227,9 @@ export class MemDirectory {
     }
   }
 
-  list(): Array<MemFile | MemDirectory> {
+  list(): (MemFile | MemDirectory)[] {
     requireDir(this.path);
-    const out: Array<MemFile | MemDirectory> = [];
+    const out: (MemFile | MemDirectory)[] = [];
     for (const [key, node] of nodes) {
       if (parentOf(key) !== this.path) continue;
       out.push(node.kind === 'dir' ? new MemDirectory(key) : new MemFile(key));

@@ -10,15 +10,15 @@ import { useEffect, useReducer, useRef } from 'react';
 interface Scope<T> {
   value: T;
   dispose: () => void;
-  deps: ReadonlyArray<unknown>;
+  deps: readonly unknown[];
   disposed: boolean;
 }
 
-function sameDeps(a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): boolean {
+function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 }
 
-export function useSolidScope<T>(factory: () => T, deps: ReadonlyArray<unknown>): T {
+export function useSolidScope<T>(factory: () => T, deps: readonly unknown[]): T {
   const ref = useRef<Scope<T> | null>(null);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const create = (): Scope<T> => createRoot((dispose) => ({ value: factory(), dispose, deps, disposed: false }));

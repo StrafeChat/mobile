@@ -52,10 +52,6 @@ export default {
       offlineNotice: "أنت غير متصل. يُعرض ما هو موجود على هذا الجهاز.",
     },
 
-    // Sign-in and accounts (src/features/auth).
-    auth: {
-      sessionExpiredNotice: "انتهت صلاحية جلستك. سجّل الدخول مرة أخرى.",
-    },
 
     // The end-to-end encryption engine (src/platform/crypto).
     crypto: {

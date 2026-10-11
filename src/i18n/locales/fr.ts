@@ -48,10 +48,6 @@ export default {
       offlineNotice: "Vous êtes hors ligne. Affichage de ce qui se trouve sur cet appareil.",
     },
 
-    // Sign-in and accounts (src/features/auth).
-    auth: {
-      sessionExpiredNotice: "Votre session a expiré. Reconnectez-vous.",
-    },
 
     // The end-to-end encryption engine (src/platform/crypto).
     crypto: {

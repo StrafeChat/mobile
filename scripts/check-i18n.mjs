@@ -6,15 +6,27 @@
 import { readFileSync } from 'node:fs';
 import { transformSync } from 'esbuild';
 
+import { readdirSync } from 'node:fs';
+
 const LOCALES = ['en', 'es', 'pt-BR', 'fr', 'de', 'ar'];
 const PLURAL = /_(zero|one|two|few|many|other)$/;
 
-function load(code) {
-  const src = readFileSync(new URL(`../src/i18n/locales/${code}.ts`, import.meta.url), 'utf8');
+const AREAS = readdirSync(new URL('../src/i18n/areas/', import.meta.url));
+
+function loadFile(rel) {
+  const src = readFileSync(new URL(`../src/i18n/${rel}`, import.meta.url), 'utf8');
   const js = transformSync(src, { loader: 'ts', format: 'cjs' }).code;
   const mod = { exports: {} };
   new Function('module', 'exports', js)(mod, mod.exports);
   return mod.exports.default;
+}
+
+/** A locale as the app assembles it: the shared file plus every area under mobile.<area>. */
+function load(code) {
+  const out = loadFile(`locales/${code}.ts`);
+  out.mobile ??= {};
+  for (const area of AREAS) out.mobile[area] = { ...(out.mobile[area] ?? {}), ...loadFile(`areas/${area}/${code}.ts`) };
+  return out;
 }
 
 function keys(obj, prefix = '') {

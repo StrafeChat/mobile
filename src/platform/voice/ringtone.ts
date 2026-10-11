@@ -14,7 +14,7 @@ import { Vibration } from 'react-native';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { notificationPrefs } from '@web/stores/notificationPrefs';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const RINGTONE: number = require('./assets/ringtone.wav');
 
 /** Ring, pause, ring, long pause - in step with the two-second tone loop. */

@@ -48,10 +48,6 @@ export default {
       offlineNotice: "Estás sin conexión. Se muestra lo que hay en este dispositivo.",
     },
 
-    // Sign-in and accounts (src/features/auth).
-    auth: {
-      sessionExpiredNotice: "Tu sesión ha caducado. Vuelve a iniciar sesión.",
-    },
 
     // The end-to-end encryption engine (src/platform/crypto).
     crypto: {

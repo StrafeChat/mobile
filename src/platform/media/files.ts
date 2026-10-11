@@ -211,7 +211,7 @@ export function sanitizeFilename(name: string | null | undefined, contentType?: 
   let base = (name ?? '')
     .split(/[\\/]/)
     .pop()!
-    // eslint-disable-next-line no-control-regex
+     
     .replace(/[\u0000-\u001f\u007f<>:"|?*]/g, '_')
     .replace(/^[.\s]+/, '')
     .trim();

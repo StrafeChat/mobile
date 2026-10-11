@@ -13,7 +13,7 @@
  * - i18next is initialised with the real English strings (web + mobile), so labels in
  *   assertions read as users would hear them.
  */
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 import i18next from 'i18next';
 
 jest.mock('react-native-worklets', () => require('react-native-worklets/src/mock'));

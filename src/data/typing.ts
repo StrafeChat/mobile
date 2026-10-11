@@ -44,7 +44,7 @@ export const TYPING_MAX_NAMED = 3;
 export const TYPING_MAX_FACES = 3;
 
 /** The indicator's sentence, with the web's strings. '' for nobody. */
-export function typingLabel(people: ReadonlyArray<{ name: string }>): string {
+export function typingLabel(people: readonly { name: string }[]): string {
   const names = people.map((p) => p.name);
   if (names.length === 0) return '';
   if (names.length === 1) return t('room.typingOne', { name: names[0] });

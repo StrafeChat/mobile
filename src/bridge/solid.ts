@@ -59,11 +59,11 @@ interface Subscription<T> {
  * Subscribe a component to Solid state. `deps` are the React values `fn` closes over (a room
  * id, say): when they change the selector is re-run and re-subscribed.
  */
-export function useSolid<T>(fn: () => T, deps: ReadonlyArray<unknown> = []): T {
+export function useSolid<T>(fn: () => T, deps: readonly unknown[] = []): T {
   const fnRef = useRef(fn);
   fnRef.current = fn;
   const sub = useRef<Subscription<T> | null>(null);
-  const depsKey = useRef<ReadonlyArray<unknown>>(deps);
+  const depsKey = useRef<readonly unknown[]>(deps);
 
   const depsChanged =
     depsKey.current.length !== deps.length || depsKey.current.some((d, i) => !Object.is(d, deps[i]));
@@ -118,7 +118,7 @@ function shallowSame(a: unknown, b: unknown): boolean {
  * Run a Solid effect for the lifetime of a component (e.g. to drive an Animated value from a
  * store field without re-rendering). Returns nothing; the effect is disposed on unmount.
  */
-export function useSolidEffect(fn: () => void, deps: ReadonlyArray<unknown> = []): void {
+export function useSolidEffect(fn: () => void, deps: readonly unknown[] = []): void {
   const subscribe = useCallback(() => createRoot((dispose) => {
     createComputed(fn);
     return dispose;

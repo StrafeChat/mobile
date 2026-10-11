@@ -52,7 +52,7 @@ function failed(e: unknown): PickResult {
  * slots); `mediaTypes` narrows it.
  */
 export async function pickFromLibrary(
-  opts: { limit?: number; mediaTypes?: Array<'images' | 'videos'> } = {},
+  opts: { limit?: number; mediaTypes?: ('images' | 'videos')[] } = {},
 ): Promise<PickResult> {
   const limit = Math.max(1, opts.limit ?? ATTACHMENTS_PER_MESSAGE);
   try {

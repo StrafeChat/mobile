@@ -230,7 +230,7 @@ export interface SectionRowView {
   /** Mute toggles the whole section: "Mute section" while any child is unmuted. */
   anyUnmuted: boolean;
   /** What Mark as read acks - each text child's last_message_id, as the web does. */
-  markReadTargets: Array<{ roomId: string; messageId: string }>;
+  markReadTargets: { roomId: string; messageId: string }[];
   childIds: string[];
 }
 

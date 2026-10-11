@@ -5,6 +5,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
+import { memoryFs } from '../../media/testing/memoryFileSystem';
+import { setAudioSessionGuard } from '../../media/audioSession';
+import { VOICE_MESSAGE_MAX_MS, VoiceRecorderError, meteringToLevel, startVoiceRecording } from './voiceRecorder';
+
 jest.mock('expo-file-system', () => require('../../media/testing/memoryFileSystem'));
 
 jest.mock('expo-audio', () => {
@@ -61,10 +65,6 @@ jest.mock('expo-audio', () => {
     },
   };
 });
-
-import { memoryFs } from '../../media/testing/memoryFileSystem';
-import { setAudioSessionGuard } from '../../media/audioSession';
-import { VOICE_MESSAGE_MAX_MS, VoiceRecorderError, meteringToLevel, startVoiceRecording } from './voiceRecorder';
 
 const PLAYBACK_MODE = { playsInSilentMode: true, interruptionMode: 'doNotMix', allowsRecording: false, shouldPlayInBackground: false, shouldRouteThroughEarpiece: false };
 const RECORDING_MODE = { ...PLAYBACK_MODE, allowsRecording: true };
