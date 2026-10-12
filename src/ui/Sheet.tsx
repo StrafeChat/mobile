@@ -14,8 +14,11 @@
  *   and the home indicator;
  * - `dismissible={false}` for sheets that must not close mid-request (no swipe, no backdrop,
  *   back is swallowed) - the web's dismissible;
- * - keyboard: the sheet rises with it, and `Input`/`TextArea`/`SearchInput` inside a Sheet
- *   switch to the library's keyboard-aware TextInput automatically (SheetContext);
+ * - keyboard: an opening sheet puts away the keyboard of what is under it (the composer's,
+ *   say - it would otherwise stay up and come back when the sheet goes) and a closing one its
+ *   own, whatever closes it; the sheet rises with the keyboard of its own fields, and
+ *   `Input`/`TextArea`/`SearchInput` inside a Sheet switch to the library's keyboard-aware
+ *   TextInput automatically (SheetContext);
  * - Android back closes the top-most sheet first;
  * - reduced motion (app or OS) makes it appear without sliding;
  * - tablets get a centred floating card instead of an edge-to-edge sheet;
@@ -29,7 +32,7 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
-import { BackHandler, Keyboard, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { BackHandler, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@web/i18n/t';
@@ -37,6 +40,7 @@ import { useTheme } from '@/theme';
 import { withAlpha } from './color';
 import { DialogHeader } from './DialogHeader';
 import { IconButton } from './IconButton';
+import { dismissKeyboard } from './keyboard';
 import { useReduceMotion } from './motion';
 import type { DialogTone } from './presenter';
 import { SHEET_MAX_WIDTH, WIDE_BREAKPOINT, largeRadius } from './tokens';
@@ -105,11 +109,18 @@ export function Sheet({
   const notified = useRef(true);
 
   // Close with the keyboard first: a sheet's text field unmounts with the sheet, and once it
-  // is gone Keyboard.dismiss() has nothing to blur - the Android keyboard then stays up over
-  // the app (keyboardBlurBehavior "restore" does not cover a programmatic dismiss).
+  // is gone there is nothing left to blur - the Android keyboard then stays up over the app.
+  // (keyboardBlurBehavior "restore" only moves the sheet back down when the keyboard goes; it
+  // never brings the keyboard back, and neither does android_keyboardInputMode.)
   const dismissSheet = useCallback(() => {
-    Keyboard.dismiss();
+    dismissKeyboard();
     ref.current?.dismiss();
+  }, []);
+
+  // The library closing the sheet itself (swipe down, backdrop tap) starts here: it blurs the
+  // keyboard for a swipe only, and a backdrop tap not at all.
+  const onAnimate = useCallback((_from: number, to: number) => {
+    if (to === -1) dismissKeyboard();
   }, []);
 
   const notifyClosed = useCallback(() => {
@@ -123,6 +134,9 @@ export function Sheet({
     if (open) {
       notified.current = false;
       presented.current = true;
+      // Before presenting: a field inside the sheet that focuses itself does so as its content
+      // mounts, after this.
+      dismissKeyboard();
       ref.current?.present();
       return;
     }
@@ -189,6 +203,7 @@ export function Sheet({
     <BottomSheetModal
       ref={ref}
       onDismiss={notifyClosed}
+      onAnimate={onAnimate}
       snapPoints={snapPoints}
       enableDynamicSizing={!snapPoints}
       maxDynamicContentSize={Math.round(height * 0.92) - insets.top}

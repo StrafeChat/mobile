@@ -34,7 +34,6 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Keyboard,
   Platform,
   StyleSheet,
   View,
@@ -67,7 +66,7 @@ import { useSolid } from '@/bridge/solid';
 import { enterRoom, spaceIdOfRoom, type RoomEntry } from '@/platform/rooms';
 import { createRoomViewportAck } from '@/platform/overrides/lib/viewportAck';
 import { useTheme } from '@/theme';
-import { Button, EmptyState, haptics, Icon, Text, Touchable, withAlpha } from '@/ui';
+import { Button, dismissKeyboard, EmptyState, ErrorBoundary, haptics, Icon, Text, Touchable, withAlpha } from '@/ui';
 import { DeleteMessageHost } from '../actions/DeleteMessageSheet';
 import { flashMessage } from '../flash';
 import { ReactionPickerHost } from '../reactions/ReactionPicker';
@@ -97,6 +96,7 @@ import {
   type ListRow,
   type ViewTokenLike,
 } from './listLogic';
+import { safeRecomputeViewableItems, safeScrollToEnd, safeScrollToIndex } from './safeList';
 
 /** Rooms whose first-view landing (on the first unread) has happened this session. */
 const roomsWithInitialScrollDone = new Set<string>();
@@ -109,9 +109,17 @@ export interface MessageListProps {
   spaceId?: string | null;
 }
 
-/** One list per room: a different room is a fresh list (its own landing, its own entry). */
+/**
+ * One list per room: a different room is a fresh list (its own landing, its own entry). A
+ * render error inside it remounts just the list, which re-enters the room and lands again
+ * (on the position it left with), instead of taking the conversation or the app down.
+ */
 export function MessageList(props: MessageListProps) {
-  return <RoomMessageList key={props.roomId} {...props} />;
+  return (
+    <ErrorBoundary key={props.roomId} name="message-list">
+      <RoomMessageList {...props} />
+    </ErrorBoundary>
+  );
 }
 
 function Divider({ item }: { item: DividerItem }) {
@@ -338,7 +346,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   /** Snap to the newest row now, then again as late layout (images, previews) settles. */
   const scrollToBottomSettled = useCallback(() => {
     cancelSettle();
-    const snap = () => listRef.current?.scrollToEnd({ animated: false });
+    const snap = () => safeScrollToEnd(listRef.current, { animated: false });
     snap();
     const end = beginMove();
     settleEnd.current = end;
@@ -359,20 +367,19 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     if (!landedRef.current) return;
     const top = topRow.current;
     // topRow is from the last viewability report; the rows may have changed since (a jump
-    // replaced the window, a page was trimmed). Look the row up again by id, and ask FlashList
-    // only for an index it has laid out - getLayout throws "not enough layouts" otherwise.
+    // replaced the window, a page was trimmed, a message was deleted). Look the row up again
+    // by id. The reads are caught: this runs from timers, where a throw closes the app.
     const rows = rowsRef.current;
     const at = top ? rows[top.index] : undefined;
     const index = !top ? -1 : at?.kind === 'message' && at.id === top.id ? top.index : rows.findIndex((r) => r.kind === 'message' && r.id === top.id);
     let layout: { y: number } | undefined;
-    if (index >= 0) {
-      try {
-        layout = listRef.current?.getLayout(index) ?? undefined;
-      } catch {
-        layout = undefined;
-      }
+    let first = 0;
+    try {
+      if (index >= 0) layout = listRef.current?.getLayout(index) ?? undefined;
+      first = listRef.current?.getFirstItemOffset() ?? 0;
+    } catch {
+      layout = undefined;
     }
-    const first = listRef.current?.getFirstItemOffset() ?? 0;
     position.current = {
       anchorId: top?.id ?? null,
       atBottom: stick.current,
@@ -404,7 +411,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
       stick.current = false;
       updateNear(false);
       const animated = allowSmooth && pj.smooth && !reduceMotion;
-      track(listRef.current?.scrollToIndex({ index: hit.index, viewPosition: 0.5, animated }));
+      track(safeScrollToIndex(listRef.current, { index: hit.index, viewPosition: 0.5, animated }, rowsRef.current.length));
       if (hit.exact) flashMessage(hit.id);
       return true;
     },
@@ -463,12 +470,12 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
       case 'saved':
         stick.current = false;
         updateNear(false);
-        track(list.scrollToIndex({ index: choice.index, animated: false, viewOffset: -choice.top }).finally(done));
+        track(safeScrollToIndex(list, { index: choice.index, animated: false, viewOffset: -choice.top }, rowsRef.current.length).finally(done));
         return;
       case 'unread':
         stick.current = false;
         updateNear(false);
-        track(list.scrollToIndex({ index: choice.index, animated: false, viewOffset: -UNREAD_LANDING_OFFSET }).finally(done));
+        track(safeScrollToIndex(list, { index: choice.index, animated: false, viewOffset: -UNREAD_LANDING_OFFSET }, rowsRef.current.length).finally(done));
         return;
       default:
         stick.current = true;
@@ -498,7 +505,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     if (signals.tick === prevTick.current) return;
     prevTick.current = signals.tick;
     if (!landedRef.current || !stick.current || dragging.current) return;
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: !reduceMotion }));
+    requestAnimationFrame(() => safeScrollToEnd(listRef.current, { animated: !reduceMotion }));
   }, [signals.tick, reduceMotion]);
 
   const prevForce = useRef(signals.force);
@@ -520,7 +527,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   const onContentSizeChange = useCallback(
     (_w: number, h: number) => {
       metrics.current.content = h;
-      if (followsLive()) listRef.current?.scrollToEnd({ animated: false });
+      if (followsLive()) safeScrollToEnd(listRef.current, { animated: false });
     },
     [followsLive],
   );
@@ -530,7 +537,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     const grew = h !== metrics.current.viewport;
     metrics.current.viewport = h;
     // The keyboard (or a banner) resized the list: keep the newest message in view.
-    if (grew && followsLive()) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+    if (grew && followsLive()) requestAnimationFrame(() => safeScrollToEnd(listRef.current, { animated: false }));
   }, [followsLive]);
 
   // ---- scroll events ------------------------------------------------------------------------------------
@@ -578,7 +585,12 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
         return;
       }
       ackTimer.current = null;
-      ack.current?.setBottomVisibleMessageId(bottomId.current);
+      // A timer: anything thrown here is uncaught, and fatal in a release build.
+      try {
+        ack.current?.setBottomVisibleMessageId(bottomId.current);
+      } catch (e) {
+        console.warn('[list] read cursor not published:', e instanceof Error ? e.message : e);
+      }
       stashPosition();
     }, ACK_DEBOUNCE_MS);
   }, [stashPosition]);
@@ -594,10 +606,18 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
   );
 
   // A message arriving while already at the bottom never scrolls: re-measure on every change.
+  // A frame later, never in the commit that changed the rows: FlashList has trimmed its
+  // layouts to the new data by then but still holds the previous on-screen indices until its
+  // own layout pass, so recomputing now asks for the layout of a row that was just deleted
+  // ("index out of bounds, not enough layouts" - the 0.1.1 crash on deleting a message).
   useEffect(() => {
-    if (!landed) return;
-    listRef.current?.recomputeViewableItems();
-    publish();
+    if (!landed) return undefined;
+    const frame = requestAnimationFrame(() => {
+      if (!mounted.current) return;
+      safeRecomputeViewableItems(listRef.current);
+      publish();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [landed, rows, publish]);
 
   // ---- overlays -----------------------------------------------------------------------------------------
@@ -614,12 +634,12 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
     const index = indexOfMessage(rowsRef.current, id);
     if (index < 0) return;
     stick.current = false;
-    track(listRef.current?.scrollToIndex({ index, animated: !reduceMotion, viewOffset: -UNREAD_LANDING_OFFSET }));
+    track(safeScrollToIndex(listRef.current, { index, animated: !reduceMotion, viewOffset: -UNREAD_LANDING_OFFSET }, rowsRef.current.length));
   };
   const toBottom = () => {
     stick.current = true;
     updateNear(true);
-    listRef.current?.scrollToEnd({ animated: !reduceMotion });
+    safeScrollToEnd(listRef.current, { animated: !reduceMotion });
   };
 
   // ---- render ---------------------------------------------------------------------------------------------
@@ -693,7 +713,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
               feedback="opacity"
               onPress={() => {
                 haptics.selection();
-                Keyboard.dismiss();
+                dismissKeyboard();
                 void jumpToPresent(roomId);
               }}
               accessibilityRole="button"

@@ -79,8 +79,13 @@ export function ActionSheet({ open, entries, onClose, title, subtitle, header, t
   function handleClosed() {
     const item = chosen.current;
     chosen.current = null;
-    if (item) runActionItem(item);
-    onClose(item);
+    // A frame later, not inside the sheet library's dismiss callback: a handler that presents
+    // another sheet from there ("Add reaction" opening the emoji picker) is dropped by the
+    // modal provider, which is still unmounting this one.
+    requestAnimationFrame(() => {
+      if (item) runActionItem(item);
+      onClose(item);
+    });
   }
 
   const showHeader = !page && (header || title || subtitle);

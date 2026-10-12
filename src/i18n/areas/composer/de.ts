@@ -15,4 +15,11 @@ export default {
   slideUpToLock: "Nach oben wischen, um ohne Halten weiter aufzunehmen",
   emojiHint: "Tippen zum Einfügen · gedrückt halten für den Namen",
   e2eeUnavailable: "Verschlüsselung ist auf diesem Gerät nicht verfügbar, deshalb kannst du hier nichts senden. Starte die App neu, um es erneut zu versuchen.",
+  findEmoji: "Finde das perfekte Emoji",
+  gifsTab: "GIFs",
+  showKeyboard: "Tastatur anzeigen",
+  backspace: "Löschen",
+  expandPanel: "Emojis und GIFs vergrößern",
+  collapsePanel: "Emojis und GIFs verkleinern",
+  panelHandleHint: "Nach oben ziehen zum Vergrößern, nach unten zum Schließen.",
 };

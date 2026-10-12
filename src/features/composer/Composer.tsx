@@ -11,7 +11,9 @@
  *   field with remove buttons (a recorded voice message is playable there);
  * - @mention / #room / :emoji: suggestions above the field, inserted at the caret, and
  *   serializeDraft to wire syntax on send - as the web does;
- * - the emoji / GIF picker as a bottom sheet;
+ * - the emoji / GIF panel in the keyboard's place (Discord's): the emoji button swaps the
+ *   keyboard for it without moving the input row, becomes a keyboard button while it is open,
+ *   and an emoji goes in at the caret with the panel staying open (panel/useExpressionPanel);
  * - hold the microphone to record a voice message (slide to cancel, slide up to lock);
  * - a reply strip (tap to jump to the message) and an edit mode that edits in the composer,
  *   with mentions shown as @names rather than the web's raw <@id>;
@@ -24,7 +26,14 @@
  * (state.ts, attachmentQueues.ts).
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { I18nManager, TextInput, View, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from 'react-native';
+import {
+  I18nManager,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+  type NativeSyntheticEvent,
+  type TextInputSelectionChangeEventData,
+} from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,6 +72,7 @@ import { handlePick, openAttachMenu } from './attach';
 import { computeCompletion, spliceText, type Candidate } from './logic/completion';
 import { NotSentError, createTypingEmitter, hasContent, retryAfterSeconds, sendErrorText } from './logic/sending';
 import { readableToWire, wireToReadable } from './logic/wireText';
+import { deleteBackward } from './logic/backspace';
 import { useComposerContext } from './hooks/useComposerContext';
 import { useEmojiCatalog } from './hooks/useEmojiCatalog';
 import { useEditTarget, useReplyTarget } from './hooks/useComposerTargets';
@@ -70,8 +80,9 @@ import { useEncryptionEngineFailed } from './hooks/useEncryptionEngineFailed';
 import { useVoiceRecorder } from './hooks/useVoiceRecorder';
 import { AutocompleteList } from './components/AutocompleteList';
 import { ComposerNotice, ContextStrip, ErrorLine, SendButton } from './components/ComposerParts';
-import { ExpressionSheet, type ExpressionTab } from './components/ExpressionSheet';
 import type { EmojiPick } from './components/EmojiPicker';
+import { ExpressionPanel } from './panel/ExpressionPanel';
+import { useExpressionPanel } from './panel/useExpressionPanel';
 import { MicButton } from './components/MicButton';
 import { PendingAttachments } from './components/PendingAttachments';
 import { LockHint, RecordingBar } from './components/RecordingBar';
@@ -79,6 +90,10 @@ import { LockHint, RecordingBar } from './components/RecordingBar';
 export interface ComposerProps {
   roomId: string;
   spaceId?: string | null;
+  /** The most height the composer may take (the conversation's body less what must stay
+   * visible): the expression panel expands up to it. Without it the panel estimates from the
+   * window. */
+  maxHeight?: number;
 }
 
 /** The field grows with its content up to this height, then scrolls (the web's 200 px). */
@@ -88,16 +103,12 @@ const MAX_INPUT_HEIGHT = 200;
  * per-room edit buffer, so it survives switching rooms mid-edit). */
 const editSeeds = new Map<string, { id: string; text: string }>();
 
-export function Composer({ roomId, spaceId }: ComposerProps) {
+export function Composer({ roomId, spaceId, maxHeight }: ComposerProps) {
   const info = useRoomInfo(roomId, spaceId);
   const gates = useRoomGates(roomId, spaceId);
   const { lock, text: lockText } = useComposerLock(roomId, spaceId);
   const engineFailed = useEncryptionEngineFailed();
-  const insets = useSafeAreaInsets();
-  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const theme = useTheme();
-  // Pad by the keyboard while it is up (its height is negative here), else the home indicator.
-  const spacer = useAnimatedStyle(() => ({ height: Math.max(-keyboardHeight.value, insets.bottom) }));
 
   let notice: { icon: string; text: string } | null = null;
   if (lock && lockText) {
@@ -110,7 +121,10 @@ export function Composer({ roomId, spaceId }: ComposerProps) {
   return (
     <View style={{ backgroundColor: theme.colors.background }} testID="composer">
       {notice ? (
-        <ComposerNotice icon={notice.icon} text={notice.text} />
+        <>
+          <ComposerNotice icon={notice.icon} text={notice.text} />
+          <KeyboardSpacer />
+        </>
       ) : (
         <ComposerBody
           key={roomId}
@@ -121,11 +135,20 @@ export function Composer({ roomId, spaceId }: ComposerProps) {
           customEmojiSpaceId={gates?.customEmojiSpaceId}
           slowmodeSeconds={gates?.slowmodeSeconds ?? 0}
           inSpace={gates?.kind === 'space'}
+          {...(maxHeight !== undefined ? { maxHeight } : {})}
         />
       )}
-      <Animated.View style={spacer} />
     </View>
   );
+}
+
+/** Under a notice: the keyboard's height while it is up (its height is negative here), else
+ * the home indicator. The body has its own, shared with the expression panel. */
+function KeyboardSpacer() {
+  const insets = useSafeAreaInsets();
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const spacer = useAnimatedStyle(() => ({ height: Math.max(-keyboardHeight.value, insets.bottom) }));
+  return <Animated.View style={spacer} />;
 }
 
 interface BodyProps {
@@ -136,9 +159,10 @@ interface BodyProps {
   customEmojiSpaceId?: string;
   slowmodeSeconds: number;
   inSpace: boolean;
+  maxHeight?: number;
 }
 
-function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEmojiSpaceId, slowmodeSeconds, inSpace }: BodyProps) {
+function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEmojiSpaceId, slowmodeSeconds, inSpace, maxHeight }: BodyProps) {
   const theme = useTheme();
   const info = useRoomInfo(roomId, spaceId);
   const st = useSolid(() => composerFor(roomId), [roomId]);
@@ -163,7 +187,10 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
   // shown like a send error, but without the Retry, which would send the draft instead.
   const [localError, setLocalError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
-  const [picker, setPicker] = useState<{ open: boolean; tab: ExpressionTab }>({ open: false, tab: 'emoji' });
+  // Everything above the keyboard's space (suggestions, error line, input row): the expanded
+  // panel leaves it in view.
+  const [aboveHeight, setAboveHeight] = useState(56);
+  const panel = useExpressionPanel({ inputRef, aboveHeight, ...(maxHeight !== undefined ? { maxHeight } : {}) });
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
 
@@ -353,7 +380,7 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
   };
 
   const sendGif = (gif: GifResult) => {
-    setPicker((p) => ({ ...p, open: false }));
+    panel.close();
     if (sending || slowmodeLeft > 0) return;
     setLocalError('');
     sendMessage(roomId, gif.url)
@@ -370,9 +397,16 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
       });
   };
 
+  // The panel stays open for more (Discord). Unicode emoji go in back to back; a custom
+  // emoji's :name: keeps the web's trailing space so the token stays separate.
   const pickEmoji = (pick: EmojiPick) => {
-    insertAtCaret(pick.custom ? `:${pick.custom.name}: ` : `${pick.unicode} `);
-    setPicker((p) => ({ ...p, open: false }));
+    insertAtCaret(pick.custom ? `:${pick.custom.name}: ` : (pick.unicode ?? ''));
+  };
+
+  const customNames = useMemo(() => new Set(ctx.customEmojis.map((c) => c.name)), [ctx.customEmojis]);
+  const backspace = () => {
+    const next = deleteBackward(textRef.current, selection.current, (name) => customNames.has(name));
+    if (next.text !== textRef.current || next.caret !== selection.current.start) writeText(next.text, next.caret);
   };
 
   // ---- voice messages ---------------------------------------------------------------------
@@ -390,6 +424,11 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     onError: (message) => setLocalError(message),
   });
   const recording = recorder.state.phase !== 'idle';
+  // A recording takes the input row; the panel has nothing to insert into meanwhile.
+  const closePanel = panel.close;
+  useEffect(() => {
+    if (recording) closePanel();
+  }, [recording, closePanel]);
 
   // ---- derived UI state -------------------------------------------------------------------
   const content = hasContent(text, queued.length);
@@ -418,161 +457,180 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
   }
 
   return (
-    <View style={{ paddingTop: 6 }}>
-      {completion && !recording ? <AutocompleteList list={completion.list} onPick={pickCompletion} /> : null}
-      {errorText ? (
-        <ErrorLine
-          message={errorText}
-          action={
-            st.sendError && !editing && content ? (
-              <Button title={t('common.retry')} size="sm" variant="ghost" onPress={() => void send()} />
-            ) : undefined
-          }
-          onDismiss={() => {
-            setSendError(roomId, '');
-            queue.setError('');
-            setLocalError('');
-          }}
-        />
-      ) : null}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 8, paddingBottom: 6 }}>
-        {recording ? null : (
-          <IconButton
-            icon="circle-plus"
-            size="lg"
-            tone="subtle"
-            label={canAttach && !editing ? t('composer.attachFiles') : t('composer.attachUnavailable')}
-            disabled={!canAttach || editing}
-            onPress={() => openAttachMenu({ queue, onGif: () => setPicker({ open: true, tab: 'gif' }) })}
-            testID="composer-attach"
+    <View>
+      {/* What sits above the keyboard's space; the expanded panel leaves it in view. */}
+      <View style={{ paddingTop: 6 }} onLayout={(e: LayoutChangeEvent) => setAboveHeight(Math.round(e.nativeEvent.layout.height))}>
+        {completion && !recording ? <AutocompleteList list={completion.list} onPick={pickCompletion} /> : null}
+        {errorText ? (
+          <ErrorLine
+            message={errorText}
+            action={
+              st.sendError && !editing && content ? (
+                <Button title={t('common.retry')} size="sm" variant="ghost" onPress={() => void send()} />
+              ) : undefined
+            }
+            onDismiss={() => {
+              setSendError(roomId, '');
+              queue.setError('');
+              setLocalError('');
+            }}
           />
-        )}
-        <View
-          style={{
-            flex: 1,
-            minHeight: 44,
-            borderRadius: theme.radii.xl,
-            backgroundColor: withAlpha(theme.colors.muted, 0.55),
-            borderWidth: 1,
-            borderColor: focused ? withAlpha(theme.colors.ring, 0.5) : 'transparent',
-            overflow: 'hidden',
-          }}
-        >
-          {editing ? (
-            <ContextStrip
-              icon="pen"
-              lead={t('mobile.composer.editing')}
-              onCancel={() => cancelEdit(roomId)}
-              cancelLabel={t('common.cancel')}
-              testID="composer-edit-strip"
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 8, paddingBottom: 6 }} testID="composer-row">
+          {recording ? null : (
+            <IconButton
+              icon="circle-plus"
+              size="lg"
+              tone="subtle"
+              label={canAttach && !editing ? t('composer.attachFiles') : t('composer.attachUnavailable')}
+              disabled={!canAttach || editing}
+              onPress={() => openAttachMenu({ queue, onGif: () => panel.openPanel('gif') })}
+              testID="composer-attach"
             />
-          ) : replyTarget ? (
-            <ContextStrip
-              icon="reply"
-              lead={t('composer.replyingTo')}
-              name={replyTarget.name}
-              preview={replyTarget.preview}
-              {...(replyTarget.loaded ? { onPress: () => void jumpToMessage(roomId, replyTarget.id), pressHint: t('messages.replyJump') } : {})}
-              onCancel={() => cancelReply(roomId)}
-              cancelLabel={t('composer.cancelReply')}
-              testID="composer-reply-strip"
-            />
-          ) : null}
-          {!editing ? <PendingAttachments items={queued} onRemove={removeQueued} /> : null}
-          {recording ? (
-            <RecordingBar state={recorder.state} dragX={dragX} rtl={I18nManager.isRTL} onCancel={recorder.cancel} />
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-              {info?.e2ee ? (
-                <View style={{ height: 44, justifyContent: 'center', paddingStart: 12 }} accessible accessibilityLabel={t('room.e2eeBadge')}>
-                  <Icon name="lock" size={11} tone="muted" />
-                </View>
-              ) : null}
-              <TextInput
-                ref={inputRef}
-                value={text}
-                onChangeText={onChangeText}
-                onSelectionChange={onSelectionChange}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                placeholder={placeholder}
-                placeholderTextColor={theme.colors.mutedForeground}
-                selectionColor={theme.colors.primary}
-                cursorColor={theme.colors.primary}
-                multiline
-                scrollEnabled
-                textAlignVertical="center"
-                autoCorrect={spellcheck}
-                spellCheck={spellcheck}
-                autoCapitalize="sentences"
-                accessibilityLabel={placeholder}
-                testID="composer-input"
-                style={{
-                  flex: 1,
-                  minHeight: 44,
-                  maxHeight: MAX_INPUT_HEIGHT,
-                  paddingHorizontal: 12,
-                  paddingTop: 11,
-                  paddingBottom: 11,
-                  color: theme.colors.foreground,
-                  fontSize: theme.font(15),
-                }}
+          )}
+          <View
+            style={{
+              flex: 1,
+              minHeight: 44,
+              borderRadius: theme.radii.xl,
+              backgroundColor: withAlpha(theme.colors.muted, 0.55),
+              borderWidth: 1,
+              borderColor: focused ? withAlpha(theme.colors.ring, 0.5) : 'transparent',
+              overflow: 'hidden',
+            }}
+          >
+            {editing ? (
+              <ContextStrip
+                icon="pen"
+                lead={t('mobile.composer.editing')}
+                onCancel={() => cancelEdit(roomId)}
+                cancelLabel={t('common.cancel')}
+                testID="composer-edit-strip"
               />
-              {slowmodeLeft > 0 && !editing ? (
-                <View
-                  accessible
-                  accessibilityLabel={t('composer.slowmodeWait', { seconds: String(slowmodeLeft) })}
-                  accessibilityLiveRegion="polite"
-                  testID="composer-slowmode"
-                  style={{
-                    height: 44,
-                    justifyContent: 'center',
+            ) : replyTarget ? (
+              <ContextStrip
+                icon="reply"
+                lead={t('composer.replyingTo')}
+                name={replyTarget.name}
+                preview={replyTarget.preview}
+                {...(replyTarget.loaded ? { onPress: () => void jumpToMessage(roomId, replyTarget.id), pressHint: t('messages.replyJump') } : {})}
+                onCancel={() => cancelReply(roomId)}
+                cancelLabel={t('composer.cancelReply')}
+                testID="composer-reply-strip"
+              />
+            ) : null}
+            {!editing ? <PendingAttachments items={queued} onRemove={removeQueued} /> : null}
+            {recording ? (
+              <RecordingBar state={recorder.state} dragX={dragX} rtl={I18nManager.isRTL} onCancel={recorder.cancel} />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                {info?.e2ee ? (
+                  <View style={{ height: 44, justifyContent: 'center', paddingStart: 12 }} accessible accessibilityLabel={t('room.e2eeBadge')}>
+                    <Icon name="lock" size={11} tone="muted" />
+                  </View>
+                ) : null}
+                <TextInput
+                  ref={inputRef}
+                  value={text}
+                  onChangeText={onChangeText}
+                  onSelectionChange={onSelectionChange}
+                  onFocus={() => {
+                    setFocused(true);
+                    panel.onInputFocus();
                   }}
-                >
+                  onBlur={() => setFocused(false)}
+                  placeholder={placeholder}
+                  placeholderTextColor={theme.colors.mutedForeground}
+                  selectionColor={theme.colors.primary}
+                  cursorColor={theme.colors.primary}
+                  multiline
+                  scrollEnabled
+                  textAlignVertical="center"
+                  autoCorrect={spellcheck}
+                  spellCheck={spellcheck}
+                  autoCapitalize="sentences"
+                  accessibilityLabel={placeholder}
+                  testID="composer-input"
+                  style={{
+                    flex: 1,
+                    minHeight: 44,
+                    maxHeight: MAX_INPUT_HEIGHT,
+                    paddingHorizontal: 12,
+                    paddingTop: 11,
+                    paddingBottom: 11,
+                    color: theme.colors.foreground,
+                    fontSize: theme.font(15),
+                  }}
+                />
+                {slowmodeLeft > 0 && !editing ? (
                   <View
+                    accessible
+                    accessibilityLabel={t('composer.slowmodeWait', { seconds: String(slowmodeLeft) })}
+                    accessibilityLiveRegion="polite"
+                    testID="composer-slowmode"
                     style={{
-                      minWidth: 28,
-                      height: 24,
-                      paddingHorizontal: 7,
-                      borderRadius: 12,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      backgroundColor: withAlpha(theme.colors.mutedForeground, 0.18),
+                      height: 44,
+                      justifyContent: 'center',
                     }}
                   >
-                    <Icon name="stopwatch" size={10} tone="muted" />
-                    <TextCount value={slowmodeLeft} />
+                    <View
+                      style={{
+                        minWidth: 28,
+                        height: 24,
+                        paddingHorizontal: 7,
+                        borderRadius: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor: withAlpha(theme.colors.mutedForeground, 0.18),
+                      }}
+                    >
+                      <Icon name="stopwatch" size={10} tone="muted" />
+                      <TextCount value={slowmodeLeft} />
+                    </View>
                   </View>
-                </View>
-              ) : null}
-              <IconButton
-                icon="face-smile"
-                tone="subtle"
-                size="lg"
-                label={t('composer.emoji')}
-                active={picker.open && picker.tab === 'emoji'}
-                onPress={() => setPicker({ open: true, tab: 'emoji' })}
-                testID="composer-emoji"
-              />
-            </View>
-          )}
-        </View>
-        <View>
-          {recording && !recorder.state.locked ? <LockHint dragY={dragY} /> : null}
-          {action}
+                ) : null}
+                {panel.open ? (
+                  <IconButton
+                    icon="keyboard"
+                    tone="subtle"
+                    size="lg"
+                    label={t('mobile.composer.showKeyboard')}
+                    onPress={panel.showKeyboard}
+                    testID="composer-keyboard"
+                  />
+                ) : (
+                  <IconButton
+                    icon="face-smile"
+                    tone="subtle"
+                    size="lg"
+                    label={t('composer.emoji')}
+                    onPress={() => panel.openPanel('emoji')}
+                    testID="composer-emoji"
+                  />
+                )}
+              </View>
+            )}
+          </View>
+          <View>
+            {recording && !recorder.state.locked ? <LockHint dragY={dragY} /> : null}
+            {action}
+          </View>
         </View>
       </View>
-      <ExpressionSheet
-        open={picker.open}
-        tab={picker.tab}
-        onTabChange={(tab) => setPicker({ open: true, tab })}
-        onClose={() => setPicker((p) => ({ ...p, open: false }))}
-        onPickEmoji={pickEmoji}
-        onPickGif={sendGif}
-        gifAllowed={!editing}
-        {...(customEmojiSpaceId !== undefined ? { customEmojiSpaceId } : {})}
-      />
+      {/* The keyboard's space - or the panel's, which sits in it. */}
+      <Animated.View style={panel.spacerStyle} />
+      {panel.open ? (
+        <ExpressionPanel
+          panel={panel}
+          onPickEmoji={pickEmoji}
+          onPickGif={sendGif}
+          onBackspace={backspace}
+          gifAllowed={!editing}
+          currentSpaceId={spaceId}
+          {...(customEmojiSpaceId !== undefined ? { customEmojiSpaceId } : {})}
+        />
+      ) : null}
     </View>
   );
 }

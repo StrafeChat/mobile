@@ -23,6 +23,10 @@ import { useGifFeed } from '../hooks/useGifFeed';
 export interface GifPickerProps {
   onPick: (gif: GifResult) => void;
   inSheet?: boolean;
+  /** In the composer's expression panel: a drag on the grid leaves the composer's focus alone. */
+  inPanel?: boolean;
+  onSearchFocus?: () => void;
+  onSearchBlur?: () => void;
   testID?: string;
 }
 
@@ -37,6 +41,9 @@ function SheetGifPicker(props: GifPickerProps) {
 
 function GifPickerBody({
   onPick,
+  inPanel,
+  onSearchFocus,
+  onSearchBlur,
   renderScrollComponent,
   testID,
 }: GifPickerProps & { renderScrollComponent?: (props: never) => ReactElement }) {
@@ -82,7 +89,7 @@ function GifPickerBody({
         onEndReached={feed.loadMore}
         onEndReachedThreshold={0.6}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode={inPanel ? 'none' : 'on-drag'}
         contentContainerStyle={{ paddingHorizontal: 6, paddingTop: 6 }}
         ListFooterComponent={feed.loading ? <Spinner decorative style={{ paddingVertical: 12 }} /> : null}
         {...(renderScrollComponent ? { renderScrollComponent: renderScrollComponent as never } : {})}
@@ -99,6 +106,8 @@ function GifPickerBody({
           onValueChange={setQuery}
           placeholder={t('gif.search', { provider: info.name })}
           containerStyle={{ flex: 1 }}
+          onFocus={onSearchFocus}
+          onBlur={onSearchBlur}
           testID="gif-search"
         />
         <SegmentedControl<GifProviderId>

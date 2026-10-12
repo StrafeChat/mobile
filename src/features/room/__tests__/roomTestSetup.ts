@@ -75,6 +75,7 @@ jest.mock('@/features/chat', () => {
     MessageAttachments: () => null,
     MessageList: () => React.createElement(RN.View, { testID: 'message-list' }),
     TypingIndicator: () => null,
+    TYPING_ROW_HEIGHT: 24,
   };
 });
 jest.mock('@/features/composer', () => ({ Composer: () => null }));

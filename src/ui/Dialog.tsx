@@ -22,6 +22,7 @@ import { Button, type ButtonVariant } from './Button';
 import { DialogHeader } from './DialogHeader';
 import { useExternalStore } from './externalStore';
 import { haptics } from './haptics';
+import { dismissKeyboard } from './keyboard';
 import { useReduceMotion } from './motion';
 import { dialogStore, settleDialog, type DialogTone } from './presenter';
 import { DIALOG_MAX_WIDTH, largeRadius } from './tokens';
@@ -147,6 +148,15 @@ export function DialogHost() {
   });
   const queue = useExternalStore(dialogStore);
   const head = queue[0];
+
+  // A prompt takes the keyboard down as it appears ("Delete this message?" raised while the
+  // composer is focused). Left up, it stays over the dialog, and Android brings it back for
+  // the still-focused field under the modal when the modal goes - the app looks as if it
+  // never let go of the keyboard. These prompts have no fields of their own.
+  const showing = !!confirm || !!head;
+  useEffect(() => {
+    if (showing) dismissKeyboard();
+  }, [showing]);
 
   if (confirm) {
     const danger = confirm.tone === 'danger';

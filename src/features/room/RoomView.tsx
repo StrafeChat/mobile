@@ -13,7 +13,7 @@ import { View } from 'react-native';
 import { upsertSpaceRoomFromPayload } from '@web/stores/spaces';
 import { t } from '@web/i18n/t';
 import { roomInfo, useEnsureRoomPins, useRoomInfo, useSession, useSpaceRoomsLoaded, type RoomInfo } from '@/data';
-import { MessageList, TypingIndicator } from '@/features/chat';
+import { MessageList, TYPING_ROW_HEIGHT, TypingIndicator } from '@/features/chat';
 import { Composer } from '@/features/composer';
 import { openNav, openRoom, setMembersAvailable } from '@/shell/state';
 import { useIsWide } from '@/shell/SwipeShell';
@@ -99,6 +99,9 @@ function Conversation({ info, mode }: { info: RoomInfo; mode: RoomMode }) {
   const theme = useTheme();
   const onBack = useBack(mode);
   const [infoOpen, setInfoOpen] = useState(false);
+  // The body under the header and banners: the composer's emoji panel may expand to all of it
+  // but the typing row (the list shrinks to nothing, as in Discord's expanded panel).
+  const [bodyHeight, setBodyHeight] = useState(0);
   const spaceId = info.spaceId ?? null;
   useEnsureRoomPins(info.id);
 
@@ -116,13 +119,16 @@ function Conversation({ info, mode }: { info: RoomInfo; mode: RoomMode }) {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }} testID={`room-${info.id}`}>
       <RoomHeader info={info} mode={mode} onBack={onBack} onOpenInfo={() => setInfoOpen(true)} />
       <RoomBanners info={info} />
-      {/* The composer rises with the keyboard itself (it pads by the keyboard's height), so the
-          list above it shrinks; nothing else here may add keyboard avoidance on top. */}
-      <View style={{ flex: 1 }}>
-        <MessageList roomId={info.id} spaceId={spaceId} />
+      {/* The composer rises with the keyboard itself (it pads by the keyboard's height, or the
+          emoji panel's, which takes the keyboard's place), so the list above it shrinks;
+          nothing else here may add keyboard avoidance on top. */}
+      <View style={{ flex: 1 }} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
+        <View style={{ flex: 1 }}>
+          <MessageList roomId={info.id} spaceId={spaceId} />
+        </View>
+        <TypingIndicator roomId={info.id} />
+        <Composer roomId={info.id} spaceId={spaceId} {...(bodyHeight > 0 ? { maxHeight: bodyHeight - TYPING_ROW_HEIGHT } : {})} />
       </View>
-      <TypingIndicator roomId={info.id} />
-      <Composer roomId={info.id} spaceId={spaceId} />
       <RoomInfoSheet info={info} mode={mode} open={infoOpen} onClose={() => setInfoOpen(false)} onThreadDeleted={onThreadDeleted} />
     </View>
   );

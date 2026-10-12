@@ -35,14 +35,23 @@ jest.mock('@web/api/rooms', () => ({ ...jest.requireActual<object>('@web/api/roo
 
 jest.mock('@web/stores/externalLink', () => ({ requestOpenExternalLink: () => undefined }));
 
-/** The expression sheet's latest props (the GIF picker itself is pickers.test.tsx's). */
-let mockSheet: { onPickGif?: (gif: { id: string; url: string }) => void } = {};
-jest.mock('../components/ExpressionSheet', () => ({
-  ExpressionSheet: (p: typeof mockSheet) => {
-    mockSheet = p;
+/** The expression panel's latest props while it is open (the panel itself is pickers.test.tsx's,
+ * its placement panel.test.tsx's). */
+type MockPanelProps = {
+  onPickGif: (gif: { id: string; url: string }) => void;
+  onPickEmoji: (pick: { unicode?: string; custom?: { id: string; name: string; url: string } }) => void;
+  onBackspace: () => void;
+  gifAllowed: boolean;
+};
+let mockPanel: MockPanelProps | null = null;
+jest.mock('../panel/ExpressionPanel', () => ({
+  ExpressionPanel: (p: MockPanelProps) => {
+    mockPanel = p;
     return null;
   },
 }));
+
+jest.mock('expo-router', () => ({ useIsFocused: () => true }));
 
 jest.mock('@/shell/SwipeShell', () => ({
   HorizontalGestureOwner: ({ children }: { children: unknown }) => children,
@@ -325,12 +334,56 @@ describe('Composer', () => {
     });
     await render(<Composer roomId="r" spaceId={null} />);
     await type('unrelated draft');
+    await fireEvent.press(screen.getByTestId('composer-emoji'));
     await act(async () => {
-      mockSheet.onPickGif?.({ id: 'g', url: 'https://media.example/x.gif' });
+      mockPanel!.onPickGif({ id: 'g', url: 'https://media.example/x.gif' });
     });
     expect(sendMessage).toHaveBeenCalledWith('r', 'https://media.example/x.gif');
     expect(screen.getByTestId('composer-error')).toBeTruthy();
     expect(screen.queryByText('Retry')).toBeNull();
     expect(input().props.value).toBe('unrelated draft');
+  });
+
+  test('the emoji button swaps for a keyboard button; picks go in at the caret and the panel stays', async () => {
+    await render(<Composer roomId="r" spaceId={null} />);
+    await type('hi there');
+    await fireEvent(input(), 'selectionChange', { nativeEvent: { selection: { start: 2, end: 2 } } });
+    await fireEvent.press(screen.getByTestId('composer-emoji'));
+    expect(screen.queryByTestId('composer-emoji')).toBeNull();
+    expect(screen.getByRole('button', { name: 'mobile.composer.showKeyboard' })).toBeTruthy();
+    expect(mockPanel?.gifAllowed).toBe(true);
+
+    await act(async () => mockPanel!.onPickEmoji({ unicode: '👍🏽' }));
+    expect(input().props.value).toBe('hi👍🏽 there');
+    await act(async () => mockPanel!.onPickEmoji({ custom: { id: 'e1', name: 'blob', url: 'u' } }));
+    expect(input().props.value).toBe('hi👍🏽:blob:  there');
+    // Still open: the keyboard button is still there.
+    expect(screen.getByTestId('composer-keyboard')).toBeTruthy();
+
+    // Backspace takes the space, then (blob isn't a custom emoji here) one character.
+    await act(async () => mockPanel!.onBackspace());
+    expect(input().props.value).toBe('hi👍🏽:blob: there');
+    await act(async () => mockPanel!.onBackspace());
+    expect(input().props.value).toBe('hi👍🏽:blob there');
+    await fireEvent(input(), 'selectionChange', { nativeEvent: { selection: { start: 6, end: 6 } } });
+    await act(async () => mockPanel!.onBackspace());
+    expect(input().props.value).toBe('hi:blob there');
+
+    // The keyboard button asks for the keyboard; with none arriving the panel steps aside.
+    await fireEvent.press(screen.getByTestId('composer-keyboard'));
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(screen.getByTestId('composer-emoji')).toBeTruthy();
+  });
+
+  test('a GIF picked from the panel is sent and closes it', async () => {
+    await render(<Composer roomId="r" spaceId={null} />);
+    await fireEvent.press(screen.getByTestId('composer-emoji'));
+    await act(async () => {
+      mockPanel!.onPickGif({ id: 'g', url: 'https://media.example/y.gif' });
+    });
+    expect(sendMessage).toHaveBeenCalledWith('r', 'https://media.example/y.gif');
+    expect(screen.getByTestId('composer-emoji')).toBeTruthy();
   });
 });

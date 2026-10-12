@@ -21,6 +21,7 @@ import { useSolid } from '@/bridge/solid';
 import { useTheme } from '@/theme';
 import { Avatar, BotTag, OfficialTag, Text, Touchable, useLongPress, withAlpha } from '@/ui';
 import { composerFor, startReply } from '@/features/composer/state';
+import { dismissKeyboard } from '@/ui/keyboard';
 import { MessageAttachments } from '../attachments/Attachments';
 import { MessageBody, bodyColor } from '../body/MessageBody';
 import { EditedMarker } from '../body/inline';
@@ -207,7 +208,12 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   return (
     <SwipeToReply enabled={canSwipeReply} onReply={reply}>
       <Pressable
-        onPress={!item.showHeader && !compact ? () => setTimeFor((v) => (v === msg.id ? null : msg.id)) : undefined}
+        onPress={() => {
+          // A tap on the conversation puts the keyboard away (Discord); the row claims the tap,
+          // so the list's own tap-to-dismiss never sees it.
+          dismissKeyboard();
+          if (!item.showHeader && !compact) setTimeFor((v) => (v === msg.id ? null : msg.id));
+        }}
         {...rowLongPress}
         accessibilityRole="text"
         accessibilityLabel={`${name}, ${formatMessageTimestamp(created)}: ${preview}`}

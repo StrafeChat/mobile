@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import './setup';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { UiProvider } from '../UiHosts';
 import { closeActionSheet, showActionSheet, showDialog, type ActionItem } from '../presenter';
@@ -45,7 +45,8 @@ describe('ActionSheet presenter', () => {
       void showActionSheet([{ label: 'Copy user ID', icon: 'fa-copy', onClick }]);
     });
     await fireEvent.press(screen.getByRole('menuitem', { name: 'Copy user ID' }));
-    expect(onClick).toHaveBeenCalledTimes(1);
+    // Handlers run a frame after the sheet has closed.
+    await waitFor(() => expect(onClick).toHaveBeenCalledTimes(1));
   });
 
   it('ignores disabled items', async () => {
@@ -127,7 +128,7 @@ describe('Select', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Theme, Strafe Dark' }));
     expect(screen.getByRole('menuitem', { name: 'Strafe Dark' })).toBeSelected();
     await fireEvent.press(screen.getByRole('menuitem', { name: 'Strafe Light' }));
-    expect(onChange).toHaveBeenCalledWith('light');
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('light'));
   });
 });
 

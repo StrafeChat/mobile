@@ -4,7 +4,8 @@
  *
  * Same sources, filters and caps as the web's EmojiPicker: recent keys 'u:<unicode>' /
  * 'c:<id>', custom emoji limited to one space when the viewer lacks Use External Emojis,
- * search = custom names containing the query (max 24) then searchEmoji (max 96). Where the
+ * search = custom names containing the query (max 24) then searchEmoji (max 96). The
+ * conversation's own space comes first among the custom emoji (Discord's order). Where the
  * web renders only the active category, the phone scrolls through all of them with the rail
  * jumping between sections (the mobile pattern the inventory asks for).
  */
@@ -79,6 +80,8 @@ export interface SectionsInput {
   spaces: readonly SpaceEmojiSet[];
   /** Restrict custom emoji to this space (no Use External Emojis). */
   onlySpaceId?: string;
+  /** The conversation's space: its emoji come first (Discord's order). */
+  currentSpaceId?: string | null;
   customById: (id: string) => PickerCustomEmoji | undefined;
   tone: number;
 }
@@ -104,7 +107,7 @@ export function buildEmojiSections(input: SectionsInput): EmojiSection[] {
     out.push({ id: 'recent', title: t('emoji.picker.recent'), icon: 'clock-rotate-left', cells: recentCells });
   }
 
-  for (const s of input.spaces) {
+  for (const s of currentFirst(input.spaces, input.currentSpaceId)) {
     if (s.emojis.length === 0 || !allows(onlySpaceId, s.spaceId)) continue;
     out.push({
       id: `space:${s.spaceId}`,
@@ -125,13 +128,20 @@ export function buildEmojiSections(input: SectionsInput): EmojiSection[] {
   return out;
 }
 
+/** The spaces with the conversation's own first, the rest in their stored order. */
+export function currentFirst(spaces: readonly SpaceEmojiSet[], currentSpaceId: string | null | undefined): readonly SpaceEmojiSet[] {
+  if (!currentSpaceId) return spaces;
+  const own = spaces.find((s) => s.spaceId === currentSpaceId);
+  return own ? [own, ...spaces.filter((s) => s !== own)] : spaces;
+}
+
 export function searchEmojiCells(
   query: string,
-  input: { catalog: EmojiCatalog | null; spaces: readonly SpaceEmojiSet[]; onlySpaceId?: string; tone: number },
+  input: { catalog: EmojiCatalog | null; spaces: readonly SpaceEmojiSet[]; onlySpaceId?: string; currentSpaceId?: string | null; tone: number },
 ): EmojiCell[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const custom = input.spaces
+  const custom = currentFirst(input.spaces, input.currentSpaceId)
     .filter((s) => allows(input.onlySpaceId, s.spaceId))
     .flatMap((s) => s.emojis)
     .filter((c) => c.name.toLowerCase().includes(q))

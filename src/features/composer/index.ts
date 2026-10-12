@@ -1,7 +1,7 @@
 /**
  * The composer area: the message composer of a conversation, its shared reply/edit/draft
- * state, and the emoji / GIF pickers (reusable elsewhere - the reaction picker is
- * <EmojiPickerSheet>).
+ * state, its emoji / GIF panel (in the keyboard's place), and the emoji picker reusable
+ * elsewhere (the reaction picker is <EmojiPickerSheet>).
  */
 import { forgetComposer } from './state';
 import { discardAttachmentQueue } from './attachmentQueues';
@@ -27,7 +27,9 @@ export {
 } from './state';
 export { attachmentQueueFor, discardAttachmentQueue } from './attachmentQueues';
 export { EmojiPicker, type EmojiPick, type EmojiPickerProps } from './components/EmojiPicker';
-export { EmojiPickerSheet, ExpressionSheet, type EmojiPickerSheetProps, type ExpressionSheetProps, type ExpressionTab } from './components/ExpressionSheet';
+export { EmojiPickerSheet, type EmojiPickerSheetProps } from './components/EmojiPickerSheet';
+export { ExpressionPanel, type ExpressionPanelProps } from './panel/ExpressionPanel';
+export { useExpressionPanel, type ExpressionTab } from './panel/useExpressionPanel';
 export { GifPicker, type GifPickerProps } from './components/GifPicker';
 export { EmojiGlyph } from './components/EmojiGlyph';
 export { wireToReadable, readableToWire } from './logic/wireText';

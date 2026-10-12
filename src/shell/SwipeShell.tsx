@@ -21,10 +21,21 @@
  * Android back: members -> conversation -> rails -> leave the app, and only while the shell
  * is the screen on top - a screen pushed over it handles its own back.
  *
+ * Touches: whatever is on top takes them, and nothing under it reacts. Android dispatches a
+ * touch to the sibling with the highest elevation first (whatever the order it draws them in),
+ * so the conversation's shadow elevation must never exceed what is laid over it - otherwise
+ * the drawer's list is drawn on top but the conversation's list under it scrolls. A panel
+ * that is covered is also out of touch entirely (pointerEvents), so it cannot start a scroll
+ * or a long-press behind the one in front.
+ *
+ * The keyboard goes down whenever the shell moves away from the conversation (state.ts) and
+ * when another screen is pushed over the shell, so that screen does not open under it and,
+ * coming back, Android finds no focused field to bring the keyboard back for.
+ *
  * The thresholds are the web client's (src/lib/mobileSwipe.ts) so the two feel the same.
  */
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { BackHandler, I18nManager, Keyboard, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { BackHandler, I18nManager, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -39,6 +50,7 @@ import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
 import { openContent, openNav, setMembersOpen, shell } from './state';
 import { useTheme } from '@/theme';
+import { dismissKeyboard } from '@/ui/keyboard';
 import {
   DECIDE_PX,
   EDGE_ACTIVATE_PX,
@@ -52,6 +64,12 @@ const SETTLE_MS = 240;
 /** Width at which rails and conversation fit side by side. */
 export const WIDE_BREAKPOINT = 768;
 const MEMBERS_MAX_WIDTH = 360;
+/**
+ * Android elevations of the phone layout. Android hands a touch to the highest-elevated
+ * sibling first, so what is laid over the conversation (the scrim, then the drawer) sits above
+ * the conversation's shadow, in the same order as it is drawn.
+ */
+export const SHELL_ELEVATION = { content: 12, scrim: 13, drawer: 14 } as const;
 
 const settle = { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) };
 
@@ -170,14 +188,15 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
     if (!wide && !membersAvailable && membersOpen) setMembersOpen(false);
   }, [wide, membersAvailable, membersOpen, canMembers]);
 
-  // Leaving the conversation (for the rails, or under the member list) puts the keyboard
-  // away: it would otherwise stay up over a panel with nothing to type into.
-  const covered = !wide && (panel === 'nav' || membersOpen);
-  const wasCovered = useRef(covered);
+  // A screen pushed over the shell (a thread, a profile, settings, the call) takes the
+  // keyboard down as it opens. Clearing the composer's focus here also keeps Android from
+  // focusing it again - keyboard and all - when the shell comes back to the front. Nothing
+  // is done on the way back: the composer only takes focus when something asks it to.
+  const wasFocused = useRef(focused);
   useEffect(() => {
-    if (covered && !wasCovered.current) Keyboard.dismiss();
-    wasCovered.current = covered;
-  }, [covered]);
+    if (!focused && wasFocused.current) dismissKeyboard();
+    wasFocused.current = focused;
+  }, [focused]);
 
   // Android back, only while this screen is the one in front: listeners run newest-first, so
   // a shell that registered once would answer before the navigator and swallow the back of
@@ -270,7 +289,9 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
 
   const ctx = useMemo(() => ({ pan: gestures.pan, edge: gestures.edge, progress }), [gestures, progress]);
 
-  // Pager only: the panels out of sight are out of the accessibility tree too.
+  // Pager only: the panels out of sight are out of the accessibility tree too, and out of
+  // touch - a covered panel must not scroll or long-press behind the one in front. (A drag
+  // between panels is the shell's own pan, which sits above all of them.)
   const navA11y = wide || panel === 'nav';
   const contentA11y = wide || (panel === 'content' && !membersOpen);
 
@@ -281,6 +302,7 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
           <Animated.View
             testID="shell-nav"
             style={[wide ? [styles.wideNav, { borderEndColor: theme.colors.border }] : styles.panel, navStyle]}
+            pointerEvents={navA11y ? 'auto' : 'none'}
             importantForAccessibility={navA11y ? 'auto' : 'no-hide-descendants'}
             accessibilityElementsHidden={!navA11y}
           >
@@ -293,6 +315,7 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
               { backgroundColor: theme.colors.background },
               contentStyle,
             ]}
+            pointerEvents={contentA11y ? 'auto' : 'none'}
             importantForAccessibility={contentA11y ? 'auto' : 'no-hide-descendants'}
             accessibilityElementsHidden={!contentA11y}
           >
@@ -300,7 +323,7 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
           </Animated.View>
           {members && membersAvailable ? (
             <>
-              <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrimStyle]}>
+              <Animated.View testID="shell-scrim" style={[StyleSheet.absoluteFill, styles.scrim, !wide && styles.scrimElevation, scrimStyle]}>
                 <Pressable
                   style={StyleSheet.absoluteFill}
                   onPress={() => setMembersOpen(false)}
@@ -315,6 +338,7 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
                     ? [styles.wideMembers, { borderStartColor: theme.colors.border }]
                     : [
                         styles.drawer,
+                        styles.drawerElevation,
                         drawerEdgeStyle(I18nManager.isRTL),
                         { width: drawerWidth, backgroundColor: theme.colors.card, borderColor: theme.colors.border },
                       ],
@@ -343,9 +367,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: -6, height: 0 },
     shadowRadius: 16,
-    elevation: 12,
+    elevation: SHELL_ELEVATION.content,
   },
   scrim: { backgroundColor: '#000' },
+  scrimElevation: { elevation: SHELL_ELEVATION.scrim },
+  drawerElevation: { elevation: SHELL_ELEVATION.drawer },
   drawer: { position: 'absolute', top: 0, bottom: 0 },
   /** The border on the drawer's inner (physically left) side. */
   drawerLtr: { end: 0, borderStartWidth: StyleSheet.hairlineWidth },

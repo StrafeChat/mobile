@@ -209,6 +209,10 @@ export function MembersList({ roomId, spaceId, inSheet, safeTop }: MembersListPr
             <EmptyState icon="magnifying-glass" body={t('mobile.room.noMembersMatch')} />
           ) : null
         }
+        // Searching: a tap on a member opens them at once (not just puts the keyboard away),
+        // and scrolling the results takes the keyboard down.
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: insets.bottom + 16, paddingHorizontal: 4 }}
         refreshControl={sid && !inSheet ? <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={theme.colors.primary} colors={[theme.colors.primary]} /> : undefined}
         renderItem={({ item }) =>

@@ -15,4 +15,11 @@ export default {
   slideUpToLock: "Desliza hacia arriba para seguir grabando sin mantener pulsado",
   emojiHint: "Toca para añadir · mantén pulsado para ver su nombre",
   e2eeUnavailable: "El cifrado no está disponible en este dispositivo, así que no puedes enviar mensajes aquí. Reinicia la app para volver a intentarlo.",
+  findEmoji: "Encuentra el emoji perfecto",
+  gifsTab: "GIFs",
+  showKeyboard: "Mostrar teclado",
+  backspace: "Borrar",
+  expandPanel: "Ampliar emojis y GIFs",
+  collapsePanel: "Reducir emojis y GIFs",
+  panelHandleHint: "Arrastra hacia arriba para agrandarlo o hacia abajo para cerrarlo.",
 };

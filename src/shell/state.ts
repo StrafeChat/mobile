@@ -14,6 +14,7 @@
  * members is a column.
  */
 import { createSignal } from 'solid-js';
+import { dismissKeyboard } from '@/ui/keyboard';
 
 export type ShellPanel = 'nav' | 'content';
 export type ShellTab = 'home' | 'notifications' | 'you';
@@ -25,9 +26,9 @@ export type ShellView =
   | { kind: 'notes' }
   | { kind: 'empty' };
 
-const [panel, setPanel] = createSignal<ShellPanel>('nav');
+const [panel, writePanel] = createSignal<ShellPanel>('nav');
 const [tab, setTab] = createSignal<ShellTab>('home');
-const [membersOpen, setMembersOpen] = createSignal(false);
+const [membersOpen, writeMembersOpen] = createSignal(false);
 const [membersAvailable, setMembersAvailable] = createSignal(false);
 /** The space selected on the rail; null is Home (DMs). */
 const [selectedSpaceId, setSelectedSpaceId] = createSignal<string | null>(null);
@@ -42,17 +43,38 @@ export const shell = {
   view,
 };
 
-export { setPanel as setShellPanel, setTab as setShellTab, setMembersOpen, setMembersAvailable, setSelectedSpaceId };
+export { setTab as setShellTab, setMembersAvailable, setSelectedSpaceId };
+
+/*
+ * The keyboard goes away whenever the conversation is covered or a panel that may hold the
+ * focused field goes away: the rails coming over it, the member drawer opening (the composer
+ * is under it) and closing (its search field is gone). Done here, at the moment the shell
+ * moves, rather than in a component effect: every caller (a swipe, a button, Android back, a
+ * notification, a deleted room) goes through these, and it runs before the render in which a
+ * newly opened conversation's composer takes a requested focus (a push notification's Reply),
+ * which a parent's effect would run after and undo. Bringing the conversation to the front
+ * leaves the keyboard alone for the same reason.
+ */
+
+export function setShellPanel(next: ShellPanel): void {
+  if (next === 'nav' && panel() !== 'nav') dismissKeyboard();
+  writePanel(next);
+}
+
+export function setMembersOpen(open: boolean): void {
+  if (open !== membersOpen()) dismissKeyboard();
+  writeMembersOpen(open);
+}
 
 /** Show the rails (space list + rooms). */
 export function openNav(): void {
   setMembersOpen(false);
-  setPanel('nav');
+  setShellPanel('nav');
 }
 
 /** Bring the conversation to the front. */
 export function openContent(): void {
-  setPanel('content');
+  setShellPanel('content');
 }
 
 /** Open a conversation: the room on the content panel, the Home tab underneath. */
@@ -61,21 +83,21 @@ export function openRoom(roomId: string, spaceId?: string | null): void {
   if (spaceId !== undefined) setSelectedSpaceId(spaceId ?? null);
   setTab('home');
   setMembersOpen(false);
-  setPanel('content');
+  setShellPanel('content');
 }
 
 export function openShellView(next: ShellView): void {
   setView(next);
   setTab('home');
   setMembersOpen(false);
-  setPanel('content');
+  setShellPanel('content');
 }
 
 /** The open room went away (deleted, left, kicked): back to the list. */
 export function closeView(): void {
   setView({ kind: 'empty' });
   setMembersOpen(false);
-  setPanel('nav');
+  setShellPanel('nav');
 }
 
 export function currentRoomId(): string | null {

@@ -60,6 +60,7 @@ export { ListRow, ListSection, ListHeader, ToggleRow, type ListRowProps, type Li
 export { Divider, type DividerProps } from './Divider';
 export { Header, Header as AppBar, type HeaderProps, type HeaderAction } from './Header';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
+export { ErrorBoundary, type ErrorBoundaryProps } from './ErrorBoundary';
 export { Banner, type BannerProps, type BannerTone } from './Banner';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Skeleton, SkeletonText, SkeletonRow, type SkeletonProps } from './Skeleton';
@@ -81,3 +82,4 @@ export { useReduceMotion, useOsReduceMotion } from './motion';
 export { space, MIN_TOUCH, HEADER_HEIGHT, SHEET_MAX_WIDTH, DIALOG_MAX_WIDTH, WIDE_BREAKPOINT, hitSlopFor, largeRadius } from './tokens';
 export { withAlpha, parseColor, luminance, onScrim } from './color';
 export { createExternalStore, useExternalStore, type ExternalStore } from './externalStore';
+export { dismissKeyboard } from './keyboard';

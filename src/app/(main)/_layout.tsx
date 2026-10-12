@@ -11,6 +11,7 @@ import { RoomHosts } from '@/features/room';
 import { VoiceHosts } from '@/features/voice';
 import { MediaViewerHost } from '@/features/chat';
 import { useTheme } from '@/theme';
+import { dismissKeyboard } from '@/ui/keyboard';
 
 /**
  * A screen reached directly by a deep link (an invite, a thread, a profile) still gets the
@@ -23,7 +24,9 @@ export default function MainLayout() {
   const theme = useTheme();
   return (
     <>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
+      {/* Leaving a screen for another (a thread, a profile, settings) puts the keyboard away, so
+          Android has no focused field to bring it back for on the way back. */}
+      <Stack screenListeners={{ blur: () => dismissKeyboard() }} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="media" options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         <Stack.Screen name="oauth2/authorize" options={{ presentation: 'modal' }} />

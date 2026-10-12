@@ -4,7 +4,7 @@
  */
 import './navTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { setSpaces } from '@web/stores/spaces';
 import { setRooms } from '@web/stores/rooms';
 import { readState, setReadState } from '@web/stores/readState';
@@ -143,7 +143,8 @@ describe('NavPanel', () => {
     await fireEvent(screen.getByRole('button', { name: /^general/ }), 'longPress');
     expect(screen.getByRole('menuitem', { name: 'Copy room link' })).toBeTruthy();
     await fireEvent.press(screen.getByRole('menuitem', { name: 'Mark as read' }));
-    expect(readState.byRoom.t1?.lastReadMessageId).toBe('50');
+    // Action sheet handlers run a frame after the sheet has closed.
+    await waitFor(() => expect(readState.byRoom.t1?.lastReadMessageId).toBe('50'));
   });
 
   test('Notifications tab: tapping a mention opens the room without marking it read', async () => {
