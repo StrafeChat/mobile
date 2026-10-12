@@ -12,8 +12,13 @@
  *
  * Instances need none of this: they speak standard Web Push to whatever endpoint a device
  * registered. See docs/PUSH.md in StrafeChat/deploy.
+ *
+ * - `extra.defaultInstance`: what the instance field offers on a fresh install (any other
+ *   instance is a tap on the field away). STRAFE_DEFAULT_INSTANCE overrides it for a build of
+ *   your own; set it to an empty string for no default.
  */
 const DEFAULT_PUSH_GATEWAY = 'https://push.strafe.chat';
+const DEFAULT_INSTANCE = 'app.strafe.chat';
 
 function fcmConfig() {
   const projectId = process.env.STRAFE_FCM_PROJECT_ID;
@@ -29,6 +34,7 @@ module.exports = ({ config }) => ({
   extra: {
     ...config.extra,
     pushGateway: (process.env.EXPO_PUBLIC_PUSH_GATEWAY || DEFAULT_PUSH_GATEWAY).replace(/\/+$/, ''),
+    defaultInstance: (process.env.STRAFE_DEFAULT_INSTANCE ?? DEFAULT_INSTANCE).trim(),
     ...(fcmConfig() ? { fcm: fcmConfig() } : {}),
   },
 });

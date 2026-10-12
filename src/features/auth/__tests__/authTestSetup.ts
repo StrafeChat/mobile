@@ -128,6 +128,7 @@ jest.mock('@/platform/session', () => {
     InstanceResolveError,
     currentInstance: jest.fn(() => null),
     suggestedInstance: jest.fn(() => null),
+    defaultInstanceAddress: jest.fn(() => ''),
     chooseInstance: jest.fn(),
     finishSignIn: jest.fn((r: { mfa_required?: boolean; mfa_token?: string; methods?: string[] }) =>
       r?.mfa_required

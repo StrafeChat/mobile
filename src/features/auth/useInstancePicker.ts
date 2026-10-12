@@ -7,7 +7,8 @@
  * - every edit makes the field "not ready" until the instance has answered, so a typo can
  *   never send a password to the wrong server;
  * - prefilled with the chosen instance (ready at once, its version refreshed in the
- *   background) or else the last account's (looked up straight away).
+ *   background), else the last account's, else the build's default instance
+ *   (app.strafe.chat) - both of those looked up straight away.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
@@ -15,6 +16,7 @@ import {
   InstanceResolveError,
   chooseInstance,
   currentInstance,
+  defaultInstanceAddress,
   suggestedInstance,
   type Instance,
 } from '@/platform/session';
@@ -40,7 +42,8 @@ export function useInstancePicker(): InstancePicker {
   const startRef = useRef<{ current: Instance | null; suggested: Instance | null } | null>(null);
   if (!startRef.current) startRef.current = { current: currentInstance(), suggested: suggestedInstance() };
   const start = startRef.current;
-  const prefill = initialFrom(start.current) ?? initialFrom(start.suggested);
+  const fallback = defaultInstanceAddress();
+  const prefill = initialFrom(start.current) ?? initialFrom(start.suggested) ?? (fallback ? { value: fallback, input: fallback } : null);
 
   const [value, setValueState] = useState(prefill?.value ?? '');
   const [status, setStatusState] = useState<InstanceStatus>(
@@ -95,7 +98,7 @@ export function useInstancePicker(): InstancePicker {
   // last account's instance when none is chosen.
   useEffect(() => {
     if (start.current) void lookup(prefill!.value, true);
-    else if (start.suggested) void lookup(prefill!.value, false);
+    else if (prefill) void lookup(prefill.value, false);
     return () => {
       inflight.current?.abort();
       if (timer.current) clearTimeout(timer.current);

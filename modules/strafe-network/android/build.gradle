@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'chat.strafe'
+version = '1.0.0'
+
+android {
+  namespace "chat.strafe.network"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // OkHttpClientProvider, the hook every networking module builds its client from.
+  implementation 'com.facebook.react:react-android'
+  // React Native's own OkHttp (gradle/libs.versions.toml in react-native): the client this
+  // module configures is the one every networking module of the app builds on.
+  implementation 'com.squareup.okhttp3:okhttp:4.9.2'
+  testImplementation 'junit:junit:4.13.2'
+}

@@ -43,6 +43,7 @@ beforeEach(() => {
   session.currentInstance.mockReturnValue(INST);
   session.suggestedInstance.mockReturnValue(INST);
   session.chooseInstance.mockResolvedValue({ ...INST, version: '1.4.0' });
+  session.defaultInstanceAddress.mockReturnValue('');
   session.peekSignOutNotice.mockReturnValue(null);
   instanceStore.setInstance({ loaded: true, inviteOnly: false, email: { enabled: true, verificationRequired: false } });
   instanceStore.setInstance('captcha', { enabled: false, provider: '', siteKey: '', apiUrl: '' });
@@ -73,6 +74,25 @@ describe('instance screen', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test("a fresh install offers the build's default instance and looks it up at once", async () => {
+    session.currentInstance.mockReturnValue(null);
+    session.suggestedInstance.mockReturnValue(null);
+    session.defaultInstanceAddress.mockReturnValue('app.strafe.chat');
+    session.chooseInstance.mockResolvedValue({ domain: 'app.strafe.chat', apiUrl: 'https://app.strafe.chat/api', stargateUrl: 'wss://app.strafe.chat/gateway/events', version: '1.0.0' });
+    await render(<InstanceScreen />);
+    expect(screen.getByTestId('instance-input').props.value).toBe('app.strafe.chat');
+    expect(session.chooseInstance).toHaveBeenCalledWith('app.strafe.chat', expect.anything());
+    expect(await screen.findByText('Connected to app.strafe.chat · Strafe 1.0.0.')).toBeTruthy();
+  });
+
+  test('the last account\'s instance wins over the default', async () => {
+    session.currentInstance.mockReturnValue(null);
+    session.suggestedInstance.mockReturnValue(INST);
+    session.defaultInstanceAddress.mockReturnValue('app.strafe.chat');
+    await render(<InstanceScreen />);
+    expect(screen.getByTestId('instance-input').props.value).toBe('chat.example.org');
   });
 
   test('an address that is not a Strafe instance says so and goes nowhere', async () => {

@@ -28,6 +28,7 @@
  *   push keys and notifications go (setAccountLeavingHook: the push lifecycle installs
  *   push/registration.ts forgetPushAccount, so this module does not load push itself).
  */
+import Constants from 'expo-constants';
 import { createComputed, createEffect, createRoot, createSignal } from 'solid-js';
 import { api } from '@web/api/client';
 import { isApiError } from '@web/api/ApiError';
@@ -557,6 +558,16 @@ export function currentInstance(): DesktopInstance | null {
 /** What to prefill the instance field with: the current one, else the last account's. */
 export function suggestedInstance(): DesktopInstance | null {
   return lastDesktopInstance();
+}
+
+/**
+ * The instance a fresh install offers (app config `extra.defaultInstance`, app.strafe.chat
+ * unless a build says otherwise; '' for none). Only an offer: the field stays editable and it
+ * is looked up like anything typed.
+ */
+export function defaultInstanceAddress(): string {
+  const value = (Constants.expoConfig?.extra as { defaultInstance?: unknown } | undefined)?.defaultInstance;
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 /**
