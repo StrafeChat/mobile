@@ -8,6 +8,7 @@ export default {
   loadFailed: 'No se pudieron cargar los mensajes.',
   messageHint: 'Mantén pulsado para ver acciones; desliza a la izquierda para responder',
   openProfile: 'Abre su perfil',
+  openProfileOf: 'Abrir perfil: {{name}}',
   jumpToUnread: 'Salta al primer mensaje sin leer',
   emojiUnavailable: 'Este emoji ya no está disponible',
   videoUnplayable: 'Este vídeo no se puede reproducir en este dispositivo.',
@@ -16,7 +17,10 @@ export default {
   link: {
     open: 'Abrir enlace',
     copy: 'Copiar enlace',
+    openNamed: 'Abrir enlace: {{link}}',
+    openImage: 'Abrir imagen: {{name}}',
   },
+  copyCode: 'Copiar código',
   reactions: {
     title: 'Reacciones',
     none: 'No hay nadie que mostrar.',

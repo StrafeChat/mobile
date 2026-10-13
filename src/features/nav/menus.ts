@@ -30,7 +30,7 @@ import {
   type SpaceAbilities,
 } from '@/data';
 import { presentProfileSheetForParticipant, presentReportSheet } from '@/platform/presenters';
-import { currentRoomId } from '@/shell/state';
+import { roomOnScreen } from '@/shell/state';
 import type { ActionItem, ActionSheetEntry } from '@/ui';
 import {
   copyText,
@@ -53,6 +53,14 @@ import { openPmWith } from './navigation';
 import { moveOptions } from './reorder';
 import { openCreateRoomSheet, openCreateSectionSheet, openInviteSheet } from './sheets/store';
 import { openRoomSettings, openSpaceSettings } from './links';
+
+/**
+ * The room whose unread the menus leave out, as the rows do: the one on screen, being read as
+ * messages arrive. Not the selected one behind the rails, whose unread is real and can be marked.
+ */
+function onScreenRoomId(): string | null {
+  return roomOnScreen()?.roomId ?? null;
+}
 
 /** The bell menu's timed mutes (RoomNotifyMenu.DURATIONS). */
 export const MUTE_DURATIONS: readonly { key: string; ms: number | null }[] = [
@@ -143,8 +151,7 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
   const sp = spaces.spaces.find((s) => s.id === spaceId);
   if (!sp) return [];
   const ab = abilitiesNow(spaceId);
-  const viewing = currentRoomId();
-  const hasUnread = spaceUnreadCount(spaceId, viewing) > 0 || spaceMentionCount(spaceId) > 0;
+  const hasUnread = spaceUnreadCount(spaceId, onScreenRoomId()) > 0 || spaceMentionCount(spaceId) > 0;
   const invite: ActionSheetEntry = ab.canInvite && {
     key: 'invite',
     label: t('space.inviteMembers'),
@@ -208,7 +215,7 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
 /** A text or voice room's long-press menu (SpaceRoomsBar.openRoomMenu + the row's hover actions). */
 export function channelMenuEntries(spaceId: string, roomId: string): ActionSheetEntry[] {
   const room = spaces.spaceRoomsBySpaceId[spaceId]?.find((r) => r.id === roomId);
-  const row = channelRowView(spaceId, roomId, currentRoomId());
+  const row = channelRowView(spaceId, roomId, onScreenRoomId());
   if (!room || !row) return [];
   const ab = abilitiesNow(spaceId);
   return [
@@ -243,7 +250,7 @@ export function channelMenuEntries(spaceId: string, roomId: string): ActionSheet
 
 /** A section header's long-press menu (SpaceRoomsBar.openSectionMenu). */
 export function sectionMenuEntries(spaceId: string, sectionId: string): ActionSheetEntry[] {
-  const row = sectionRowView(spaceId, sectionId, currentRoomId());
+  const row = sectionRowView(spaceId, sectionId, onScreenRoomId());
   if (!row) return [];
   const ab = abilitiesNow(spaceId);
   const name = row.name || t('space.section');
@@ -295,7 +302,7 @@ export function sectionMenuEntries(spaceId: string, sectionId: string): ActionSh
 /** A joined thread's long-press menu (SpaceRoomsBar.openThreadMenu). */
 export function threadMenuEntries(spaceId: string, threadId: string): ActionSheetEntry[] {
   const room = spaces.spaceRoomsBySpaceId[spaceId]?.find((r) => r.id === threadId);
-  const row = threadRowView(spaceId, threadId, currentRoomId());
+  const row = threadRowView(spaceId, threadId, onScreenRoomId());
   if (!room || !row) return [];
   return [
     row.joined
@@ -317,7 +324,7 @@ export function threadMenuEntries(spaceId: string, threadId: string): ActionShee
 /** A conversation's long-press menu (RoomsBar's ConvItem menu). */
 export function pmMenuEntries(roomId: string): ActionSheetEntry[] {
   const room = rooms.rooms.find((r) => r.id === roomId);
-  const row = pmRowView(roomId, currentRoomId());
+  const row = pmRowView(roomId, onScreenRoomId());
   if (!room || !row) return [];
   const uid = auth.user?.id;
   const other = room.type === ROOM_TYPE_GROUP ? undefined : room.participants?.find((p) => p.id !== uid);

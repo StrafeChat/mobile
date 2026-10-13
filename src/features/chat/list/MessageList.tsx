@@ -30,7 +30,9 @@
  * - "You're viewing older messages / Jump to present" while the window isn't the live tail;
  *   otherwise a jump-to-bottom button once scrolled away;
  * - the unread banner ("N new messages since…", Mark As Read) while away from the bottom;
- * - the read cursor follows the bottom-most visible message (lib/viewportAck, 450 ms).
+ * - the read cursor follows the bottom-most visible message (lib/viewportAck, 450 ms) - only
+ *   while this is the conversation on screen (shell/state.ts roomOnScreen): the list stays
+ *   mounted and following behind the rails or under a pushed screen, where nobody sees it.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -65,10 +67,12 @@ import {
 import { useSolid } from '@/bridge/solid';
 import { enterRoom, spaceIdOfRoom, type RoomEntry } from '@/platform/rooms';
 import { createRoomViewportAck } from '@/platform/overrides/lib/viewportAck';
+import { ScreenRoomClaim } from '@/shell/SwipeShell';
 import { useTheme } from '@/theme';
-import { Button, dismissKeyboard, EmptyState, ErrorBoundary, haptics, Icon, Text, Touchable, withAlpha } from '@/ui';
+import { Button, dismissKeyboard, EmptyState, ErrorBoundary, haptics, Icon, Text, toast, Touchable, withAlpha } from '@/ui';
 import { DeleteMessageHost } from '../actions/DeleteMessageSheet';
 import { flashMessage } from '../flash';
+import { errorText } from '../navigation';
 import { ReactionPickerHost } from '../reactions/ReactionPicker';
 import { DateDivider, E2eeDivider, HistoryEdge, ListIntro, NewDivider } from '../row/ListPieces';
 import { MessageRow } from '../row/MessageRow';
@@ -107,6 +111,11 @@ export interface MessageListProps {
   roomId: string;
   /** null for a PM / group; omit to look the space up from the loaded room lists. */
   spaceId?: string | null;
+  /**
+   * On a screen pushed over the shell (a thread) rather than in the shell's conversation
+   * panel: while that screen is in front, this room is the conversation on screen.
+   */
+  screen?: boolean;
 }
 
 /**
@@ -159,7 +168,7 @@ const viewabilityConfig = { itemVisiblePercentThreshold: 1, minimumViewTime: 0 }
 /** Chat mode: first render at the bottom; prepends keep the reader's row still (v2's default). */
 const keepPosition = { startRenderingFromBottom: true };
 
-function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
+function RoomMessageList({ roomId, spaceId: spaceIdProp, screen }: MessageListProps) {
   const theme = useTheme();
   const spaceId = useSolid(() => (spaceIdProp !== undefined ? spaceIdProp : spaceIdOfRoom(roomId)), [roomId, spaceIdProp]);
 
@@ -714,7 +723,8 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
               onPress={() => {
                 haptics.selection();
                 dismissKeyboard();
-                void jumpToPresent(roomId);
+                // A failed fetch leaves the window as it was (and the bar up, to try again).
+                jumpToPresent(roomId).catch((e: unknown) => toast.error(errorText(e)));
               }}
               accessibilityRole="button"
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
@@ -740,6 +750,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp }: MessageListProps) {
 
         <ReactionPickerHost />
         <DeleteMessageHost />
+        {screen ? <ScreenRoomClaim roomId={roomId} spaceId={spaceId} /> : null}
       </View>
     </ListContext.Provider>
   );

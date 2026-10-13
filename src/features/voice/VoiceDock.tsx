@@ -10,8 +10,9 @@
  * second row. Unlike the mobile web dock it carries mute and deafen: on a phone there is no
  * user area under it to hold them.
  *
- * The integrator places it (above the shell); it renders nothing when idle and takes a
- * `style` for its position.
+ * The integrator places it (under the shell, src/app/(main)/index.tsx); it renders nothing
+ * when idle and takes a `style` for its position. useVoiceDockVisible() says whether it shows,
+ * so the integrator can make room for it (the system inset goes under the bar, not the shell).
  */
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { t } from '@web/i18n/t';
@@ -34,10 +35,15 @@ export interface VoiceDockProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/** Whether the bar shows: this device is in a call and the call's own stage is not on screen. */
+export function useVoiceDockVisible(): boolean {
+  return useSolid(() => voice.session.status !== 'idle' && !!voice.session.roomId && !voice.stageVisible);
+}
+
 export function VoiceDock({ style }: VoiceDockProps) {
   const s = useCallSession();
-  const stageVisible = useSolid(() => voice.stageVisible);
-  if (s.status === 'idle' || !s.roomId || stageVisible) return null;
+  const visible = useVoiceDockVisible();
+  if (!visible || !s.roomId) return null;
   return <DockBar roomId={s.roomId} spaceId={s.spaceId} style={style} />;
 }
 

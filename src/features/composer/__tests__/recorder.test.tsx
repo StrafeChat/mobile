@@ -1,7 +1,8 @@
 /**
  * The voice-message recorder hook: a held take is delivered on release, a slide cancels it
- * and releases the microphone, a lock keeps it going, a too-short take explains itself, and
- * a release while the microphone is still opening throws the take away.
+ * and releases the microphone, a lock keeps it going, a too-short take explains itself, a
+ * release while the microphone is still opening throws the take away, and a press made while
+ * it is still opening takes over that start instead of opening a second recorder.
  */
 import '@/ui/__tests__/setup';
 import '@/data/testing/webMocks';
@@ -96,6 +97,52 @@ describe('useVoiceRecorder', () => {
     expect(mockHandle.cancel).toHaveBeenCalled();
     expect(onClip).not.toHaveBeenCalled();
     expect(result.current.state.phase).toBe('idle');
+  });
+
+  test('let go and hold again while the microphone is still opening: one recorder, and it is this take', async () => {
+    let resolve!: (h: unknown) => void;
+    let starts = 0;
+    mockStart = () => {
+      starts++;
+      return new Promise((r) => (resolve = r));
+    };
+    const { onClip, hook } = setup();
+    const { result } = await hook;
+    await act(async () => result.current.begin());
+    await act(async () => result.current.finish());
+    expect(result.current.state.phase).toBe('idle');
+    await act(async () => result.current.begin());
+    expect(result.current.state.phase).toBe('starting');
+    // The second press did not open a second recorder (which used to leave the first one
+    // recording, unreachable, until its backstop).
+    expect(starts).toBe(1);
+    await act(async () => resolve(mockHandle));
+    expect(mockHandle.cancel).not.toHaveBeenCalled();
+    expect(result.current.state.phase).toBe('recording');
+    await act(async () => result.current.finish());
+    expect(mockHandle.stop).toHaveBeenCalledTimes(1);
+    expect(onClip).toHaveBeenCalledTimes(1);
+    expect(result.current.state.phase).toBe('idle');
+  });
+
+  test('cancel and hold again while opening, then let go before it opens: thrown away', async () => {
+    let resolve!: (h: unknown) => void;
+    mockStart = () => new Promise((r) => (resolve = r));
+    const { onClip, hook } = setup();
+    const { result } = await hook;
+    await act(async () => result.current.begin());
+    await act(async () => result.current.cancel());
+    await act(async () => result.current.begin(true));
+    expect(result.current.state).toMatchObject({ phase: 'starting', locked: true });
+    await act(async () => result.current.cancel());
+    await act(async () => resolve(mockHandle));
+    expect(mockHandle.cancel).toHaveBeenCalledTimes(1);
+    expect(onClip).not.toHaveBeenCalled();
+    expect(result.current.state.phase).toBe('idle');
+    // The next press opens the microphone afresh.
+    mockStart = async () => mockHandle;
+    await act(async () => result.current.begin());
+    expect(result.current.state.phase).toBe('recording');
   });
 
   test('unmounting mid-take releases the microphone', async () => {

@@ -12,6 +12,7 @@ export default {
   logOutEverywhere: 'Log out everywhere',
   logOutEverywhereHint: 'Ends every session of this account, on every device.',
   logOutEverywhereConfirm: 'Every device signed in to this account will be signed out, this one included.',
+  logOutEverywhereFailed: "Couldn't log out everywhere. Other devices may still be signed in: check your connection and try again.",
   copyFailed: "Couldn't copy to the clipboard.",
   genericError: 'Something went wrong. Please try again.',
   share: 'Share',

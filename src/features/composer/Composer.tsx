@@ -103,6 +103,10 @@ const MAX_INPUT_HEIGHT = 200;
  * per-room edit buffer, so it survives switching rooms mid-edit). */
 const editSeeds = new Map<string, { id: string; text: string }>();
 
+function isLoaded(roomId: string, messageId: string): boolean {
+  return messages.byRoom[roomId]?.some((m) => m.id === messageId) ?? false;
+}
+
 export function Composer({ roomId, spaceId, maxHeight }: ComposerProps) {
   const info = useRoomInfo(roomId, spaceId);
   const gates = useRoomGates(roomId, spaceId);
@@ -254,7 +258,9 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
       editSeeds.delete(roomId);
       return;
     }
-    if (editTarget && !editTarget.exists) {
+    // Only a deleted message ends the edit. One that merely left the loaded window (a jump to
+    // a reply's original, a pin or search hit, "jump to present") keeps it and what was typed.
+    if (editTarget?.deleted) {
       cancelEdit(roomId);
       return;
     }
@@ -271,16 +277,13 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     if (takeFocusRequest(roomId)) inputRef.current?.focus();
   }, [st.focusRequest, roomId]);
 
-  // Android can kill the app while the photo picker is up; recover the pick on return.
+  // Android can kill the app while the photo picker is up; recover the pick on return. It goes
+  // to the room it was picked for (its queue outlives this composer), not to this one.
   useEffect(() => {
-    let alive = true;
     void recoverPendingPick().then((r) => {
-      if (alive && r) void handlePick(queue, r);
+      if (r) void handlePick(attachmentQueueFor(r.roomId), r.result);
     });
-    return () => {
-      alive = false;
-    };
-  }, [queue]);
+  }, []);
 
   // ---- autocomplete -----------------------------------------------------------------------
   const completion = useMemo(
@@ -366,6 +369,14 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
     }
     setSavingEdit(true);
     try {
+      // The store re-encrypts an end-to-end encrypted edit from the loaded message, carrying
+      // its attachments' keys over; saved while it is out of the window, every reader would
+      // lose the files. Bring it back first; still missing after that, it is gone (the
+      // edit-mode effect above ends the edit) and there is nothing to save.
+      if (!isLoaded(roomId, id)) {
+        await jumpToMessage(roomId, id);
+        if (!isLoaded(roomId, id)) return;
+      }
       // null: the store refused before trying (the room or the session is gone) - not saved.
       if ((await editMessage(roomId, id, readableToWire(raw, ctx.catalog))) === null) throw new NotSentError();
       finishEdit(roomId);
@@ -484,7 +495,7 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
               tone="subtle"
               label={canAttach && !editing ? t('composer.attachFiles') : t('composer.attachUnavailable')}
               disabled={!canAttach || editing}
-              onPress={() => openAttachMenu({ queue, onGif: () => panel.openPanel('gif') })}
+              onPress={() => openAttachMenu({ roomId, queue, onGif: () => panel.openPanel('gif') })}
               testID="composer-attach"
             />
           )}

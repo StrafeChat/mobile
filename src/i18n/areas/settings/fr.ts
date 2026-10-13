@@ -11,6 +11,7 @@ export default {
   logOutEverywhere: 'Se déconnecter partout',
   logOutEverywhereHint: 'Met fin à toutes les sessions de ce compte, sur tous les appareils.',
   logOutEverywhereConfirm: 'Tous les appareils connectés à ce compte seront déconnectés, y compris celui-ci.',
+  logOutEverywhereFailed: 'Impossible de se déconnecter partout. D’autres appareils sont peut-être encore connectés : vérifiez votre connexion et réessayez.',
   copyFailed: 'Impossible de copier dans le presse-papiers.',
   genericError: "Une erreur s'est produite. Veuillez réessayer.",
   share: 'Partager',

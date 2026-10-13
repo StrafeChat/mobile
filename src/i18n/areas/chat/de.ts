@@ -8,6 +8,7 @@ export default {
   loadFailed: 'Nachrichten konnten nicht geladen werden.',
   messageHint: 'Lange drücken für Aktionen, nach links wischen zum Antworten',
   openProfile: 'Öffnet das Profil',
+  openProfileOf: 'Profil öffnen: {{name}}',
   jumpToUnread: 'Springt zur ersten ungelesenen Nachricht',
   emojiUnavailable: 'Dieses Emoji ist nicht mehr verfügbar',
   videoUnplayable: 'Dieses Video kann auf diesem Gerät nicht abgespielt werden.',
@@ -16,7 +17,10 @@ export default {
   link: {
     open: 'Link öffnen',
     copy: 'Link kopieren',
+    openNamed: 'Link öffnen: {{link}}',
+    openImage: 'Bild öffnen: {{name}}',
   },
+  copyCode: 'Code kopieren',
   reactions: {
     title: 'Reaktionen',
     none: 'Niemand anzuzeigen.',

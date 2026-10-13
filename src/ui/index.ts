@@ -83,3 +83,4 @@ export { space, MIN_TOUCH, HEADER_HEIGHT, SHEET_MAX_WIDTH, DIALOG_MAX_WIDTH, WID
 export { withAlpha, parseColor, luminance, onScrim } from './color';
 export { createExternalStore, useExternalStore, type ExternalStore } from './externalStore';
 export { dismissKeyboard } from './keyboard';
+export { useHorizontalSafePadding, useWindowInsets, physicalSides, type HorizontalInsets } from './safeArea';

@@ -25,8 +25,10 @@ import { formatFileSize } from '@web/lib/attachments/format';
 import type { AttachmentView } from '@web/lib/attachments/types';
 import { useSolid } from '@/bridge/solid';
 import { saveAttachmentToDevice, shareAttachment } from '@/platform/media';
+import { roomOnScreen } from '@/shell/state';
+import { ScreenRoomClaim } from '@/shell/SwipeShell';
 import { useTheme } from '@/theme';
-import { IconButton, onScrim, Text, Touchable, withAlpha } from '@/ui';
+import { IconButton, onScrim, physicalSides, Text, Touchable, withAlpha } from '@/ui';
 import { reportExport } from '../attachments/Attachments';
 import { setMediaScreenMounted } from '../mediaViewer';
 import { ZoomableImage, type ZoomRequest } from './ZoomableImage';
@@ -70,6 +72,10 @@ export function viewerItemAsAttachment(item: MediaViewerItem): AttachmentView {
 export function MediaViewerScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // This route is the one screen the main stack does not pad left and right (its pages are the
+  // window's width), so the chrome keeps itself clear of the cutout and a side navigation bar
+  // in landscape. Its backgrounds still run to the edges.
+  const sides = physicalSides(insets);
   const { width, height } = useWindowDimensions();
   const state = useSolid(() => ({ open: mediaViewer.open, items: mediaViewer.items, index: mediaViewer.index, label: mediaViewer.sourceLabel }));
   const items = state.items;
@@ -84,6 +90,11 @@ export function MediaViewerScreen() {
   const pager = useRef<FlatList<MediaViewerItem>>(null);
   const closing = useRef(false);
   const fg = onScrim(theme);
+  // The conversation this was opened over stays the one on screen while the viewer is up
+  // (shell/state.ts roomOnScreen): on the web the viewer is an overlay on the room. Read in the
+  // first render, because the screen beneath only reacts to being covered in its effects after
+  // it - from then on it would say none.
+  const [overRoom] = useState(roomOnScreen);
 
   // Register / clear: the store is closed when the screen goes, however it goes.
   useEffect(() => {
@@ -166,6 +177,7 @@ export function MediaViewerScreen() {
 
   return (
     <View style={styles.root} accessibilityViewIsModal accessibilityLabel={t('attachments.viewer.label')}>
+      {overRoom ? <ScreenRoomClaim roomId={overRoom.roomId} spaceId={overRoom.spaceId} /> : null}
       <StatusBar style="light" hidden={!chrome} />
       <Animated.View style={[StyleSheet.absoluteFill, styles.black, backdrop]} />
       <FlatList
@@ -200,7 +212,10 @@ export function MediaViewerScreen() {
       />
 
       {chrome ? (
-        <View style={[styles.bar, { paddingTop: insets.top + 6 }]}>
+        <View
+          testID="media-viewer-bar"
+          style={[styles.bar, { paddingTop: insets.top + 6, paddingLeft: BAR_PAD + sides.left, paddingRight: BAR_PAD + sides.right }]}
+        >
           <IconButton icon="xmark" label={t('common.close')} tone="overlay" onPress={close} />
           <View style={styles.title}>
             <Text variant="label" color={fg} numberOfLines={1}>
@@ -237,7 +252,10 @@ export function MediaViewerScreen() {
       ) : null}
 
       {chrome && (many || facts) ? (
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View
+          testID="media-viewer-footer"
+          style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12), paddingLeft: sides.left, paddingRight: sides.right }]}
+        >
           {many ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
               {items.map((it, i) => (
@@ -269,6 +287,8 @@ export function MediaViewerScreen() {
   );
 }
 
+const BAR_PAD = 8;
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   black: { backgroundColor: '#000' },
@@ -280,8 +300,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingBottom: 8,
+    paddingBottom: BAR_PAD,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   title: { flex: 1, minWidth: 0, paddingHorizontal: 4 },

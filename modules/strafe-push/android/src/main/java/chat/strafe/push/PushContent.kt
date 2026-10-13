@@ -10,12 +10,19 @@ import java.net.URLEncoder
  * [PushStrings].
  */
 object PushContent {
-  /** Fills `{{name}}` placeholders; unknown placeholders are left as they are. */
+  /**
+   * Fills `{{name}}` placeholders; unknown placeholders are left as they are. One pass over
+   * the template, as on iOS (PushRenderer.fill): a value is never scanned again, so a caller
+   * named `{{room}}` stays `{{room}}` instead of pulling in the room's name - names are
+   * whatever their owners typed.
+   */
   fun fill(template: String, vararg values: Pair<String, String>): String {
-    var out = template
-    for ((key, value) in values) out = out.replace("{{$key}}", value)
-    return out
+    val map = values.toMap()
+    return PLACEHOLDER.replace(template) { m -> map[m.groupValues[1]] ?: m.value }
   }
+
+  /** `{{` to the next `}}`, the key between them - PushRenderer.fill's scan. */
+  private val PLACEHOLDER = Regex("""\{\{(.*?)\}\}""", RegexOption.DOT_MATCHES_ALL)
 
   /**
    * The conversation title: none for a 1:1 PM (the sender's name is the conversation), the

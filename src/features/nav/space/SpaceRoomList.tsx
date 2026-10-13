@@ -19,7 +19,7 @@ import {
   useSpaceRoomsLoaded,
   type SpaceRoomTreeItem,
 } from '@/data';
-import { shell } from '@/shell/state';
+import { roomOnScreen, shell } from '@/shell/state';
 import { useTheme } from '@/theme';
 import { Button, EmptyState, Spinner } from '@/ui';
 import { VoiceOccupantRow } from '../links';
@@ -29,6 +29,7 @@ import { SectionRow } from './SectionRow';
 import { SpaceHeader } from './SpaceHeader';
 import { ThreadRow } from './ThreadRow';
 
+/** The selected room (the highlight, and its thread showing in the tree). */
 function useActiveRoomId(): string | null {
   return useSolid(() => {
     const v = shell.view();
@@ -36,11 +37,20 @@ function useActiveRoomId(): string | null {
   });
 }
 
+/**
+ * The room on screen, whose unread the rows and a collapsed section's dot leave out. Not the
+ * selected room while the rails (or another screen) cover it: it collects unread meanwhile.
+ */
+function useOnScreenRoomId(): string | null {
+  return useSolid(() => roomOnScreen()?.roomId ?? null);
+}
+
 export function SpaceRoomList({ spaceId, bottomInset = 0 }: { spaceId: string; bottomInset?: number }) {
   const theme = useTheme();
   useEnsureSpaceData(spaceId);
   const activeRoomId = useActiveRoomId();
-  const tree = useSpaceRoomTree(spaceId, activeRoomId);
+  const onScreenRoomId = useOnScreenRoomId();
+  const tree = useSpaceRoomTree(spaceId, activeRoomId, onScreenRoomId);
   const loaded = useSpaceRoomsLoaded(spaceId);
   const abilities = useSpaceAbilities(spaceId);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,16 +66,30 @@ export function SpaceRoomList({ spaceId, bottomInset = 0 }: { spaceId: string; b
     ({ item }: { item: SpaceRoomTreeItem }) => {
       switch (item.kind) {
         case 'channel':
-          return <ChannelRow spaceId={spaceId} roomId={item.roomId} active={activeRoomId === item.roomId} />;
+          return (
+            <ChannelRow
+              spaceId={spaceId}
+              roomId={item.roomId}
+              active={activeRoomId === item.roomId}
+              onScreen={onScreenRoomId === item.roomId}
+            />
+          );
         case 'thread':
-          return <ThreadRow spaceId={spaceId} roomId={item.roomId} active={activeRoomId === item.roomId} />;
+          return (
+            <ThreadRow
+              spaceId={spaceId}
+              roomId={item.roomId}
+              active={activeRoomId === item.roomId}
+              onScreen={onScreenRoomId === item.roomId}
+            />
+          );
         case 'voiceUser':
           return <VoiceOccupantRow spaceId={spaceId} roomId={item.roomId} userId={item.userId} indent={38} />;
         case 'section':
           return <SectionRow spaceId={spaceId} sectionId={item.sectionId} collapsed={item.collapsed} hasUnread={item.hasUnread} />;
       }
     },
-    [spaceId, activeRoomId],
+    [spaceId, activeRoomId, onScreenRoomId],
   );
 
   return (
@@ -76,7 +100,7 @@ export function SpaceRoomList({ spaceId, bottomInset = 0 }: { spaceId: string; b
         renderItem={renderItem}
         keyExtractor={(item) => item.key}
         getItemType={(item) => item.kind}
-        extraData={activeRoomId}
+        extraData={`${activeRoomId ?? ''}:${onScreenRoomId ?? ''}`}
         contentContainerStyle={{ paddingTop: 6, paddingBottom: 12 + bottomInset }}
         ListEmptyComponent={
           loaded ? (

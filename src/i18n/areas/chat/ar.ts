@@ -8,6 +8,7 @@ export default {
   loadFailed: 'تعذّر تحميل الرسائل.',
   messageHint: 'اضغط مطولاً لعرض الإجراءات، واسحب لليسار للرد',
   openProfile: 'يفتح الملف الشخصي',
+  openProfileOf: 'فتح الملف الشخصي: {{name}}',
   jumpToUnread: 'ينتقل إلى أول رسالة غير مقروءة',
   emojiUnavailable: 'هذا الرمز التعبيري لم يعد متاحًا',
   videoUnplayable: 'لا يمكن تشغيل هذا الفيديو على هذا الجهاز.',
@@ -16,7 +17,10 @@ export default {
   link: {
     open: 'فتح الرابط',
     copy: 'نسخ الرابط',
+    openNamed: 'فتح الرابط: {{link}}',
+    openImage: 'فتح الصورة: {{name}}',
   },
+  copyCode: 'نسخ الشيفرة',
   reactions: {
     title: 'التفاعلات',
     none: 'لا يوجد أحد لعرضه.',

@@ -14,12 +14,14 @@ import { Avatar, Badge, BotTag, Icon, OfficialTag, Text, Touchable, UserAvatar, 
 import { pmMenuEntries } from '../menus';
 
 /**
- * `active`: this conversation is the one on screen. A boolean rather than the open room's id,
- * so switching conversations re-renders (and re-derives) the two rows involved, not all of them.
+ * `active`: this conversation is the selected one (the highlight). `onScreen`: it is the one on
+ * screen (shell/state.ts roomOnScreen), so its unread is not shown - the selected one behind
+ * the rails collects unread like any other. Booleans rather than room ids, so a switch
+ * re-renders (and re-derives) the rows involved, not all of them.
  */
-export const PmRow = memo(function PmRow({ roomId, active }: { roomId: string; active: boolean }) {
+export const PmRow = memo(function PmRow({ roomId, active, onScreen }: { roomId: string; active: boolean; onScreen: boolean }) {
   const theme = useTheme();
-  const row = usePmRow(roomId, active ? roomId : null);
+  const row = usePmRow(roomId, onScreen ? roomId : null);
   const menu = useLongPressActions(() => pmMenuEntries(roomId), { title: row?.name });
   if (!row) return null;
   const unread = row.unread > 0;

@@ -12,11 +12,11 @@ import { View } from 'react-native';
 import { router } from 'expo-router';
 import { formatDate, t } from '@web/i18n/t';
 import { patchSpaceRoom } from '@web/api/spaces';
-import { refreshSpaceRooms, spaces } from '@web/stores/spaces';
+import { refreshSpaceRooms } from '@web/stores/spaces';
 import { rooms } from '@web/stores/rooms';
 import { NotifyModeAll, NotifyModeDefault, NotifyModeMentions, NotifyModeNone, isRoomMuted, muteRoom, setRoomNotifyMode, unmuteRoom } from '@web/lib/roomNotify';
 import { useSolid } from '@/bridge/solid';
-import { useRoomNotifySettings } from '@/data';
+import { findPmRoom, findSpaceRoom, useRoomNotifySettings } from '@/data';
 import { useTheme } from '@/theme';
 import { Button, Icon, Input, ListSection, SegmentedControl, Select, Text, withAlpha } from '@/ui';
 import { LiveSlider } from '../components/LiveSlider';
@@ -259,18 +259,23 @@ const MUTE_DURATIONS: { key: string; ms: number | null }[] = [
   { key: 'forever', ms: null },
 ];
 
-/** The room's own mute fields, wherever the store keeps it (a PM or a space room). */
-function useMuteState(roomId: string): { muted: boolean; until: string | null } {
+/**
+ * The room's own mute fields, wherever the store keeps it - resolved as roomInfo() does: a PM
+ * or group from the rooms store, a space room (channel, thread) from its space. An open
+ * channel also has a mirror in the rooms store (useSpaceChannelMirror), which carries no mute
+ * fields, so reading that first would show a muted channel as unmuted with no way back.
+ */
+function useMuteState(roomId: string, spaceId: string | null | undefined): { muted: boolean; until: string | null } {
   return useSolid(() => {
-    const r = rooms.rooms.find((x) => x.id === roomId) ?? Object.values(spaces.spaceRoomsBySpaceId).flat().find((x) => x.id === roomId);
+    const r = findPmRoom(roomId) ?? findSpaceRoom(roomId, spaceId)?.room ?? rooms.rooms.find((x) => x.id === roomId);
     if (!r) return { muted: false, until: null };
     return { muted: isRoomMuted(r), until: r.muted ? null : (r.muted_until ?? null) };
-  }, [roomId]);
+  }, [roomId, spaceId]);
 }
 
 function Notifications({ data, setError }: { data: RoomSettingsData; setError: (m: string) => void }) {
   const settings = useRoomNotifySettings(data.roomId, data.spaceId);
-  const mute = useMuteState(data.roomId);
+  const mute = useMuteState(data.roomId, data.spaceId);
   const run = (p: Promise<void>) =>
     void p.catch((e: unknown) => setError(e instanceof Error ? e.message : t('common.saveFailed')));
 

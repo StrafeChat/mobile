@@ -1,11 +1,13 @@
 /**
  * Who shows a notification when both the app and a push could.
  *
- * - App in the background, open account's pushes working: the push does. The app's own
- *   (local) message notification would be the same message twice, so it stands aside.
- *   In the foreground the app's notification logic runs as it always has, and the native
- *   renderer suppresses the open account's pushes instead (Android natively; iOS asks the
- *   app, below).
+ * - App not active, open account's pushes working: the push does. The app's own (local)
+ *   message notification would be the same message twice, so it stands aside. Active, the
+ *   app's notification logic runs as it always has, and the native renderer suppresses the
+ *   open account's pushes instead (Android natively; iOS asks the app, below). On iOS "not
+ *   active" includes 'inactive' - open, with Notification Center, the app switcher or a call
+ *   banner over it - where iOS still hands the app its pushes: both sides then use the same
+ *   rule (pushTakesOver), so the message notifies exactly once.
  * - A push for another account on this device is never covered by the running app (it has
  *   no session for it): it always shows.
  * - A test push always shows: it is the answer to "does this work?".
@@ -19,14 +21,31 @@ function isMessageNotification(n: { tag?: string }): boolean {
   return !!n.tag && n.tag.startsWith('room:');
 }
 
-/** Keep the app's local notification back? */
-export function suppressLocalNotification(n: { tag?: string }, appState: AppStateStatus, pushActive: boolean): boolean {
-  return pushActive && appState !== 'active' && isMessageNotification(n);
+/** The open account's message notifications are the push's, not the app's. */
+function pushTakesOver(appState: AppStateStatus, pushActive: boolean): boolean {
+  return pushActive && appState !== 'active';
 }
 
-/** How a Strafe push that reached the running app (iOS) is presented. */
-export function presentRemotePush(data: PushData, activeSlot: string | null, sounds: boolean): { show: boolean; sound: boolean } {
+/** Keep the app's local notification back? */
+export function suppressLocalNotification(n: { tag?: string }, appState: AppStateStatus, pushActive: boolean): boolean {
+  return pushTakesOver(appState, pushActive) && isMessageNotification(n);
+}
+
+/**
+ * How a Strafe push that reached the running app (iOS) is presented. The open account's
+ * message push shows exactly when its local notification was held back; its call push never
+ * does - while the app runs, the voice store rings for the call itself (ringtone, vibration,
+ * the incoming-call screen).
+ */
+export function presentRemotePush(
+  data: PushData,
+  activeSlot: string | null,
+  sounds: boolean,
+  appState: AppStateStatus,
+  pushActive: boolean,
+): { show: boolean; sound: boolean } {
   if (data.type === 'test' || data.slot !== activeSlot) return { show: true, sound: sounds };
+  if (data.type === 'msg' && pushTakesOver(appState, pushActive)) return { show: true, sound: sounds };
   return { show: false, sound: false };
 }
 
@@ -42,9 +61,11 @@ export function presentRemoteNotification(
   triggerPayload: unknown,
   activeSlot: string | null,
   sounds: boolean,
+  appState: AppStateStatus,
+  pushActive: boolean,
 ): { show: boolean; sound: boolean } | null {
   const data = pushDataOf(content, triggerPayload);
-  if (data) return presentRemotePush(data, activeSlot, sounds);
+  if (data) return presentRemotePush(data, activeSlot, sounds, appState, pushActive);
   const slot = (triggerPayload as { s?: unknown } | null | undefined)?.s;
   return typeof slot === 'string' && isValidSlot(slot) ? { show: false, sound: false } : null;
 }

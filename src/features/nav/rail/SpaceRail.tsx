@@ -21,7 +21,7 @@ import {
   useSpaceBadges,
   useSpaceIds,
 } from '@/data';
-import { openRoom, setSelectedSpaceId, shell } from '@/shell/state';
+import { openRoom, roomOnScreen, setSelectedSpaceId, shell } from '@/shell/state';
 import { useTheme } from '@/theme';
 import {
   Avatar,
@@ -64,13 +64,14 @@ export function railItems(dmIds: readonly string[], spaceIds: readonly string[])
 
 /**
  * The PM on screen (it never shows on the rail), and the room on screen in general with its
- * space when known.
+ * space when known - on screen as shell/state.ts roomOnScreen has it, which the selected room
+ * is not while the rails cover it: it collects unread like any other room meanwhile.
  */
-function useActiveRoom(): { roomId: string | null; pmRoomId: string | null; spaceId: string | null } {
+function useRoomOnScreen(): { roomId: string | null; pmRoomId: string | null; spaceId: string | null } {
   return useSolid(() => {
-    const v = shell.view();
-    if (v.kind !== 'room') return { roomId: null, pmRoomId: null, spaceId: null };
-    return { roomId: v.roomId, pmRoomId: v.spaceId ? null : v.roomId, spaceId: v.spaceId ?? null };
+    const room = roomOnScreen();
+    if (!room) return { roomId: null, pmRoomId: null, spaceId: null };
+    return { roomId: room.roomId, pmRoomId: room.spaceId ? null : room.roomId, spaceId: room.spaceId };
   });
 }
 
@@ -243,8 +244,8 @@ function RailDivider() {
 
 export function SpaceRail({ bottomInset = 0 }: { bottomInset?: number }) {
   const theme = useTheme();
-  const active = useActiveRoom();
-  const dmIds = useRailDmIds(active.pmRoomId);
+  const onScreen = useRoomOnScreen();
+  const dmIds = useRailDmIds(onScreen.pmRoomId);
   const spaceIds = useSpaceIds();
   const data = useMemo(() => railItems(dmIds, spaceIds), [dmIds, spaceIds]);
 
@@ -258,14 +259,14 @@ export function SpaceRail({ bottomInset = 0 }: { bottomInset?: number }) {
         case 'divider':
           return <RailDivider />;
         case 'space':
-          return <SpaceRailItem spaceId={item.spaceId} viewingRoomId={viewingRoomFor(item.spaceId, active)} />;
+          return <SpaceRailItem spaceId={item.spaceId} viewingRoomId={viewingRoomFor(item.spaceId, onScreen)} />;
         case 'add':
           return <RailAction icon="fa-plus" label={t('space.addSpace')} onPress={openCreateSpace} />;
         case 'discover':
           return <RailAction icon="fa-compass" label={t('discover.title')} onPress={openDiscover} />;
       }
     },
-    [active],
+    [onScreen],
   );
 
   return (
@@ -275,7 +276,7 @@ export function SpaceRail({ bottomInset = 0 }: { bottomInset?: number }) {
         renderItem={renderItem}
         keyExtractor={(item) => item.key}
         getItemType={(item) => item.kind}
-        extraData={active}
+        extraData={onScreen}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 8, paddingBottom: 8 + bottomInset }}
       />

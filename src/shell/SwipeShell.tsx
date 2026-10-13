@@ -34,8 +34,16 @@
  *
  * The thresholds are the web client's (src/lib/mobileSwipe.ts) so the two feel the same.
  */
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { BackHandler, I18nManager, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  BackHandler,
+  I18nManager,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -48,7 +56,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
-import { openContent, openNav, setMembersOpen, shell } from './state';
+import { claimScreenRoom, openContent, openNav, setMembersOpen, setShellFocused, setShellWide, shell } from './state';
 import { useTheme } from '@/theme';
 import { dismissKeyboard } from '@/ui/keyboard';
 import {
@@ -132,6 +140,19 @@ function useScreenFocused(): boolean {
   return useIsFocused();
 }
 
+/**
+ * Renders nothing. Put on a screen pushed over the shell that shows a conversation (a thread)
+ * or keeps one in view (the media viewer): while that screen is the one in front, its room is
+ * the conversation on screen (state.ts roomOnScreen) - read as it arrives, never notified. A
+ * component rather than a hook so that only such a screen follows its own navigation focus;
+ * the shell's is followed once, by SwipeShell.
+ */
+export function ScreenRoomClaim({ roomId, spaceId }: { roomId: string; spaceId: string | null }): null {
+  const focused = useScreenFocused();
+  useEffect(() => (focused ? claimScreenRoom(roomId, spaceId) : undefined), [focused, roomId, spaceId]);
+  return null;
+}
+
 /** Moves the shell to where a finished drag landed (runs on the JS thread). */
 function commitRelease(action: ReleaseAction): void {
   if (action === 'nav') openNav();
@@ -158,8 +179,16 @@ export function handleShellBack(): boolean {
 
 export function SwipeShell({ nav, content, members }: SwipeShellProps) {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const wide = width >= WIDE_BREAKPOINT;
+  const { width: windowWidth } = useWindowDimensions();
+  // Side by side or not is the window's call, as everywhere else in the app (useIsWide).
+  const wide = windowWidth >= WIDE_BREAKPOINT;
+  // But the pager is the shell's own width: in landscape the route group pads the screen by the
+  // left and right insets (src/ui/safeArea), so the shell is narrower than the window by both.
+  // A drag moves the panels by this much, and the right-edge strip is at the shell's own right
+  // edge, not under a side navigation bar. The window's width stands in until the first layout.
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+  const width = measuredWidth ?? windowWidth;
+  const onLayout = useCallback((e: LayoutChangeEvent) => setMeasuredWidth(e.nativeEvent.layout.width), []);
   const focused = useScreenFocused();
   const panel = useSolid(() => shell.panel());
   const membersOpen = useSolid(() => shell.membersOpen());
@@ -197,6 +226,20 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
     if (!focused && wasFocused.current) dismissKeyboard();
     wasFocused.current = focused;
   }, [focused]);
+
+  // Whether the conversation is on screen (state.ts roomOnScreen) depends on both: a screen
+  // over the shell hides it, and on a tablet it shows beside the rails. Kept from here, the
+  // one place that lays the shell out and is navigated over; no shell, no conversation.
+  useEffect(() => {
+    setShellFocused(focused);
+    setShellWide(wide);
+  }, [focused, wide]);
+  useEffect(
+    () => () => {
+      setShellFocused(false);
+    },
+    [],
+  );
 
   // Android back, only while this screen is the one in front: listeners run newest-first, so
   // a shell that registered once would answer before the navigator and swallow the back of
@@ -256,6 +299,8 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
         'worklet';
         const touch = e.changedTouches[0];
         const start = { progress: progress.value, drawer: drawer.value, canMembers: canMembers.value === 1 };
+        // x, not absoluteX: x is from the left edge of the view the gesture is attached to (the
+        // shell's root, the one measured for `width`), absoluteX from the window's.
         if (!touch || !edgeZoneAccepts(touch.x, width, start)) manager.fail();
       })
       .onStart(onStart)
@@ -298,7 +343,7 @@ export function SwipeShell({ nav, content, members }: SwipeShellProps) {
   return (
     <ShellGestureContext.Provider value={ctx}>
       <GestureDetector gesture={gestures.root}>
-        <View style={[wide ? styles.row : styles.fill, { backgroundColor: theme.colors.background }]}>
+        <View testID="shell" onLayout={onLayout} style={[wide ? styles.row : styles.fill, { backgroundColor: theme.colors.background }]}>
           <Animated.View
             testID="shell-nav"
             style={[wide ? [styles.wideNav, { borderEndColor: theme.colors.border }] : styles.panel, navStyle]}

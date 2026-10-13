@@ -11,6 +11,7 @@ export default {
   logOutEverywhere: 'Sair de todos os lugares',
   logOutEverywhereHint: 'Encerra todas as sessões desta conta, em todos os dispositivos.',
   logOutEverywhereConfirm: 'Todos os dispositivos conectados a esta conta serão desconectados, inclusive este.',
+  logOutEverywhereFailed: 'Não foi possível sair de todos os lugares. Outros dispositivos podem continuar conectados: verifique sua conexão e tente de novo.',
   copyFailed: 'Não foi possível copiar para a área de transferência.',
   genericError: 'Algo deu errado. Tente novamente.',
   share: 'Compartilhar',

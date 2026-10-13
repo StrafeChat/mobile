@@ -9,7 +9,7 @@ import { useWindowDimensions } from 'react-native';
 import { fitWithin } from '@web-original/lib/attachments/format';
 import { useSolid } from '@/bridge/solid';
 import { shell } from '@/shell/state';
-import { WIDE_BREAKPOINT } from '@/ui';
+import { useHorizontalSafePadding, WIDE_BREAKPOINT } from '@/ui';
 
 /** Horizontal padding of a message row. */
 export const ROW_PAD_X = 16;
@@ -27,9 +27,13 @@ const VIDEO_MAX_H = 300;
 const VIDEO_MAX_H_PORTRAIT = 420;
 const VIDEO_MIN_W = 232;
 
-/** Width available to a message's content column. */
-export function contentWidth(windowWidth: number, compact: boolean, membersColumn: boolean): number {
-  let w = windowWidth;
+/**
+ * Width available to a message's content column. `sideInsets` is the landscape safe-area
+ * padding every screen now carries; it narrows the column but not the decision to lay the
+ * rails beside it, which SwipeShell makes from the window's width.
+ */
+export function contentWidth(windowWidth: number, compact: boolean, membersColumn: boolean, sideInsets = 0): number {
+  let w = windowWidth - sideInsets;
   if (windowWidth >= WIDE_BREAKPOINT) {
     w -= WIDE_NAV_PX;
     if (membersColumn) w -= WIDE_MEMBERS_PX;
@@ -42,8 +46,9 @@ export function contentWidth(windowWidth: number, compact: boolean, membersColum
 /** Media cap for this screen: the web's `max` within the content column. */
 export function useMediaMaxWidth(max = 400, compact = false): number {
   const { width } = useWindowDimensions();
+  const { paddingLeft, paddingRight } = useHorizontalSafePadding();
   const members = useSolid(() => shell.membersOpen() && shell.membersAvailable());
-  return Math.min(max, contentWidth(width, compact, members));
+  return Math.min(max, contentWidth(width, compact, members, paddingLeft + paddingRight));
 }
 
 /** Fit (w, h) in a box, never upscaling; the web's fitWithin with a width cap applied. */

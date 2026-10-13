@@ -104,7 +104,11 @@ function themeActions(th: ThemeDefinition) {
 function ThemeCard({ theme: th, selected, width }: { theme: ThemeDefinition; selected: boolean; width: number }) {
   const theme = useTheme();
   const c = theme.colors;
-  const kind = th.builtin ? (th.description ?? t('settings.appearance.theme.builtIn')) : t('settings.appearance.theme.custom');
+  // Built-in themes' descriptions are English in the theme data; the translated one wins, with
+  // that as the fallback for a theme the locale files do not know.
+  const kind = th.builtin
+    ? t(`settings.appearance.theme.descriptions.${th.id}`, { defaultValue: th.description ?? t('settings.appearance.theme.builtIn') })
+    : t('settings.appearance.theme.custom');
   const mode = th.appearance === 'light' ? t('settings.appearance.theme.light') : t('settings.appearance.theme.dark');
   const openMenu = () => {
     haptics.longPress();

@@ -49,8 +49,8 @@ export function backOr(path: AuthPath): void {
 }
 
 /**
- * On the screens the boot gate lands on (sign-in, instance): open the email link that
- * launched the app, if any (logic/pendingLink.ts).
+ * On the screens the boot gate lands on (sign-in, instance; the shell when signed in): open
+ * the email link that launched the app, if any (logic/pendingLink.ts).
  */
 export function useLaunchAuthLink(): void {
   useEffect(() => {

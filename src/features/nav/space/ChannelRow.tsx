@@ -16,18 +16,24 @@ import { channelMenuEntries } from '../menus';
 import { pressVoiceRoom } from '../voiceRooms';
 import { RoomTypeIcon } from './RoomTypeIcon';
 
-/** `active`: the room on screen (a boolean, so a room switch re-renders two rows, not all). */
+/**
+ * `active`: the selected room (the highlight). `onScreen`: the room on screen (shell/state.ts
+ * roomOnScreen), whose unread is not shown - the selected one behind the rails collects unread
+ * like any other. Booleans, so a switch re-renders the rows involved, not all.
+ */
 export const ChannelRow = memo(function ChannelRow({
   spaceId,
   roomId,
   active,
+  onScreen,
 }: {
   spaceId: string;
   roomId: string;
   active: boolean;
+  onScreen: boolean;
 }) {
   const theme = useTheme();
-  const row = useChannelRow(spaceId, roomId, active ? roomId : null);
+  const row = useChannelRow(spaceId, roomId, onScreen ? roomId : null);
   const name = row?.name || t('space.unnamed');
   const menu = useLongPressActions(() => channelMenuEntries(spaceId, roomId), { title: name });
   if (!row) return null;

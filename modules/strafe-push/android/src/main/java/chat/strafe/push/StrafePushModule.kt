@@ -81,6 +81,9 @@ private class InvalidSlotException(slot: String) :
 
 private class NoDistributorException(message: String) : CodedException("ERR_NO_DISTRIBUTOR", message, null)
 
+private class BackgroundException(cause: Throwable) :
+  CodedException("ERR_STRAFE_PUSH", "strafe-push: ${cause.javaClass.simpleName}", cause)
+
 /**
  * `StrafePush` (modules/strafe-push/index.ts) on Android: slot keys, FCM and UnifiedPush
  * registration, the display config the native renderer uses, and clearing notifications.
@@ -132,12 +135,16 @@ class StrafePushModule : Module() {
       store.deleteKeys(slot)
     }
 
-    AsyncFunction("getFcmToken") {
-      Fcm.token(context)
+    // These wait on Firebase or the network for up to half a minute: off the shared queue.
+    AsyncFunction("getFcmToken") { promise: Promise ->
+      inBackground(promise) { promise.resolve(Fcm.token(context)) }
     }
 
-    AsyncFunction("releaseFcm") {
-      Fcm.release(context)
+    AsyncFunction("releaseFcm") { promise: Promise ->
+      inBackground(promise) {
+        Fcm.release(context)
+        promise.resolve(null)
+      }
     }
 
     // Synchronous: +native-intent checks a link while the router waits for its answer.
@@ -151,7 +158,8 @@ class StrafePushModule : Module() {
 
     AsyncFunction("registerUnifiedPush") { slot: String, distributor: String?, promise: Promise ->
       requireSlot(slot)
-      registerUnifiedPush(slot, distributor, promise)
+      // Off the shared queue: registering fetches the instance's VAPID key first.
+      inBackground(promise) { registerUnifiedPush(slot, distributor, promise) }
     }
 
     AsyncFunction("unregisterUnifiedPush") { slot: String ->
@@ -196,6 +204,25 @@ class StrafePushModule : Module() {
     if (!Slots.isValid(slot)) throw InvalidSlotException(slot)
   }
 
+  /**
+   * Runs [work] on this module's own thread, which settles [promise]. Every Expo module's
+   * AsyncFunctions share one queue thread (expo.modules.AsyncFunctionQueue): one blocked on
+   * Firebase or a slow instance would hold up SecureStore, notifications and the rest of the
+   * app's native calls behind it. What [work] throws rejects [promise] - uncaught on this
+   * thread, it would kill the process and leave the promise unsettled.
+   */
+  private fun inBackground(promise: Promise, work: () -> Unit) {
+    background.execute {
+      try {
+        work()
+      } catch (e: CodedException) {
+        promise.reject(e)
+      } catch (e: Exception) {
+        promise.reject(BackgroundException(e))
+      }
+    }
+  }
+
   /** Installed distributors, not counting ourselves. */
   private fun unifiedPushDistributors(): List<String> =
     UnifiedPush.getDistributors(context).filter { it != context.packageName }
@@ -210,7 +237,8 @@ class StrafePushModule : Module() {
   /**
    * Binds [slot] to UnifiedPush: through [distributor] when given, else the saved one, else
    * the system default (which may ask the person to pick, hence an activity). The endpoint
-   * comes later, as the `unifiedPushEndpoint` event.
+   * comes later, as the `unifiedPushEndpoint` event. Blocking (the VAPID key fetch): runs on
+   * [background].
    */
   private fun registerUnifiedPush(slot: String, distributor: String?, promise: Promise) {
     val installed = unifiedPushDistributors()
@@ -244,15 +272,19 @@ class StrafePushModule : Module() {
           return
         }
         activity.runOnUiThread {
-          UnifiedPush.tryUseDefaultDistributor(activity) { chosen ->
-            background.execute {
-              if (chosen) {
-                registerSlot(slot)
-                promise.resolve(null)
-              } else {
-                promise.reject(NoDistributorException("no UnifiedPush distributor was chosen"))
+          try {
+            UnifiedPush.tryUseDefaultDistributor(activity) { chosen ->
+              inBackground(promise) {
+                if (chosen) {
+                  registerSlot(slot)
+                  promise.resolve(null)
+                } else {
+                  promise.reject(NoDistributorException("no UnifiedPush distributor was chosen"))
+                }
               }
             }
+          } catch (e: Exception) {
+            promise.reject(BackgroundException(e))
           }
         }
       }

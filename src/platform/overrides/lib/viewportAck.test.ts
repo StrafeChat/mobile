@@ -1,8 +1,9 @@
 /**
  * The mobile viewport ack: the web's read-cursor rules (web/src/lib/viewportAck.ts) driven by
- * a message list's bottom row and AppState instead of the DOM. readState and pendingAck are the
- * real web stores; rooms and messages are Solid stores shaped like the web's, so the effect
- * re-runs on their changes as it does in the app.
+ * a message list's bottom row and AppState instead of the DOM, and only for the conversation on
+ * screen (the real shell state: its room in front, or a thread's screen over it). readState and
+ * pendingAck are the real web stores; rooms and messages are Solid stores shaped like the web's,
+ * so the effect re-runs on their changes as it does in the app.
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { createRoot, createSignal } from 'solid-js';
@@ -51,6 +52,8 @@ const { setRooms } = require('@web/stores/rooms') as unknown as {
 const { setMessages } = require('@web/stores/messages') as unknown as {
   setMessages: (...args: unknown[]) => void;
 };
+const shellState = require('@/shell/state') as typeof import('@/shell/state');
+const { claimScreenRoom, closeView, openNav, openRoom, setShellFocused, setShellWide } = shellState;
 
 // Every tracker a test starts is stopped after it, even when an expectation fails midway.
 const live: { dispose(): void }[] = [];
@@ -72,10 +75,18 @@ function loadRoom(roomId: string, ids: string[], extra: { hasMoreNewer?: boolean
   setMessages('hasMoreNewer', roomId, extra.hasMoreNewer ?? false);
 }
 
+/** Room `roomId` open in the shell, the conversation in front, nothing pushed over it. */
+function showRoom(roomId: string): void {
+  setShellFocused(true);
+  setShellWide(false);
+  openRoom(roomId, null);
+}
+
 beforeEach(() => {
   mockAckRoom.mockClear();
   mockKeepalive.mockClear();
   setAppState('active');
+  showRoom('1');
   // Store setters merge; reconcile replaces, so no state leaks between tests.
   setReadState('byRoom', reconcile({}));
   for (const key of ['byRoom', 'loading', 'hasMoreOlder', 'hasMoreNewer']) setMessages(key, reconcile({}));
@@ -87,6 +98,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const ack of live.splice(0)) ack.dispose();
+  closeView();
 });
 
 describe('createRoomViewportAck', () => {
@@ -193,6 +205,7 @@ describe('createViewportAck (the web signature)', () => {
     expect(mockAckRoom).toHaveBeenLastCalledWith('1', '105');
     mockAckRoom.mockClear();
     // Room 1's 105 is "newer" than room 2's cursor; it must not ack room 2.
+    showRoom('2');
     setRoom('2');
     expect(mockAckRoom).not.toHaveBeenCalled();
     set('205');
@@ -200,5 +213,90 @@ describe('createViewportAck (the web signature)', () => {
     setRoom(undefined);
     expect(getPendingAck()).toBeNull();
     dispose();
+  });
+});
+
+describe('only the conversation on screen is read', () => {
+  it('acks nothing while the rails are in front, then catches up when the conversation is back', () => {
+    loadRoom('1', ['100', '101', '105']);
+    const ack = createRoomViewportAck('1');
+    // Swiped back to the room list: the list stays mounted and keeps following new messages.
+    openNav();
+    ack.setBottomVisibleMessageId('105');
+    expect(mockAckRoom).not.toHaveBeenCalled();
+    expect(readState.byRoom['1']?.lastReadMessageId).toBeUndefined();
+
+    showRoom('1');
+    expect(mockAckRoom).toHaveBeenCalledWith('1', '105');
+  });
+
+  it('keeps nothing unseen for the background keepalive', () => {
+    loadRoom('1', ['100', '101', '105']);
+    const ack = createRoomViewportAck('1');
+    openNav();
+    ack.setBottomVisibleMessageId('105');
+    expect(getPendingAck()).toBeNull();
+    setAppState('background');
+    expect(mockKeepalive).not.toHaveBeenCalled();
+  });
+
+  it('does not clear a stranded mention behind the rails', () => {
+    loadRoom('1', ['100']);
+    setRooms('rooms', [{ id: '1', last_message_id: '100', last_read_message_id: '100' }]);
+    setReadState('byRoom', '1', { lastReadMessageId: '100', mentionCount: 1 });
+    openNav();
+    const ack = createRoomViewportAck('1');
+    ack.setBottomVisibleMessageId('100');
+    expect(mockAckRoom).not.toHaveBeenCalled();
+    expect(readState.byRoom['1']?.mentionCount).toBe(1);
+  });
+
+  it('reads the room beside the rails on a tablet, whichever panel is in front', () => {
+    loadRoom('1', ['100', '101', '105']);
+    const ack = createRoomViewportAck('1');
+    setShellWide(true);
+    openNav();
+    ack.setBottomVisibleMessageId('101');
+    expect(mockAckRoom).toHaveBeenCalledWith('1', '101');
+  });
+
+  it('a screen over the shell hides its room; a thread on that screen is the one read', () => {
+    loadRoom('1', ['100', '101', '105']);
+    loadRoom('2', ['200', '205']);
+    const channel = createRoomViewportAck('1');
+    const thread = createRoomViewportAck('2');
+    // The thread's screen is pushed and comes into focus; the shell under it loses it.
+    setShellFocused(false);
+    const release = claimScreenRoom('2', null);
+    channel.setBottomVisibleMessageId('105');
+    thread.setBottomVisibleMessageId('205');
+    expect(mockAckRoom).toHaveBeenCalledTimes(1);
+    expect(mockAckRoom).toHaveBeenCalledWith('2', '205');
+    // The channel's off-screen run left the thread's pending position alone.
+    expect(getPendingAck()).toEqual({ roomId: '2', messageId: '205' });
+
+    // Back to the shell: the channel is read up to what its list shows.
+    release();
+    setShellFocused(true);
+    expect(mockAckRoom).toHaveBeenLastCalledWith('1', '105');
+  });
+
+  it('another screen over the thread hides it too, and a stale release changes nothing', () => {
+    loadRoom('2', ['200', '205']);
+    const thread = createRoomViewportAck('2');
+    setShellFocused(false);
+    const releaseFirst = claimScreenRoom('2', null);
+    const releaseSecond = claimScreenRoom('2', null);
+    // The first claim's late release (its blur after the second's focus) is not current.
+    releaseFirst();
+    thread.setBottomVisibleMessageId('205');
+    expect(mockAckRoom).toHaveBeenCalledWith('2', '205');
+
+    mockAckRoom.mockClear();
+    releaseSecond();
+    setMessages('byRoom', '2', [{ id: '200' }, { id: '205' }, { id: '206' }]);
+    setRooms('rooms', [{ id: '2', last_message_id: '206', last_read_message_id: '205' }]);
+    thread.setBottomVisibleMessageId('206');
+    expect(mockAckRoom).not.toHaveBeenCalled();
   });
 });

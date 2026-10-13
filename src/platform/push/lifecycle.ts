@@ -30,6 +30,7 @@ import { jumpToMessage } from '@web/stores/messages';
 import { stargate } from '@web/stores/stargate';
 import { voice, voiceStatesForRoom } from '@web/stores/voice';
 import { requestComposerFocus } from '@/features/composer/state';
+import { backToShell } from '@/features/nav/navigation';
 import { acceptIncomingFromUi, joinVoiceFromUi } from '@/features/voice/join';
 import { openRoom } from '@/shell/state';
 import { bootState } from '../boot';
@@ -107,7 +108,13 @@ export function installPushLifecycle(): () => void {
   setPushRoutingHost({
     ready: () => bootState() === 'ready',
     switchAccount,
-    openRoom: (roomId, spaceId) => openRoom(roomId, spaceId ?? spaceIdOfRoom(roomId)),
+    // Then back to the shell: openRoom alone only moves it, so a push tapped while a thread,
+    // settings or the media viewer is in front (the usual case after leaving the app mid-thread)
+    // would change nothing visible - as wiring.ts's showRoom does for local notifications.
+    openRoom: (roomId, spaceId) => {
+      openRoom(roomId, spaceId ?? spaceIdOfRoom(roomId));
+      backToShell();
+    },
     jumpToMessage: (roomId, messageId) => void jumpToMessage(roomId, messageId).catch((err: unknown) => console.warn('[push] jump failed', err)),
     focusComposer: requestComposerFocus,
     callState: (roomId) => {
@@ -122,9 +129,18 @@ export function installPushLifecycle(): () => void {
     joinCall: (roomId, spaceId) => joinVoiceFromUi(roomId, { spaceId: spaceId ?? spaceIdOfRoom(roomId) }),
   });
   setLocalNotificationGate((n) => suppressLocalNotification(n, AppState.currentState, pushCoversOpenAccount()));
+  // The same app state and the same "push covers it" as the gate above: one notification
+  // per message, whichever side shows it.
   setRemotePushPresenter((n) => {
     const trigger = n.request.trigger as { type?: string; payload?: unknown } | null;
-    return presentRemoteNotification(n.request.content, trigger?.type === 'push' ? trigger.payload : undefined, activeSlot(), notificationPrefs.sounds);
+    return presentRemoteNotification(
+      n.request.content,
+      trigger?.type === 'push' ? trigger.payload : undefined,
+      activeSlot(),
+      notificationPrefs.sounds,
+      AppState.currentState,
+      pushCoversOpenAccount(),
+    );
   });
   setRemotePushResponder(handlePushResponse);
   setAccountLeavingHook(forgetPushAccount);

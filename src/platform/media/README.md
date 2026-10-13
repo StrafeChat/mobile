@@ -19,7 +19,15 @@ File, so the shared send path is untouched. Its parameter is still typed with th
 ## Sending
 
 1. `pickFromLibrary` / `takePhoto` / `recordVideo` / `pickDocuments` (`pickers.ts`), or
-   `startVoiceRecording()` -> `handle.stop()` -> `clip.file`.
+   `startVoiceRecording()` -> `handle.stop()` -> `clip.file`. Every image-picker pick (camera
+   or library, both platforms) has its location metadata removed in place first
+   (`stripLocation.ts`: the EXIF GPS directory, XMP that mentions GPS, MP4 `©xyz`/`loci`, and
+   the items of QuickTime keyed metadata whose key names a location, such as an iPhone
+   recording's `com.apple.quicktime.location.ISO6709`). Nothing moves and nothing is
+   re-encoded; a file that cannot be checked fails the pick and its copies are deleted. An iOS
+   photo is normally re-encoded without its metadata, so there is nothing left to find; an iOS
+   video keeps its own. Only JPEG and MP4/QuickTime are parsed: other formats (PNG, WebP,
+   HEIC...) pass as they are.
 2. `draft.addFiles(files)` (`useAttachmentDraft()` in React): size/count validation with the
    web's messages, preview URI, image dimensions.
 3. `sendMessage(roomId, text, replyTo, asWebPendingAttachments(draft.take()))`. In an E2EE

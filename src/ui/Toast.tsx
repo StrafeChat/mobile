@@ -17,6 +17,7 @@ import { withAlpha } from './color';
 import { useExternalStore } from './externalStore';
 import { Icon } from './Icon';
 import { useReduceMotion } from './motion';
+import { physicalSides } from './safeArea';
 import { Text } from './Text';
 import { dismissToast, toastStore, type ToastTone } from './toast';
 
@@ -52,6 +53,7 @@ function toneColour(theme: Theme, tone: ToastTone): string {
 export function ToastHost() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const sides = physicalSides(insets);
   const reduce = useReduceMotion();
   const cur = useExternalStore(toastStore);
 
@@ -70,7 +72,13 @@ export function ToastHost() {
   const icon = cur.icon ?? toneIcon(cur.tone);
 
   return (
-    <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top + 8, alignItems: 'center', paddingHorizontal: 12 }}>
+    // Clear of the cutout and a side navigation bar in landscape too: the host sits over every
+    // screen, outside their safe-area padding.
+    <View
+      testID="toast-host"
+      pointerEvents="box-none"
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top + 8, alignItems: 'center', paddingLeft: sides.left + 12, paddingRight: sides.right + 12 }}
+    >
       <Animated.View
         key={cur.id}
         entering={reduce ? undefined : FadeInUp.duration(180)}

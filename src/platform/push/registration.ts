@@ -33,7 +33,7 @@ import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
 import { notificationPrefs, requestDesktopPermission, setNotificationPrefs } from '@web/stores/notificationPrefs';
 import { appStorage } from '../storage';
-import { activePushAccount, pushAccounts } from './accounts';
+import { activePushAccount, pushAccounts, pushAccountsComplete } from './accounts';
 import {
   PushRequestError,
   deleteSubscription,
@@ -58,6 +58,12 @@ const ASKED_KEY = 'strafe.push.permissionAsked';
 const TRANSPORT_USED_KEY = 'strafe.push.transportUsed';
 const gatewayKey = (slot: string) => `strafe.push.gw.${slot}`;
 const subscriptionKey = (slot: string) => `strafe.push.sub.${slot}`;
+/**
+ * A PUT or PATCH went out for the slot: the instance may hold a subscription for it whatever
+ * came back (a timeout, a 5xx after the write, an earlier subscription a failed refresh left
+ * in place), so stopping push sends a DELETE even when no SubscriptionRecord is on file.
+ */
+const maybeSubscribedKey = (slot: string) => `strafe.push.maybe.${slot}`;
 const unifiedPushKey = (slot: string) => `strafe.push.up.${slot}`;
 
 // ---- small persistence helpers -------------------------------------------------------------------
@@ -97,6 +103,7 @@ interface UnifiedPushRecord {
 function forgetCaches(slot: string): void {
   appStorage.remove(gatewayKey(slot));
   appStorage.remove(subscriptionKey(slot));
+  appStorage.remove(maybeSubscribedKey(slot));
   appStorage.remove(unifiedPushKey(slot));
 }
 
@@ -303,33 +310,32 @@ function registerUnifiedPushAndWait(slot: string, distributor: string): Promise<
   });
 }
 
-async function unifiedPushEndpoint(distributor: Distributor, slot: string): Promise<{ endpoint: string; keys?: PushKeys }> {
+async function unifiedPushEndpoint(distributor: Distributor, slot: string): Promise<string> {
   const record = readJson<UnifiedPushRecord>(unifiedPushKey(slot));
   if (record?.distributor === distributor.id) {
     const stored = await StrafePush.getUnifiedPushEndpoint(slot).catch(() => null);
-    if (stored?.endpoint) return { endpoint: stored.endpoint, ...(stored.keys ? { keys: stored.keys } : {}) };
+    if (stored?.endpoint) return stored.endpoint;
   }
   const event = await registerUnifiedPushAndWait(slot, distributor.id);
   writeJson(unifiedPushKey(slot), { distributor: distributor.id } satisfies UnifiedPushRecord);
-  return { endpoint: event.endpoint, ...(event.keys ? { keys: event.keys } : {}) };
+  return event.endpoint;
 }
 
 // ---- per account ----------------------------------------------------------------------------------
 
 async function registerAccount(account: PushAccount, transport: Usable, prefs: InstancePrefs, force: boolean): Promise<void> {
-  let endpoint: string;
-  let keys: PushKeys | undefined;
-  if (transport.kind === 'unifiedpush') {
-    ({ endpoint, keys } = await unifiedPushEndpoint(transport.distributor, account.slot));
-  } else {
-    endpoint = await gatewayEndpoint(transport, account.slot);
-  }
-  if (!keys) {
-    try {
-      keys = await StrafePush.ensureKeys(account.slot);
-    } catch (e) {
-      throw new StepError('transport', e instanceof Error ? e.message : String(e));
-    }
+  const endpoint =
+    transport.kind === 'unifiedpush' ? await unifiedPushEndpoint(transport.distributor, account.slot) : await gatewayEndpoint(transport, account.slot);
+  // The slot's keys as the native side holds them now - for UnifiedPush too, although its
+  // endpoint event carries keys: those are what the slot had when the endpoint came. Keys the
+  // native store had to remake since (it discards keys it can never open again) would leave
+  // the instance encrypting to a private key that no longer exists, every push dropped. The
+  // connector decrypts with the slot's keys whatever it reported, so these are the ones.
+  let keys: PushKeys;
+  try {
+    keys = await StrafePush.ensureKeys(account.slot);
+  } catch (e) {
+    throw new StepError('transport', e instanceof Error ? e.message : String(e));
   }
   // The gateway's debug platform stands in for Firebase; the instance sees an FCM device.
   const kind: SubscriptionKind = transport.kind === 'debug' ? 'fcm' : transport.kind;
@@ -341,6 +347,7 @@ async function registerAccount(account: PushAccount, transport: Usable, prefs: I
       case 'none':
         return;
       case 'patch':
+        appStorage.set(maybeSubscribedKey(account.slot), true);
         if (await patchSubscriptionPrefs(account, prefs)) {
           writeJson(subscriptionKey(account.slot), { ...previous!, prefs } satisfies SubscriptionRecord);
           return;
@@ -350,6 +357,7 @@ async function registerAccount(account: PushAccount, transport: Usable, prefs: I
       case 'put':
         break;
     }
+    appStorage.set(maybeSubscribedKey(account.slot), true);
     await putSubscription(account, { endpoint, keys, kind, prefs });
     writeJson(subscriptionKey(account.slot), { ...next, at: now } satisfies SubscriptionRecord);
   } catch (e) {
@@ -361,13 +369,15 @@ async function registerAccount(account: PushAccount, transport: Usable, prefs: I
 
 /**
  * Tell the account's instance to stop pushing to this device (best effort: offline, the
- * subscription lapses on the instance's side when its endpoint goes away).
+ * subscription lapses on the instance's side when its endpoint goes away). Sent whenever the
+ * instance may hold one - a failed refresh drops the record, not the instance's subscription.
  */
 async function unsubscribe(account: Pick<PushAccount, 'apiBase' | 'token' | 'slot'>, opts: { always?: boolean } = {}): Promise<void> {
-  const had = readJson<SubscriptionRecord>(subscriptionKey(account.slot));
+  const had = readJson<SubscriptionRecord>(subscriptionKey(account.slot)) !== null || appStorage.getBoolean(maybeSubscribedKey(account.slot)) === true;
   appStorage.remove(subscriptionKey(account.slot));
   if (!had && !opts.always) return;
   await deleteSubscription(account).catch(() => undefined);
+  appStorage.remove(maybeSubscribedKey(account.slot));
 }
 
 /**
@@ -435,7 +445,9 @@ let appliedDisplay: string | null = null;
 
 /** Hand the native renderer the current config (skipped when nothing changed this run). */
 export async function applyDisplayConfig(excludeAccountId?: string): Promise<void> {
-  if (!StrafePush.isAvailable() || !desktopAccountsLoaded()) return;
+  // A partial list would take the accounts it lacks away from the renderer (on iOS: every
+  // push for them shown as the generic alert, their buttons dead).
+  if (!StrafePush.isAvailable() || !desktopAccountsLoaded() || !pushAccountsComplete()) return;
   const accounts = pushAccounts(excludeAccountId);
   const activeId = activeDesktopAccountId();
   const config = buildDisplayConfig({
@@ -463,12 +475,19 @@ async function run(force: boolean): Promise<void> {
     setPushStatus({ state: 'unavailable' });
     return;
   }
-  // The account list decides everything below (and which slots are orphans): wait for it.
+  // The account list decides everything below: wait for it.
   if (!desktopAccountsLoaded()) return;
   const accounts = pushAccounts();
   const active = activePushAccount();
 
-  await releaseOrphanedSlots(accounts);
+  // Which slots are orphans needs all of it. A start that could not read some account's token
+  // (iOS, launched in the background while the phone is locked) has a list without that
+  // account, which is still here: its slot, keys and place in the renderer's config stay
+  // (applyDisplayConfig waits too) until the list has it again. The rest goes ahead for the
+  // accounts the list does have - turning push off, a new sign-in, a new Firebase token must
+  // not wait on one that may never come back - and the missing one is torn down or registered
+  // by the first run that has it, from the records it keeps.
+  if (pushAccountsComplete()) await releaseOrphanedSlots(accounts);
   const caps = await StrafePush.getCapabilities().catch(() => null);
   setPushCapabilities(caps);
   await applyDisplayConfig().catch((e: unknown) => console.warn('[push] could not hand over the display config', e));

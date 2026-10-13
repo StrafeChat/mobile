@@ -11,6 +11,7 @@ export default {
   logOutEverywhere: 'تسجيل الخروج من كل مكان',
   logOutEverywhereHint: 'ينهي كل جلسات هذا الحساب على كل الأجهزة.',
   logOutEverywhereConfirm: 'سيُسجَّل خروج كل جهاز مسجّل الدخول بهذا الحساب، بما فيه هذا الجهاز.',
+  logOutEverywhereFailed: 'تعذّر تسجيل الخروج من كل مكان. قد تبقى أجهزة أخرى مسجّلة الدخول: تحقّق من اتصالك وحاول مرة أخرى.',
   copyFailed: 'تعذّر النسخ إلى الحافظة.',
   genericError: 'حدث خطأ ما. حاول مرة أخرى.',
   share: 'مشاركة',

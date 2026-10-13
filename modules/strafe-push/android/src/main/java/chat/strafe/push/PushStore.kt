@@ -13,7 +13,9 @@ import java.security.KeyFactory
 import java.security.KeyStore
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
+import java.security.spec.InvalidKeySpecException
 import java.security.spec.PKCS8EncodedKeySpec
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -39,11 +41,20 @@ class PushStore private constructor(context: Context) {
 
   // --- Web Push keys ---
 
-  /** The slot's keys, created if missing (and recreated if the wrapping key was lost). */
+  /**
+   * The slot's keys, created if missing (and recreated if the wrapping key was lost). A
+   * keystore that fails this time throws instead ([loadKeys]): keys an instance is encrypting
+   * to are never replaced over a fault that the next attempt would not have.
+   */
   fun ensureKeys(slot: String): WebPushKeys = synchronized(lock) {
     loadKeys(slot) ?: generateKeys(slot)
   }
 
+  /**
+   * The slot's keys; null when there are none, or when they can never be opened again (then
+   * they are discarded: a fresh ensureKeys() makes new ones and JS re-subscribes with them).
+   * Throws when the keystore failed this time, keeping them for the next push.
+   */
   fun loadKeys(slot: String): WebPushKeys? = synchronized(lock) {
     val pub = prefs.getString("k.$slot.pub", null) ?: return null
     val sealedPriv = prefs.getString("k.$slot.priv", null) ?: return null
@@ -54,9 +65,8 @@ class PushStore private constructor(context: Context) {
       val priv = KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(pkcs8)) as ECPrivateKey
       WebPushKeys(priv, WebPushCrypto.base64UrlDecode(pub), auth)
     } catch (e: GeneralSecurityException) {
-      // The keystore key is gone (e.g. the app's keystore was reset): these keys are
-      // unrecoverable. A fresh ensureKeys() makes new ones and JS re-subscribes with them.
-      Log.w(TAG, "slot keys unreadable, discarding them", e)
+      if (!neverOpens(e)) throw e
+      Log.w(TAG, "slot keys can never be opened, discarding them: ${e.javaClass.simpleName}")
       deleteKeys(slot)
       null
     }
@@ -95,12 +105,23 @@ class PushStore private constructor(context: Context) {
     }
   }
 
+  /**
+   * The account's session token, or null - also when the keystore failed this time, which
+   * leaves it on file: dropped, it would stay gone (and Mark as read / Decline with it) until
+   * JS hands over a display config that differs, since it skips an unchanged one. Never
+   * throws: it is read while a notification is drawn, which must not fail over one button.
+   */
   fun token(slot: String): String? = synchronized(lock) {
     val sealed = prefs.getString("tok.$slot", null) ?: return null
     return try {
       String(open(WebPushCrypto.base64UrlDecode(sealed), "tok", slot))
     } catch (e: GeneralSecurityException) {
-      prefs.edit().remove("tok.$slot").apply()
+      if (neverOpens(e)) prefs.edit().remove("tok.$slot").apply()
+      else Log.w(TAG, "session token unreadable for now: ${e.javaClass.simpleName}")
+      null
+    } catch (e: RuntimeException) {
+      // AndroidKeyStore's transient faults (KeyStoreConnectException...) are ProviderExceptions.
+      Log.w(TAG, "session token unreadable for now: ${e.javaClass.simpleName}")
       null
     }
   }
@@ -187,9 +208,9 @@ class PushStore private constructor(context: Context) {
   }
 
   private fun open(sealed: ByteArray, kind: String, slot: String): ByteArray {
-    if (sealed.isEmpty()) throw GeneralSecurityException("empty")
+    if (sealed.isEmpty()) throw MalformedSealedValueException("empty")
     val ivLength = sealed[0].toInt() and 0xff
-    if (sealed.size < 1 + ivLength + 16) throw GeneralSecurityException("truncated")
+    if (sealed.size < 1 + ivLength + 16) throw MalformedSealedValueException("truncated")
     val cipher = Cipher.getInstance(TRANSFORMATION)
     cipher.init(Cipher.DECRYPT_MODE, wrappingKey(), GCMParameterSpec(128, sealed, 1, ivLength))
     cipher.updateAAD(aad(kind, slot))
@@ -229,3 +250,19 @@ class PushStore private constructor(context: Context) {
       }
   }
 }
+
+/** A sealed value that is not one: empty, or shorter than its own IV and tag. */
+internal class MalformedSealedValueException(message: String) : GeneralSecurityException(message)
+
+/**
+ * Whether a sealed value failed to open for good, so keeping it is pointless: the GCM tag does
+ * not verify (the wrapping key it was sealed with is gone - a lost key is quietly replaced by a
+ * new one - or the bytes changed), or what is on disk is malformed (not base64url, too short,
+ * not a PKCS#8 key). Anything else is the keystore failing this once: AndroidKeyStore maps a
+ * transient fault to IllegalBlockSizeException, InvalidKeyException or a KeyStoreException,
+ * and a value discarded over one of those would take keys an instance is still encrypting to.
+ * UnrecoverableKeyException is not on the list either: it is about fetching the wrapping key,
+ * and discarding what that key sealed would not bring it back.
+ */
+internal fun neverOpens(e: GeneralSecurityException): Boolean =
+  e is AEADBadTagException || e is MalformedSealedValueException || e is WebPushException || e is InvalidKeySpecException

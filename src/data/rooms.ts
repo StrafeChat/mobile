@@ -110,7 +110,7 @@ export interface PmRowView {
   system: boolean;
   /** The other person's custom status, only while they are online/idle/dnd. */
   subtitle?: string;
-  /** 0 for the room on screen. */
+  /** 0 for the room on screen (it is read as it arrives). */
   unread: number;
   muted: boolean;
   /** What "Mark as read" acks to; null when nothing is known. */
@@ -119,15 +119,19 @@ export interface PmRowView {
   canMarkRead: boolean;
 }
 
-/** One PM list row, as RoomsBar's ConvItem derives it. */
-export function pmRowView(roomId: string, activeRoomId: string | null): PmRowView | undefined {
+/**
+ * One PM list row, as RoomsBar's ConvItem derives it. `onScreenRoomId`: the conversation on
+ * screen (shell/state.ts roomOnScreen), whose unread is not shown - not merely the selected
+ * one, which collects unread like any other while the rails or another screen cover it.
+ */
+export function pmRowView(roomId: string, onScreenRoomId: string | null): PmRowView | undefined {
   const uid = auth.user?.id ?? '';
   const room = rooms.rooms.find((r) => r.id === roomId);
   if (!room) return undefined;
   const isGroup = room.type === ROOM_TYPE_GROUP;
   const other = room.participants?.find((p) => p.id !== uid);
   const list = messages.byRoom[room.id] ?? [];
-  const unread = activeRoomId === room.id || !uid ? 0 : getUnreadCountForDisplay(room.id, room, list, uid);
+  const unread = onScreenRoomId === room.id || !uid ? 0 : getUnreadCountForDisplay(room.id, room, list, uid);
   let subtitle: string | undefined;
   if (!isGroup && other) {
     const st = presence.byUser[other.id]?.status ?? other.presence?.status;
@@ -163,8 +167,8 @@ export function usePmListLoading(): boolean {
 }
 
 /** One PM row. Re-renders only when something the row shows changes. */
-export function usePmRow(roomId: string, activeRoomId: string | null): PmRowView | undefined {
-  return useDerived(`pmRow:${roomId}:${activeRoomId ?? ''}`, () => pmRowView(roomId, activeRoomId), deepEqual);
+export function usePmRow(roomId: string, onScreenRoomId: string | null): PmRowView | undefined {
+  return useDerived(`pmRow:${roomId}:${onScreenRoomId ?? ''}`, () => pmRowView(roomId, onScreenRoomId), deepEqual);
 }
 
 /** The signed-in user's Notes room id, when READY carried it. */

@@ -124,7 +124,7 @@ function Conversation({ info, mode }: { info: RoomInfo; mode: RoomMode }) {
           nothing else here may add keyboard avoidance on top. */}
       <View style={{ flex: 1 }} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
         <View style={{ flex: 1 }}>
-          <MessageList roomId={info.id} spaceId={spaceId} />
+          <MessageList roomId={info.id} spaceId={spaceId} screen={mode === 'screen'} />
         </View>
         <TypingIndicator roomId={info.id} />
         <Composer roomId={info.id} spaceId={spaceId} {...(bodyHeight > 0 ? { maxHeight: bodyHeight - TYPING_ROW_HEIGHT } : {})} />

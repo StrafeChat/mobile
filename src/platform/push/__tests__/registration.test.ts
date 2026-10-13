@@ -77,6 +77,10 @@ jest.mock('@web/desktop/accounts', () => ({
   desktopAccountsLoaded: () => mockAccounts.loaded,
 }));
 
+// Accounts whose token the start-up could not read (tauri-core.ts).
+const mockUnreadable = { ids: [] as string[] };
+jest.mock('../../overrides/packages/tauri-core', () => ({ unreadableAccountIds: () => mockUnreadable.ids }));
+
 const mockAuth = { token: 'tok-a' as string | null };
 jest.mock('@web/stores/auth', () => ({ auth: mockAuth }));
 
@@ -172,6 +176,7 @@ beforeEach(() => {
   mockAccounts.list = [A];
   mockAccounts.active = A.id;
   mockAccounts.loaded = true;
+  mockUnreadable.ids = [];
   mockAuth.token = 'tok-a';
   mockPermission.value = { granted: true, status: 'granted', canAskAgain: true, ios: undefined };
   Object.assign(mockPrefs, { desktop: false, preview: true, pmMode: 'all', spaceMode: 'mentions', sounds: true });
@@ -331,6 +336,78 @@ describe('every account on the device', () => {
     expect(mockNative.getCapabilities).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
+
+  it('a start that could not read every account (iOS, locked) keeps the missing one and goes ahead for the rest', async () => {
+    mockAccounts.list = [A, B];
+    await reg.ensurePushRegistration();
+    const slotA = slots.slotFor(A.id);
+    const slotB = slots.slotFor(B.id);
+    jest.clearAllMocks();
+    calls = [];
+
+    // B's token was refused: the list has only A, and B is still here. Its slot is not an
+    // orphan, and the renderer is not handed a config without it.
+    mockUnreadable.ids = [B.id];
+    mockAccounts.list = [A];
+    await reg.ensurePushRegistration();
+    expect(mockNative.deleteKeys).not.toHaveBeenCalled();
+    expect(mockNative.clearAll).not.toHaveBeenCalled();
+    expect(mockNative.setDisplayConfig).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(slots.existingSlot(B.id)).toBe(slotB);
+
+    // A must not wait for B, which may never be readable again (a keystore fault): a new
+    // Firebase token still reaches its instance...
+    mockNative.getFcmToken.mockResolvedValueOnce('fcm-token-2');
+    await reg.ensurePushRegistration();
+    expect((gatewayCalls()[0]!.body as { token: string; slot: string }).slot).toBe(slotA);
+    expect(instanceCalls().map((c) => [c.method, c.url])).toEqual([['PUT', 'https://api.a.example/users/@me/push']]);
+    expect(status.pushStatus().state).toBe('active');
+
+    // ...and turning push off tears A down. B keeps its keys and records, for the run that
+    // has it again.
+    calls = [];
+    config.setPushEnabled(false);
+    await reg.ensurePushRegistration();
+    expect(instanceCalls().map((c) => [c.method, c.url])).toEqual([['DELETE', 'https://api.a.example/users/@me/push']]);
+    expect(mockNative.releaseFcm).toHaveBeenCalled();
+    expect(mockNative.deleteKeys).toHaveBeenCalledWith(slotA);
+    expect(mockNative.deleteKeys).not.toHaveBeenCalledWith(slotB);
+    expect(reg.hasStoredSubscription(slotB)).toBe(true);
+    expect(slots.existingSlot(B.id)).toBe(slotB);
+    expect(mockNative.setDisplayConfig).not.toHaveBeenCalled();
+    expect(status.pushStatus()).toEqual({ state: 'disabled' });
+
+    // An account leaving meanwhile goes, but the renderer is not handed the partial list.
+    await reg.forgetPushAccount(A.id, { server: false });
+    expect(mockNative.clearAll).toHaveBeenCalledWith(slotA);
+    expect(mockNative.deleteKeys).not.toHaveBeenCalledWith(slotB);
+    expect(mockNative.setDisplayConfig).not.toHaveBeenCalled();
+
+    // B is in the list again (READY brought it back; the save that would note it may still
+    // be on its way): runs carry on, and B's instance hears that push went off.
+    mockAccounts.list = [B];
+    mockAccounts.active = B.id;
+    mockAuth.token = B.token;
+    calls = [];
+    await reg.ensurePushRegistration();
+    expect(mockNative.setDisplayConfig).toHaveBeenCalledWith(expect.objectContaining({ accounts: [expect.objectContaining({ slot: slotB })] }));
+    expect(instanceCalls().map((c) => [c.method, c.url, c.auth])).toEqual([['DELETE', 'https://api.b.example/users/@me/push', 'Bearer tok-b']]);
+    expect(mockNative.deleteKeys).toHaveBeenCalledWith(slotB);
+
+    jest.clearAllMocks();
+    calls = [];
+    config.setPushEnabled(true);
+    await reg.ensurePushRegistration();
+    expect(instanceCalls().map((c) => [c.method, c.url])).toEqual([['PUT', 'https://api.b.example/users/@me/push']]);
+    expect(mockNative.deleteKeys).not.toHaveBeenCalledWith(slotB);
+
+    // Or a later start read the list whole.
+    mockUnreadable.ids = [];
+    mockAccounts.list = [A, B];
+    await reg.ensurePushRegistration();
+    expect(mockNative.setDisplayConfig).toHaveBeenLastCalledWith(expect.objectContaining({ accounts: expect.arrayContaining([expect.objectContaining({ slot: slotB })]) }));
+  });
 });
 
 describe('turning push off', () => {
@@ -349,6 +426,44 @@ describe('turning push off', () => {
     config.setPushEnabled(true);
     await reg.ensurePushRegistration();
     expect(instanceCalls().map((c) => c.method)).toEqual(['PUT']);
+  });
+
+  it('still tells the instance after a refresh that failed (it keeps the earlier subscription)', async () => {
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await reg.ensurePushRegistration();
+    now.mockReturnValue(1_000_000 + reg.SUBSCRIPTION_REFRESH_MS + 1);
+    responder = (c) => (c.method === 'PUT' ? { status: 500, body: { error: 'internal error' } } : defaultResponder(c));
+    await reg.ensurePushRegistration();
+    expect(status.pushStatus()).toMatchObject({ state: 'error', where: 'instance' });
+    expect(reg.hasStoredSubscription(slots.slotFor(A.id))).toBe(false);
+    now.mockRestore();
+
+    responder = defaultResponder;
+    calls = [];
+    config.setPushEnabled(false);
+    await reg.ensurePushRegistration();
+    expect(instanceCalls().map((c) => c.method)).toEqual(['DELETE']);
+    // Told once: the next run with push off has nothing more to say.
+    calls = [];
+    await reg.ensurePushRegistration();
+    expect(instanceCalls()).toEqual([]);
+  });
+
+  it('a first PUT that failed may still have reached the instance: withdrawn permission sends a DELETE', async () => {
+    responder = (c) => (c.method === 'PUT' ? { status: 502, body: { error: 'bad gateway' } } : defaultResponder(c));
+    await reg.ensurePushRegistration();
+    responder = defaultResponder;
+    calls = [];
+    mockPermission.value = { granted: false, status: 'denied', canAskAgain: false, ios: undefined };
+    await reg.ensurePushRegistration();
+    expect(instanceCalls().map((c) => c.method)).toEqual(['DELETE']);
+  });
+
+  it('nothing ever sent: nothing to withdraw', async () => {
+    config.setPushEnabled(false);
+    await reg.ensurePushRegistration();
+    expect(instanceCalls()).toEqual([]);
   });
 });
 
@@ -424,33 +539,44 @@ describe('choosing a transport', () => {
     mockNative.getCapabilities.mockImplementation(async () => caps(true, []));
   });
 
-  it('UnifiedPush: registers the slot, waits for the endpoint, uses the keys it brings', async () => {
+  it('UnifiedPush: registers the slot, waits for the endpoint, sends the slot keys', async () => {
     const ntfy = { id: 'io.heckel.ntfy', name: 'ntfy' };
     mockNative.getCapabilities.mockResolvedValue(caps(false, [ntfy]));
     const slot = slots.slotFor(A.id);
+    const slotKeys = { p256dh: `pk-${slot}`, auth: `au-${slot}` };
     mockNative.registerUnifiedPush.mockImplementationOnce(async (s: string) => {
-      setTimeout(() => emit('unifiedPushEndpoint', { slot: s, endpoint: 'https://ntfy.example/up123', keys: { p256dh: 'up-pk', auth: 'up-au' } }), 0);
+      setTimeout(() => emit('unifiedPushEndpoint', { slot: s, endpoint: 'https://ntfy.example/up123', keys: slotKeys }), 0);
     });
     await reg.ensurePushRegistration();
     expect(mockNative.registerUnifiedPush).toHaveBeenCalledWith(slot, ntfy.id);
     expect(gatewayCalls()).toEqual([]);
-    expect(mockNative.ensureKeys).not.toHaveBeenCalled();
     expect(instanceCalls()).toEqual([
       expect.objectContaining({
         method: 'PUT',
-        body: { endpoint: 'https://ntfy.example/up123', keys: { p256dh: 'up-pk', auth: 'up-au' }, kind: 'unifiedpush', prefs: expect.anything() },
+        body: { endpoint: 'https://ntfy.example/up123', keys: slotKeys, kind: 'unifiedpush', prefs: expect.anything() },
       }),
     ]);
     expect(status.pushStatus()).toEqual({ state: 'active', transport: { kind: 'unifiedpush', distributorId: ntfy.id, distributorName: 'ntfy' } });
 
     // Next run: the endpoint UnifiedPush gave is reused, not registered again.
-    mockNative.getUnifiedPushEndpoint.mockResolvedValueOnce({ slot, endpoint: 'https://ntfy.example/up123', keys: { p256dh: 'up-pk', auth: 'up-au' } });
+    mockNative.getUnifiedPushEndpoint.mockResolvedValueOnce({ slot, endpoint: 'https://ntfy.example/up123', keys: slotKeys });
     calls = [];
     await reg.ensurePushRegistration();
     expect(mockNative.registerUnifiedPush).toHaveBeenCalledTimes(1);
     expect(calls).toEqual([]);
 
+    // The slot's keys were remade natively (the old ones could never be opened again): the
+    // endpoint's record still names the old ones, the instance gets the new ones.
+    mockNative.getUnifiedPushEndpoint.mockResolvedValueOnce({ slot, endpoint: 'https://ntfy.example/up123', keys: slotKeys });
+    mockNative.ensureKeys.mockResolvedValueOnce({ p256dh: 'pk-new', auth: 'au-new' });
+    await reg.ensurePushRegistration();
+    expect(mockNative.registerUnifiedPush).toHaveBeenCalledTimes(1);
+    expect(instanceCalls()).toEqual([
+      expect.objectContaining({ method: 'PUT', body: expect.objectContaining({ endpoint: 'https://ntfy.example/up123', keys: { p256dh: 'pk-new', auth: 'au-new' } }) }),
+    ]);
+
     // Switching to Firebase releases the distributor.
+    calls = [];
     mockNative.getCapabilities.mockResolvedValue(caps(true, [ntfy]));
     config.setTransportPref('fcm');
     await reg.ensurePushRegistration();

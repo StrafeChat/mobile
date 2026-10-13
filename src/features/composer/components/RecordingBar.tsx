@@ -7,13 +7,16 @@
  * Held (finger still on the microphone): a "slide to cancel" hint that fades as you slide.
  * Locked (slid up, or started from a screen reader): a discard button; the composer's send
  * button finishes the take.
+ *
+ * Screen readers hear "Recording" once, before the microphone opens, and nothing while it is
+ * open (see `useTakeAnnouncements`).
  */
 import { useEffect } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
 import { t } from '@web/i18n/t';
 import { useTheme } from '@/theme';
-import { Icon, IconButton, Text, useReduceMotion, withAlpha } from '@/ui';
+import { Icon, IconButton, Text, haptics, useReduceMotion, withAlpha } from '@/ui';
 import { VOICE_MESSAGE_MAX_MS } from '@/platform/media';
 import { formatClock, CANCEL_DISTANCE } from '../logic/recordGesture';
 import { WAVEFORM_SLOTS, type VoiceRecorderState } from '../hooks/useVoiceRecorder';
@@ -25,6 +28,9 @@ export interface RecordingBarProps {
   rtl: boolean;
   onCancel: () => void;
 }
+
+/** When the time left turns red (and the phone buzzes: the cap is near). */
+export const NEAR_CAP_MS = 30_000;
 
 /** Bars drawn on a phone; the web draws 72 across a desktop composer. */
 const BARS = 40;
@@ -56,6 +62,30 @@ function Waveform({ levels, bars, style }: { levels: readonly number[]; bars: nu
   );
 }
 
+function announce(message: string): void {
+  AccessibilityInfo.announceForAccessibility?.(message);
+}
+
+/**
+ * What a screen reader hears during a take: "Recording", once, while the microphone is still
+ * opening - and nothing once it is open. The recorder has no echo cancellation, so whatever the
+ * screen reader says on the loudspeaker ends up in the clip: a live region over the clock had
+ * TalkBack counting into every voice message, and even one word said after the start opened
+ * every take with it. The lock is felt instead (useVoiceRecorder's tap), the cap 30 s away is a
+ * warning buzz (for everyone, as the time left turns red), and the clock stays readable on
+ * request (it is labelled, not live).
+ */
+function useTakeAnnouncements(state: VoiceRecorderState, nearCap: boolean): void {
+  const starting = state.phase === 'starting';
+  useEffect(() => {
+    if (starting) announce(t('attachments.voice.recording'));
+  }, [starting]);
+  const warn = state.phase === 'recording' && nearCap;
+  useEffect(() => {
+    if (warn) haptics.warning();
+  }, [warn]);
+}
+
 export function RecordingBar({ state, dragX, rtl, onCancel }: RecordingBarProps) {
   const theme = useTheme();
   const reduceMotion = useReduceMotion();
@@ -77,23 +107,25 @@ export function RecordingBar({ state, dragX, rtl, onCancel }: RecordingBarProps)
 
   const recent = state.levels.slice(-WAVEFORM_SLOTS);
   const remainingMs = Math.max(0, VOICE_MESSAGE_MAX_MS - state.elapsedMs);
-  const nearCap = remainingMs <= 30_000;
+  const nearCap = remainingMs <= NEAR_CAP_MS;
   const starting = state.phase === 'starting';
+  useTakeAnnouncements(state, nearCap);
+  const clock = formatClock(state.elapsedMs);
 
   return (
-    <View
-      accessibilityLiveRegion="polite"
-      accessibilityLabel={`${t('attachments.voice.recording')} ${formatClock(state.elapsedMs)}`}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 8 }}
-      testID="composer-recording"
-    >
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 8 }} testID="composer-recording">
       {state.locked ? (
         <IconButton icon="trash" tone="danger" label={t('attachments.voice.cancel')} onPress={onCancel} testID="recording-cancel" />
       ) : (
         <Animated.View style={[{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.destructive, marginStart: 6 }, dotStyle]} />
       )}
-      <Text variant="label" style={{ fontVariant: ['tabular-nums'], minWidth: 38 }}>
-        {formatClock(state.elapsedMs)}
+      <Text
+        variant="label"
+        accessibilityLabel={`${t('attachments.voice.recording')}, ${clock}`}
+        style={{ fontVariant: ['tabular-nums'], minWidth: 38 }}
+        testID="recording-clock"
+      >
+        {clock}
       </Text>
       {nearCap && !starting ? (
         <Text variant="caption" tone="danger" style={{ fontVariant: ['tabular-nums'] }}>

@@ -68,6 +68,8 @@ export function useVoiceRecorder(opts: {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** The press that started the take is still active (or the take is locked). */
   const wanted = useRef(false);
+  /** A start is in flight: the microphone is still opening. */
+  const opening = useRef(false);
   const lockedRef = useRef(false);
   const optsRef = useRef(opts);
   optsRef.current = opts;
@@ -112,8 +114,16 @@ export function useVoiceRecorder(opts: {
       wanted.current = true;
       lockedRef.current = locked;
       setState({ ...IDLE, phase: 'starting', locked });
+      // Let go and pressed again while the microphone was still opening: the start in flight
+      // becomes this take's. A second one would open a second recorder - the first was then
+      // adopted as well and left recording, out of reach, until its 5 minute backstop - and
+      // the two would race for the audio session, the abandoned one switching iOS back to
+      // playback under the live one.
+      if (opening.current) return;
+      opening.current = true;
       startVoiceRecording().then(
         (h) => {
+          opening.current = false;
           // Let go (or cancelled) while the microphone was opening - a permission prompt, say.
           if (!wanted.current) {
             h.cancel();
@@ -132,6 +142,7 @@ export function useVoiceRecorder(opts: {
           }, POLL_MS);
         },
         (err: unknown) => {
+          opening.current = false;
           reset();
           optsRef.current.onError(voiceErrorText(err));
         },

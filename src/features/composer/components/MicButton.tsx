@@ -2,10 +2,10 @@
  * The microphone: press and hold to record a voice message (Discord / WhatsApp mobile).
  * While held, sliding towards the start edge cancels and sliding up locks the recording
  * hands-free; letting go stops it and sends. A quick tap explains the gesture. Screen-reader
- * users activate it to start a locked recording, then send or discard from the bar.
+ * users activate it (double-tap) to start a locked recording, then send or discard from the bar.
  */
 import { useRef } from 'react';
-import { I18nManager, View } from 'react-native';
+import { I18nManager, Platform, View, type AccessibilityActionInfo } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { SharedValue } from 'react-native-reanimated';
 import { t } from '@web/i18n/t';
@@ -27,6 +27,14 @@ type Hold = 'idle' | 'held' | 'locked' | 'cancelled';
 
 /** How long the press must last before it records (shorter is a tap). */
 const HOLD_MS = 180;
+
+/**
+ * TalkBack's double-tap is ACTION_CLICK, which React Native hands over as the 'activate'
+ * action. Android only: on iOS every accessibility action is a custom one, listed in the
+ * VoiceOver actions rotor under its raw name, and 'activate' there would be a second, oddly
+ * named way to do what the double-tap already does (onAccessibilityTap below).
+ */
+const ACTIVATE: AccessibilityActionInfo[] = [{ name: 'activate' }];
 
 export function MicButton({ recorder, dragX, dragY, disabled, supported }: MicButtonProps) {
   const theme = useTheme();
@@ -81,6 +89,14 @@ export function MicButton({ recorder, dragX, dragY, disabled, supported }: MicBu
 
   const label = supported ? t('composer.recordVoice') : t('composer.voiceUnavailable');
 
+  // A screen reader cannot hold and slide, so its double-tap starts a locked take instead. On
+  // iOS that double-tap is accessibilityActivate, which React Native passes to JS only as
+  // onAccessibilityTap; without that handler VoiceOver sends a synthesized tap, which the tap
+  // gesture above takes for a short press and answers with the "hold to record" toast.
+  const startLocked = () => {
+    if (!disabled && supported && !recording) recorder.begin(true);
+  };
+
   return (
     <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
       <View
@@ -89,10 +105,11 @@ export function MicButton({ recorder, dragX, dragY, disabled, supported }: MicBu
         accessibilityLabel={label}
         accessibilityHint={supported ? t('mobile.composer.holdToRecordHint') : undefined}
         accessibilityState={{ disabled: !!disabled || !supported }}
-        accessibilityActions={[{ name: 'activate' }]}
+        accessibilityActions={Platform.OS === 'android' ? ACTIVATE : undefined}
         onAccessibilityAction={(e) => {
-          if (e.nativeEvent.actionName === 'activate' && !disabled && supported && !recording) recorder.begin(true);
+          if (e.nativeEvent.actionName === 'activate') startLocked();
         }}
+        onAccessibilityTap={startLocked}
         testID="composer-mic"
         hitSlop={4}
         style={{

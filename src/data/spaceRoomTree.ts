@@ -10,9 +10,9 @@
  *  - then each section the viewer can see, by position: its header, then (unless collapsed)
  *    its visible children by position;
  *  - under every channel: the people in it when it is a voice room (by join time), then its
- *    active threads the viewer joined or is looking at, most recently active first;
+ *    active threads the viewer joined or has open, most recently active first;
  *  - a collapsed section hides its children entirely and instead shows a dot when one of its
- *    text channels (not the open one) has unread messages or mentions.
+ *    text channels (not the one on screen) has unread messages or mentions.
  */
 import { ROOM_TYPE_SECTION, ROOM_TYPE_TEXT, ROOM_TYPE_THREAD, ROOM_TYPE_VOICE } from './constants';
 
@@ -36,7 +36,14 @@ export interface SpaceRoomTreeInput<R extends TreeRoom> {
   /** canViewSpaceChannel for the viewer (the only visibility rule, the server's own). */
   canView: (room: R) => boolean;
   collapsedSectionIds: ReadonlySet<string>;
+  /** The selected room: a thread shows under its channel while it is the one open, joined or not. */
   activeRoomId: string | null;
+  /**
+   * The room on screen, which never lights a collapsed header: it is read as it arrives. Not
+   * always the selected one - while the rails or another screen cover it, that one collects
+   * unread like any other. Left out, the selected room is taken to be on screen.
+   */
+  onScreenRoomId?: string | null;
   /** Whether a text channel has unread messages or mentions - consulted only for collapsed
    * sections' children, so an open space does not pay for it. */
   hasUnreadOrMention: (room: R) => boolean;
@@ -46,7 +53,7 @@ export interface SpaceRoomTreeInput<R extends TreeRoom> {
 
 const byPosition = (a: TreeRoom, b: TreeRoom) => a.position - b.position;
 
-/** Joined (or open) active threads of a channel, newest activity first (SpaceRoomsBar.threadsUnder). */
+/** Joined (or selected) active threads of a channel, newest activity first (SpaceRoomsBar.threadsUnder). */
 export function threadsUnder<R extends TreeRoom>(all: readonly R[], channelId: string, activeRoomId: string | null): R[] {
   return all
     .filter(
@@ -61,6 +68,7 @@ export function threadsUnder<R extends TreeRoom>(all: readonly R[], channelId: s
 
 export function buildSpaceRoomTree<R extends TreeRoom>(input: SpaceRoomTreeInput<R>): SpaceRoomTreeItem[] {
   const { rooms, canView, collapsedSectionIds, activeRoomId } = input;
+  const onScreenRoomId = input.onScreenRoomId === undefined ? activeRoomId : input.onScreenRoomId;
   const sections = rooms.filter((r) => r.type === ROOM_TYPE_SECTION).sort(byPosition);
   const sectionIds = new Set(sections.map((s) => s.id));
   const out: SpaceRoomTreeItem[] = [];
@@ -93,7 +101,7 @@ export function buildSpaceRoomTree<R extends TreeRoom>(input: SpaceRoomTreeInput
     const children = rooms.filter((r) => r.parent_id === section.id && canView(r)).sort(byPosition);
     const hasUnread =
       collapsed &&
-      children.some((c) => c.type === ROOM_TYPE_TEXT && c.id !== activeRoomId && input.hasUnreadOrMention(c));
+      children.some((c) => c.type === ROOM_TYPE_TEXT && c.id !== onScreenRoomId && input.hasUnreadOrMention(c));
     out.push({ kind: 'section', key: `s:${section.id}`, sectionId: section.id, collapsed, hasUnread });
     if (collapsed) continue;
     for (const child of children) pushChannel(child, section.id);

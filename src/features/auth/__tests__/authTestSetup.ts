@@ -3,7 +3,7 @@
  * Environment for the auth area's component tests. Import FIRST:
  *  - the design system's mocks (reanimated, gesture handler, bottom sheet, storage, i18n);
  *  - the router, the session module, the auth / instance API calls and the instance store,
- *    which the screens only call - each a jest.fn the tests drive;
+ *    which the screens only call - each a jest.fn the tests drive - and the boot state;
  *  - native views with no jest build (WebView, the date picker, expo-image, the keyboard
  *    controller) as plain views that keep their props for assertions;
  *  - the auth area's own English strings, so assertions read as users hear them.
@@ -110,6 +110,20 @@ jest.mock('@web/api/instance', () => ({ checkInstanceInvite: jest.fn() }));
 
 jest.mock('@/platform/reload', () => ({ reloadApp: jest.fn(async () => undefined) }));
 
+// Start-up as the boot gate sees it: settled, signed in or out with the auth store's token,
+// unless a test holds it at 'booting' (mockSetBootOverride) - a link opened on a cold start.
+jest.mock('@/platform/boot', () => {
+  const { createSignal } = require('solid-js');
+  const { useSolid } = require('@/bridge/solid');
+  const [override, setOverride] = createSignal(null as string | null);
+  const bootState = () => override() ?? (require('@web/stores/auth').auth.token ? 'ready' : 'signed-out');
+  return {
+    bootState,
+    useBootState: () => useSolid(() => ({ state: bootState(), error: null, unsynced: false })),
+    mockSetBootOverride: setOverride,
+  };
+});
+
 jest.mock('@/platform/session', () => {
   const { createSignal } = require('solid-js');
   class InstanceResolveError extends Error {
@@ -127,6 +141,8 @@ jest.mock('@/platform/session', () => {
   return {
     InstanceResolveError,
     currentInstance: jest.fn(() => null),
+    // As the real one: a token in the auth store or in storage (one not restored yet).
+    hasStoredSession: jest.fn(() => !!require('@web/stores/auth').auth.token),
     suggestedInstance: jest.fn(() => null),
     defaultInstanceAddress: jest.fn(() => ''),
     chooseInstance: jest.fn(),

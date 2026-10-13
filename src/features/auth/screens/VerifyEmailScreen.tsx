@@ -14,13 +14,14 @@ import { verifyEmail } from '@web/api/auth';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
 import { useSolid } from '@/bridge/solid';
+import { useBootState } from '@/platform/boot';
 import { Button, Spinner, haptics } from '@/ui';
 import { AuthIconChip, AuthScaffold } from '../components/AuthScaffold';
 import { FormErrors } from '../components/FormErrors';
 import { PasteLinkForm } from '../components/PasteLinkForm';
 import { authErrorLines } from '../logic/errors';
 import { ensureLinkInstance } from '../logic/linkInstance';
-import { markAuthLinkHandled } from '../logic/pendingLink';
+import { markAuthLinkDone, markAuthLinkHandled } from '../logic/pendingLink';
 import { AUTH_PATHS, backOr, pushAuth, returnToAuth } from '../nav';
 
 type State = 'input' | 'working' | 'ok' | 'failed';
@@ -28,14 +29,23 @@ type State = 'input' | 'working' | 'ok' | 'failed';
 export function VerifyEmailScreen() {
   const params = useLocalSearchParams<{ token?: string; instance?: string }>();
   const signedIn = useSolid(() => !!auth.token);
+  const { state: boot } = useBootState();
   const initialToken = typeof params.token === 'string' ? params.token.trim() : '';
   const [state, setState] = useState<State>(initialToken ? 'working' : 'input');
   const [errors, setErrors] = useState<string[]>([]);
   const [needsInstance, setNeedsInstance] = useState(false);
   const started = useRef<string | null>(null);
+  // The tokens this screen took. Leaving it is done with them, as redeeming one is: a JS
+  // restart is handed the launch link again, and must not reopen it (pendingLink.ts).
+  const taken = useRef(new Set<string>());
+  useEffect(() => {
+    const tokens = taken.current;
+    return () => tokens.forEach((token) => markAuthLinkDone(token));
+  }, []);
 
   const redeem = useCallback(async (token: string, host: string | null) => {
     markAuthLinkHandled(token);
+    taken.current.add(token);
     setErrors([]);
     setNeedsInstance(false);
     setState('working');
@@ -48,6 +58,9 @@ export function VerifyEmailScreen() {
     }
     try {
       await verifyEmail(token);
+      // Now, not only on leaving: the JS can restart with this screen still open (an expired
+      // session, a notification's account switch).
+      markAuthLinkDone(token);
       haptics.success();
       setState('ok');
     } catch (err) {
@@ -58,12 +71,16 @@ export function VerifyEmailScreen() {
   }, []);
 
   // Redeem once per token, on arrival (a re-render or a remount in development must not
-  // turn into a second request that could race the first).
+  // turn into a second request that could race the first) - but not before start-up has
+  // settled: until then whether a session is stored, and which instance its token belongs to,
+  // is not settled either, and the request carries that token. A cold start's boot gate moves
+  // off this screen meanwhile; the screen it lands on reopens the link (useLaunchAuthLink).
+  const settled = boot === 'ready' || boot === 'signed-out';
   useEffect(() => {
-    if (!initialToken || started.current === initialToken) return;
+    if (!settled || !initialToken || started.current === initialToken) return;
     started.current = initialToken;
     void redeem(initialToken, typeof params.instance === 'string' ? params.instance : null);
-  }, [initialToken, params.instance, redeem]);
+  }, [settled, initialToken, params.instance, redeem]);
 
   const title =
     state === 'working'

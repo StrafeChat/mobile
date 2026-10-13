@@ -119,14 +119,18 @@ void i18next.init({
 /**
  * React Native lays out right-to-left only from launch, so a change of direction (switching
  * to or from Arabic) is applied here and takes effect after the app restarts; the language
- * settings page offers that restart.
+ * settings page offers that restart. Returns whether this run's direction is now the wrong one.
+ *
+ * The direction is written every time, not only when it differs from isRTL: isRTL is what this
+ * run launched with (read once at start-up), not what is saved for the next launch. Choosing
+ * Arabic, declining the restart and choosing English again must undo the saved right-to-left,
+ * though isRTL never changed; comparing against it would leave the next launch mirrored.
  */
 export function syncLayoutDirection(lng: string): boolean {
   const rtl = RTL_LOCALES.has(lng);
-  if (I18nManager.isRTL === rtl) return false;
   I18nManager.allowRTL(rtl);
   I18nManager.forceRTL(rtl);
-  return true;
+  return I18nManager.isRTL !== rtl;
 }
 
 syncLayoutDirection(initialLng);

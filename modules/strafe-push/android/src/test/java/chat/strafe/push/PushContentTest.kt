@@ -115,6 +115,16 @@ class PushContentTest {
   }
 
   @Test
+  fun fillsInOnePassLikeIos() {
+    // A value is text, never a template: names are whatever their owners typed.
+    assertEquals("{{room}} is calling Den", PushContent.fill("{{name}} is calling {{room}}", "name" to "{{room}}", "room" to "Den"))
+    assertEquals("{{space}} · Lobby", PushContent.fill("{{room}} · {{space}}", "room" to "{{space}}", "space" to "Lobby"))
+    // Replacement text is literal (no group references).
+    assertEquals("\$1 \\0 is calling", PushContent.fill("{{name}} is calling", "name" to "\$1 \\0"))
+    assertEquals("{{a{{b}} x", PushContent.fill("{{a{{b}} {{c}}", "b" to "no", "c" to "x"))
+  }
+
+  @Test
   fun displayConfigSurvivesPersistence() {
     val config = DisplayConfig(
       strings = PushStrings(appName = "Strafe!", callFrom = "{{name}} ruft an"),

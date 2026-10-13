@@ -75,6 +75,12 @@ web/                     the web client (submodule, pinned) - do not edit from h
 - Icons: `@expo/vector-icons` FontAwesome6 (the web uses Font Awesome; keep the same glyph).
 - Images: `expo-image` (SVG emoji, caching). Lists: `@shopify/flash-list`. Keyboard:
   `react-native-keyboard-controller`. Safe areas: `react-native-safe-area-context`.
+- Safe areas: screens pad only their top and bottom. Left and right insets (landscape: the
+  notch, a side navigation bar) are applied once per route group, by the Stack's
+  `contentStyle` through `useHorizontalSafePadding()` (`src/ui/safeArea`), and by `Sheet` and
+  `Toast`, which draw outside it. The media viewer's route is left unpadded (its pages are the
+  window's width), so its chrome pads itself. Inside the shell the bottom inset goes to the
+  in-call bar, so anything portaled over the whole window uses `useWindowInsets()`.
 - Accessibility: every `Pressable` has `accessibilityRole` and a label; touch targets ≥ 44 pt
   (use `hitSlop`); text scales with the system font size.
 - Strings: always `t()` from `@web/i18n/t`. Use the web's existing keys wherever the meaning

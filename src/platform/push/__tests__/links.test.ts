@@ -158,23 +158,41 @@ describe('suppression', () => {
     expect(suppressLocalNotification({}, 'background', true)).toBe(false);
   });
 
-  it('a push reaching the running app shows unless it is the open account’s', () => {
+  it('a push reaching the active app shows unless it is the open account’s', () => {
     const data = { slot: 'a', roomId: '1', type: 'msg' };
-    expect(presentRemotePush(data, 'a', true)).toEqual({ show: false, sound: false });
-    expect(presentRemotePush(data, 'b', true)).toEqual({ show: true, sound: true });
-    expect(presentRemotePush(data, null, false)).toEqual({ show: true, sound: false });
-    expect(presentRemotePush({ ...data, type: 'test' }, 'a', true)).toEqual({ show: true, sound: true });
+    expect(presentRemotePush(data, 'a', true, 'active', true)).toEqual({ show: false, sound: false });
+    expect(presentRemotePush(data, 'b', true, 'active', true)).toEqual({ show: true, sound: true });
+    expect(presentRemotePush(data, null, false, 'active', true)).toEqual({ show: true, sound: false });
+    expect(presentRemotePush({ ...data, type: 'test' }, 'a', true, 'active', true)).toEqual({ show: true, sound: true });
+  });
+
+  it('open but inactive (iOS: Notification Center over it), the open account’s message notifies exactly once', () => {
+    const data = { slot: 'a', roomId: '1', type: 'msg' };
+    const msg = { tag: 'room:1' };
+    // Push working: the local one stands aside, so the push shows.
+    expect(suppressLocalNotification(msg, 'inactive', true)).toBe(true);
+    expect(presentRemotePush(data, 'a', true, 'inactive', true)).toEqual({ show: true, sound: true });
+    // Push not known to work: the local one shows, so the push stays hidden.
+    expect(suppressLocalNotification(msg, 'inactive', false)).toBe(false);
+    expect(presentRemotePush(data, 'a', true, 'inactive', false)).toEqual({ show: false, sound: false });
+    // A call rings in the app itself.
+    expect(presentRemotePush({ ...data, type: 'call' }, 'a', true, 'inactive', true)).toEqual({ show: false, sound: false });
+    expect(presentRemoteNotification({ data: { strafe: { slot: 'a', rid: '1', t: 'msg' } } }, undefined, 'a', false, 'inactive', true)).toEqual({
+      show: true,
+      sound: false,
+    });
   });
 
   it('a gateway push with nothing to route (the extension showed nothing) stays hidden', () => {
     // The extension's "nothing to show" content: only the gateway's slot in the payload.
-    expect(presentRemoteNotification({ data: {} }, { aps: {}, s: 'a' }, 'a', true)).toEqual({ show: false, sound: false });
-    expect(presentRemoteNotification({ data: {} }, { aps: {}, s: 'b' }, 'a', true)).toEqual({ show: false, sound: false });
+    expect(presentRemoteNotification({ data: {} }, { aps: {}, s: 'a' }, 'a', true, 'active', true)).toEqual({ show: false, sound: false });
+    expect(presentRemoteNotification({ data: {} }, { aps: {}, s: 'b' }, 'a', true, 'active', true)).toEqual({ show: false, sound: false });
+    expect(presentRemoteNotification({ data: {} }, { aps: {}, s: 'a' }, 'a', true, 'inactive', true)).toEqual({ show: false, sound: false });
     // The generic alert of an undecryptable push: hidden for the open account, shown for another.
-    expect(presentRemoteNotification({ data: { strafe: { slot: 'a' } } }, { s: 'a' }, 'a', true)).toEqual({ show: false, sound: false });
-    expect(presentRemoteNotification({ data: { strafe: { slot: 'b' } } }, { s: 'b' }, 'a', true)).toEqual({ show: true, sound: true });
+    expect(presentRemoteNotification({ data: { strafe: { slot: 'a' } } }, { s: 'a' }, 'a', true, 'active', true)).toEqual({ show: false, sound: false });
+    expect(presentRemoteNotification({ data: { strafe: { slot: 'b' } } }, { s: 'b' }, 'a', true, 'active', true)).toEqual({ show: true, sound: true });
     // Not ours at all: the default presentation.
-    expect(presentRemoteNotification({ data: { roomId: '1' } }, { aps: {} }, 'a', true)).toBeNull();
-    expect(presentRemoteNotification({ data: {} }, undefined, 'a', true)).toBeNull();
+    expect(presentRemoteNotification({ data: { roomId: '1' } }, { aps: {} }, 'a', true, 'active', true)).toBeNull();
+    expect(presentRemoteNotification({ data: {} }, undefined, 'a', true, 'active', true)).toBeNull();
   });
 });

@@ -1,6 +1,8 @@
 /**
- * The 0.1.1 crash on deleting a message ("index out of bounds, not enough layouts"), and the
- * guarded FlashList calls that replaced the bare ones.
+ * The 0.1.1 crash on deleting a message ("index out of bounds, not enough layouts"), the
+ * guarded FlashList calls that replaced the bare ones, and store calls from the list's taps
+ * that fail (a rejection there is unhandled - and the tap silently does nothing - unless the
+ * list catches it).
  *
  * The FlashList stand-in here keeps FlashList v2's timing, which is what the crash was about:
  * it trims its layouts to the new data while rendering, but refreshes the indices it last saw
@@ -11,11 +13,14 @@
 import '@/ui/__tests__/setup';
 import '@/data/testing/webMocks';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { t } from '@web/i18n/t';
 import { setRooms } from '@web/stores/rooms';
 import { setMessages } from '@web/stores/messages';
 import { setReadState } from '@web/stores/readState';
 import { message, pm, resetStores, user } from '@/data/testing/fixtures';
+import { roomOnScreen } from '@/shell/state';
+import { toastStore } from '@/ui/toast';
 import { safeRecomputeViewableItems, safeScrollToEnd, safeScrollToIndex } from '../safeList';
 
 jest.mock('expo-image', () => {
@@ -31,7 +36,11 @@ jest.mock('expo-audio', () => ({
   useAudioPlayer: () => ({ play: () => undefined, pause: () => undefined, seekTo: async () => undefined, setPlaybackRate: () => undefined }),
   useAudioPlayerStatus: () => ({ playing: false, currentTime: 0, duration: 0, didJustFinish: false, isBuffering: false, mute: false, playbackRate: 1, error: null }),
 }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn(), canGoBack: () => false, canDismiss: () => false }, Stack: { Screen: () => null } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), back: jest.fn(), canGoBack: () => false, canDismiss: () => false },
+  Stack: { Screen: () => null },
+  useIsFocused: () => true,
+}));
 jest.mock('react-native-webview', () => ({ WebView: () => null }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true), getStringAsync: jest.fn(async () => '') }));
 jest.mock('@web/stores/externalLink', () => ({ isExternalLink: () => true, requestOpenExternalLink: jest.fn() }));
@@ -121,6 +130,7 @@ Object.assign(storeMock, {
   loadOlderMessages: jest.fn(async () => false),
   loadNewerMessages: jest.fn(async () => false),
   jumpToPresent: jest.fn(async () => undefined),
+  jumpToMessage: jest.fn(async () => undefined),
 });
 
 // After the mocks.
@@ -232,4 +242,47 @@ describe('guarded FlashList calls', () => {
     expect(() => safeRecomputeViewableItems({ scrollToIndex: jest.fn(), scrollToEnd: jest.fn() })).not.toThrow();
     w.mockRestore();
   });
+});
+
+describe('taps whose store call fails', () => {
+  const offline = () => new TypeError('Network request failed');
+
+  test('"Jump to present" that cannot fetch the present says so, and leaves the bar to try again', async () => {
+    toastStore.set(null);
+    const jump = storeMock.jumpToPresent as jest.Mock<(roomId: string) => Promise<void>>;
+    jump.mockImplementationOnce(() => Promise.reject(offline()));
+    setMessages('hasMoreNewer', 'r', true);
+    const view = await render(<MessageList roomId="r" spaceId={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText(t('messages.jumpToPresent')));
+    });
+    expect(jump).toHaveBeenCalledWith('r');
+    expect(toastStore.get()?.tone).toBe('error');
+    expect(screen.getByText(t('messages.jumpToPresent'))).toBeTruthy();
+    await act(async () => view.unmount());
+  });
+
+  test('a reply whose original cannot be loaded says so', async () => {
+    toastStore.set(null);
+    const jump = storeMock.jumpToMessage as jest.Mock<(roomId: string, messageId: string) => Promise<void>>;
+    jump.mockImplementationOnce(() => Promise.reject(offline()));
+    setMessages('byRoom', 'r', [
+      ...['2', '3'].map((id) => message('r', id, 'a')),
+      message('r', '4', 'a', { reply_to_id: '1', referenced_message: message('r', '1', 'a') }),
+    ]);
+    const view = await render(<MessageList roomId="r" spaceId={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByHintText(t('messages.replyJump')));
+    });
+    expect(jump).toHaveBeenCalledWith('r', '1');
+    expect(toastStore.get()?.tone).toBe('error');
+    await act(async () => view.unmount());
+  });
+});
+
+test("on a pushed screen (a thread) the list's room is the conversation on screen while that screen is in front", async () => {
+  const view = await render(<MessageList roomId="r" spaceId={null} screen />);
+  expect(roomOnScreen()).toEqual({ roomId: 'r', spaceId: null });
+  await act(async () => view.unmount());
+  expect(roomOnScreen()).toBeNull();
 });

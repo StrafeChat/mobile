@@ -83,6 +83,8 @@ const PROBE_PATH = '/users/@me';
 /** After the session was seen to be valid, a 401 within this long is about something else. */
 const RECENTLY_VALID_MS = 30_000;
 const LOGOUT_TIMEOUT_MS = 5_000;
+/** Longer: signing out everywhere waits for the instance's answer instead of going without it. */
+const LOGOUT_ALL_TIMEOUT_MS = 15_000;
 const ACCOUNT_WRITE_TIMEOUT_MS = 3_000;
 const INSTANCE_PROBE_TIMEOUT_MS = 8_000;
 /** Unsubscribing from push must not hold a sign-out up when the instance is slow. */
@@ -96,6 +98,17 @@ function storedToken(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * A session is stored on this device, whether or not start-up has restored it yet. auth.token
+ * is only set once boot reaches hydrateAuth(), but the token is in localStorage from the first
+ * line of JS, and every API call sends that one. So anything that must never move a session to
+ * another instance checks this rather than auth.token: a link opened on a cold start runs
+ * before the session is restored.
+ */
+export function hasStoredSession(): boolean {
+  return !!auth.token || !!storedToken();
 }
 
 /** Resolve after `p` settles or `ms` passes, whichever is first; never rejects. */
@@ -248,15 +261,53 @@ export async function expireSession(reason: SignOutReason): Promise<void> {
  * sessions with `everywhere`), the account leaves this device's list, the app restarts on
  * the sign-in screen. Offline, the local sign-out still happens; the server session then
  * lapses at its expiry.
+ *
+ * Except with `everywhere`, where the server's part is the whole point (a lost phone, a
+ * session someone else has): unless the instance confirms it, this rejects and nothing
+ * changes here, so the caller can say so and the person can try again.
  */
 export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void> {
   if (leaving) return;
+  const accountId = activeDesktopAccountId() ?? knownAccountId;
+  if (opts.everywhere && auth.token) {
+    await logOutEverySession();
+    if (leaving) return;
+    setLeaving(true);
+    // Every session is over, this one too, and the instance stops pushing to a session that
+    // has ended: only what this device holds for the account is left to remove.
+    await accountLeaving(accountId, { server: false });
+    await endSession();
+    return;
+  }
   setLeaving(true);
-  await accountLeaving(activeDesktopAccountId() ?? knownAccountId, { server: !!auth.token });
+  await accountLeaving(accountId, { server: !!auth.token });
   if (auth.token) {
-    await settleWithin(api(opts.everywhere ? '/auth/logout_all' : '/auth/logout', { method: 'POST' }), LOGOUT_TIMEOUT_MS);
+    await settleWithin(api('/auth/logout', { method: 'POST' }), LOGOUT_TIMEOUT_MS);
   }
   await endSession();
+}
+
+/**
+ * POST /auth/logout_all, bounded: a request that hangs fails rather than spinning forever.
+ * A 401 may mean this session is over already (revoked from elsewhere, expired). If the
+ * check agrees, the check has ended it like any session the server ended, with the reason
+ * shown at sign-in, and this device can end nothing more. Anything else is a failure.
+ */
+async function logOutEverySession(): Promise<void> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LOGOUT_ALL_TIMEOUT_MS);
+  try {
+    await api('/auth/logout_all', { method: 'POST', signal: ctrl.signal });
+  } catch (e) {
+    if (isApiError(e) && e.status === 401) {
+      const check = await confirmSessionOrExpire();
+      // `leaving`: the fetch guard's own check of that 401 got there first.
+      if (check.state === 'invalid' || leaving) return;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -602,16 +653,19 @@ async function advertisedCdnUrl(api: string, signal?: AbortSignal): Promise<stri
  * unreachable | not_strafe) for the form to translate. The instance's own settings
  * (captcha, invite-only, email) are fetched again for the new instance.
  *
- * Only while signed out: changing the instance under a live session would send its token
- * to a server that did not issue it. addAccount() is the way to another instance.
+ * Only while no session is stored: changing the instance under one would send its token to a
+ * server that did not issue it (and whoever named that server, a link say, would have it).
+ * addAccount() is the way to another instance.
  */
 export async function chooseInstance(raw: string, signal?: AbortSignal): Promise<DesktopInstance & { version?: string }> {
-  if (auth.token) throw new Error('chooseInstance: a session is active; use addAccount() to reach another instance');
+  refuseWithStoredSession();
   const found = await resolveInstance(raw, signal);
   const cdnUrl = await advertisedCdnUrl(found.apiUrl, signal);
   // A lookup the person has typed past must not become the chosen instance after all (the
   // CDN probe swallows the abort).
   if (signal?.aborted) throw new Error('chooseInstance: superseded');
+  // Again after the lookups: a session restored or signed in while they ran is not moved.
+  refuseWithStoredSession();
   const inst: DesktopInstance = {
     domain: found.domain,
     apiUrl: found.apiUrl,
@@ -622,6 +676,10 @@ export async function chooseInstance(raw: string, signal?: AbortSignal): Promise
   resetInstanceInfo();
   void loadInstanceInfo();
   return { ...inst, ...(found.version !== undefined ? { version: found.version } : {}) };
+}
+
+function refuseWithStoredSession(): void {
+  if (hasStoredSession()) throw new Error('chooseInstance: a session is active; use addAccount() to reach another instance');
 }
 
 export type SignInOutcome =

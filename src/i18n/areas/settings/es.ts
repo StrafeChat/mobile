@@ -11,6 +11,7 @@ export default {
   logOutEverywhere: 'Cerrar sesión en todas partes',
   logOutEverywhereHint: 'Termina todas las sesiones de esta cuenta, en todos los dispositivos.',
   logOutEverywhereConfirm: 'Se cerrará la sesión en todos los dispositivos con esta cuenta, incluido este.',
+  logOutEverywhereFailed: 'No se pudo cerrar la sesión en todas partes. Otros dispositivos pueden seguir conectados: revisa tu conexión e inténtalo de nuevo.',
   copyFailed: 'No se pudo copiar al portapapeles.',
   genericError: 'Algo salió mal. Inténtalo de nuevo.',
   share: 'Compartir',

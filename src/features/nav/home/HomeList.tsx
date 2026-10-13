@@ -11,7 +11,7 @@ import { t } from '@web/i18n/t';
 import { loadRooms } from '@web/stores/rooms';
 import { useSolid } from '@/bridge/solid';
 import { useFriendRequestCount, useNotesRoomId, usePmListLoading, usePmRoomIds } from '@/data';
-import { openShellView, shell } from '@/shell/state';
+import { openShellView, roomOnScreen, shell } from '@/shell/state';
 import { useTheme } from '@/theme';
 import { Header, Icon, ListHeader, ListRow, Text } from '@/ui';
 import { openAddFriendSheet, openCreateGroupSheet } from '../sheets/store';
@@ -23,17 +23,26 @@ type HomeItem =
   | { kind: 'status'; key: string; text: string }
   | { kind: 'pm'; key: string; roomId: string };
 
-/** What the content panel shows, as far as the shortcuts care. */
-function useHomeSelection(notesRoomId: string | null): { activeRoomId: string | null; current: 'home' | 'friends' | 'notes' | null } {
-  return useSolid(() => {
+interface HomeSelection {
+  /** The selected conversation (the highlight). */
+  activeRoomId: string | null;
+  /** The conversation on screen (its unread is not shown), which the selected one may not be. */
+  onScreenRoomId: string | null;
+  current: 'home' | 'friends' | 'notes' | null;
+}
+
+/** What the content panel shows, as far as the list cares. */
+function useHomeSelection(notesRoomId: string | null): HomeSelection {
+  return useSolid((): HomeSelection => {
     const v = shell.view();
     const content = shell.panel() === 'content';
+    const onScreenRoomId = roomOnScreen()?.roomId ?? null;
     if (v.kind === 'room') {
-      return { activeRoomId: v.roomId, current: notesRoomId && v.roomId === notesRoomId ? 'notes' : null };
+      return { activeRoomId: v.roomId, onScreenRoomId, current: notesRoomId && v.roomId === notesRoomId ? 'notes' : null };
     }
-    if (v.kind === 'friends') return { activeRoomId: null, current: 'friends' };
-    if (v.kind === 'notes') return { activeRoomId: null, current: 'notes' };
-    return { activeRoomId: null, current: content ? 'home' : null };
+    if (v.kind === 'friends') return { activeRoomId: null, onScreenRoomId, current: 'friends' };
+    if (v.kind === 'notes') return { activeRoomId: null, onScreenRoomId, current: 'notes' };
+    return { activeRoomId: null, onScreenRoomId, current: content ? 'home' : null };
   }, [notesRoomId]);
 }
 
@@ -117,7 +126,9 @@ export function HomeList({ bottomInset = 0 }: { bottomInset?: number }) {
             </Text>
           );
         case 'pm':
-          return <PmRow roomId={item.roomId} active={sel.activeRoomId === item.roomId} />;
+          return (
+            <PmRow roomId={item.roomId} active={sel.activeRoomId === item.roomId} onScreen={sel.onScreenRoomId === item.roomId} />
+          );
       }
     },
     [sel, requests],

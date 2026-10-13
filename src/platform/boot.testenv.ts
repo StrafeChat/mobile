@@ -106,27 +106,31 @@ jest.mock('@react-native-community/netinfo', () => {
 });
 
 // The desktop app's accounts file, as the Rust side (tauri-core.ts on mobile) keeps it.
-jest.mock(
-  '@tauri-apps/api/core',
-  () => {
-    let file: unknown = null;
-    return {
-      invoke: jest.fn(async (cmd: string, args?: { value?: unknown }) => {
-        if (cmd === 'desktop_accounts_load') return file;
-        if (cmd === 'desktop_accounts_save') {
-          file = args?.value ?? null;
-          return undefined;
-        }
+//
+// Not a virtual mock, though the package is not installed: jest/resolver.js resolves it to
+// overrides/packages/tauri-core.ts, and the mock has to be registered under that path. Jest
+// remembers which module a (file, import) pair names in a resolver shared by every test file a
+// worker runs, and a virtual mock goes by the bare name. Once an earlier file in the worker had
+// loaded web/src/desktop/accounts.ts for real, accounts.ts went on getting the real
+// tauri-core.ts (empty storage) while the test read this fake file - green alone, red in some
+// full runs.
+jest.mock('@tauri-apps/api/core', () => {
+  let file: unknown = null;
+  return {
+    invoke: jest.fn(async (cmd: string, args?: { value?: unknown }) => {
+      if (cmd === 'desktop_accounts_load') return file;
+      if (cmd === 'desktop_accounts_save') {
+        file = args?.value ?? null;
         return undefined;
-      }),
-      __setAccountsFile(next: unknown) {
-        file = next;
-      },
-      __accountsFile: () => file,
-    };
-  },
-  { virtual: true },
-);
+      }
+      return undefined;
+    }),
+    __setAccountsFile(next: unknown) {
+      file = next;
+    },
+    __accountsFile: () => file,
+  };
+});
 
 // isDesktop() is true on mobile (overrides/desktop/env.ts): runtimeConfig then reads the
 // instance from desktop/instanceOverride, as in the app.
@@ -278,4 +282,14 @@ export function storeSession(token = 'tok-1'): void {
 /** Let promise chains and Solid effects scheduled by them run. */
 export async function flush(times = 5): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve();
+}
+
+/**
+ * Let promise chains run until `condition` holds, and fail naming `what` if it never does -
+ * for what a test is built on, so a broken precondition fails there, with its name, rather
+ * than as a puzzling assertion further on.
+ */
+export async function until(condition: () => boolean, what: string, turns = 50): Promise<void> {
+  for (let i = 0; i < turns && !condition(); i++) await Promise.resolve();
+  if (!condition()) throw new Error(`boot.testenv: never happened: ${what}`);
 }

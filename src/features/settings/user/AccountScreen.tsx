@@ -86,24 +86,36 @@ export function AccountScreen() {
   const [birthdayOptIn, setBirthdayOptIn] = useState(me?.birthday_opt_in === true);
   const [birthdayBusy, setBirthdayBusy] = useState(false);
   const [birthdayError, setBirthdayError] = useState('');
+  const [signingOut, setSigningOut] = useState<'here' | 'everywhere' | null>(null);
 
   useUnsavedGuard(dirty && !saving);
   // Read by the initial load, which must not wipe what was typed while it was in flight.
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
   const birthdayTouched = useRef(false);
+  // Set once a write here (a save, the birthday switch, an image) has answered with the
+  // profile: the initial load was asked for before it, so whatever it brings is older.
+  const superseded = useRef(false);
+
+  /** A whole profile from the server: the new baseline, and the draft too unless edited. */
+  const applyProfile = useCallback((res: MeResponse) => {
+    const d = draftFrom(res);
+    setSaved(d);
+    if (!dirtyRef.current) setDraft(d);
+    mergeMe(res);
+  }, []);
 
   useEffect(() => {
     let live = true;
     getMe()
       .then((res) => {
         if (!live) return;
-        const d = draftFrom(res);
-        setSaved(d);
-        if (!dirtyRef.current) setDraft(d);
+        // The date is not edited on this page, so the load's copy is current either way.
         setBirthday(res.birthday);
         if (!birthdayTouched.current) setBirthdayOptIn(res.birthday_opt_in === true);
-        mergeMe(res);
+        // A slow load landing after a save would put the old profile back on screen and in
+        // auth.user, and the next save (which sends every field) back on the server.
+        if (!superseded.current) applyProfile(res);
       })
       .catch(() => {
         if (!live) return;
@@ -114,7 +126,7 @@ export function AccountScreen() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [applyProfile]);
 
   const edit = useCallback((patch: Partial<ProfileDraft>) => {
     setDraft((d) => ({ ...d, ...patch }));
@@ -129,6 +141,7 @@ export function AccountScreen() {
     setSaving(true);
     try {
       const res = await patchMe(profilePatch(draft));
+      superseded.current = true;
       mergeMe(res);
       const d = draftFrom(res);
       setDraft(d);
@@ -149,8 +162,10 @@ export function AccountScreen() {
     setBirthdayError('');
     try {
       const res = await patchMe({ birthday_opt_in: next });
+      superseded.current = true;
       setBirthdayOptIn(res.birthday_opt_in === true);
-      mergeMe(res);
+      // Newer than the initial load, which now stands down: this answer stands in for it.
+      applyProfile(res);
     } catch (err) {
       setBirthdayError(err instanceof Error ? err.message : t('settings.profile.birthdaySaveFailed'));
     } finally {
@@ -170,7 +185,8 @@ export function AccountScreen() {
     setBusy(true);
     try {
       const res = kind === 'avatar' ? await uploadAvatar(asUploadFile(pick.file)) : await uploadBanner(asUploadFile(pick.file));
-      mergeMe(res);
+      superseded.current = true;
+      applyProfile(res);
     } catch (err) {
       setMediaError(err instanceof Error ? err.message : t('settings.profile.uploadFailed'));
     } finally {
@@ -186,7 +202,18 @@ export function AccountScreen() {
       tone: 'danger',
       icon: 'fa-solid fa-right-from-bracket',
     });
-    if (ok) await signOut({ everywhere });
+    if (!ok || signingOut) return;
+    setSigningOut(everywhere ? 'everywhere' : 'here');
+    try {
+      await signOut({ everywhere });
+    } catch {
+      // Only "everywhere" rejects: the instance did not confirm it (offline, slow, an error),
+      // so the other sessions may still be signed in and this one was kept for a retry.
+      toast.error(t('mobile.settings.logOutEverywhereFailed'));
+    } finally {
+      // A sign-out that went through restarts the app; this only matters when it did not.
+      setSigningOut(null);
+    }
   }
 
   const birthdayLabel = useMemo(() => formatBirthday(birthday), [birthday]);
@@ -330,13 +357,16 @@ export function AccountScreen() {
           title={copied('uid') ? t('common.copied') : t('userArea.copyUserId')}
           onPress={() => void copy('uid', me?.id ?? '')}
         />
-        <SettingItem icon="right-from-bracket" title={t('settings.profile.logOut')} destructive onPress={() => void logOut(false)} />
+        <SettingItem icon="right-from-bracket" title={t('settings.profile.logOut')} destructive disabled={!!signingOut} onPress={() => void logOut(false)} />
         <SettingItem
           icon="power-off"
           title={t('mobile.settings.logOutEverywhere')}
           description={t('mobile.settings.logOutEverywhereHint')}
           destructive
+          disabled={!!signingOut}
+          busy={signingOut === 'everywhere'}
           onPress={() => void logOut(true)}
+          testID="account-log-out-everywhere"
         />
       </ListSection>
     </SettingsScreen>

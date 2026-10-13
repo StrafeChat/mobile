@@ -14,7 +14,16 @@ import { setInstance } from '@web/stores/instance';
 import { setPresence } from '@web/stores/presence';
 import { PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
 import { ME, member, pm, resetStores, role, space, sroom, user } from '@/data/testing/fixtures';
-import { closeView, openNav, setSelectedSpaceId, setShellTab, shell } from '@/shell/state';
+import {
+  closeView,
+  openNav,
+  openRoom,
+  setSelectedSpaceId,
+  setShellFocused,
+  setShellTab,
+  setShellWide,
+  shell,
+} from '@/shell/state';
 import { UiProvider, closeActionSheet } from '@/ui';
 
 import * as relApi from '@web/api/relationships';
@@ -203,6 +212,62 @@ describe('NavPanel', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Friends' }));
     expect(shell.view().kind).toBe('friends');
     expect(shell.tab()).toBe('home');
+  });
+});
+
+describe('the selected room, on screen or behind the rails', () => {
+  // What SwipeShell keeps (it is not mounted here): the shell in front, at phone width.
+  beforeEach(() => {
+    setShellFocused(true);
+  });
+  afterEach(async () => {
+    await act(async () => {
+      setShellFocused(false);
+      setShellWide(false);
+    });
+  });
+
+  const aliceButtons = () => screen.getAllByRole('button', { name: /^Alice/ });
+  const aliceRow = () => aliceButtons().find((b) => b.props.accessibilityState?.selected === true);
+
+  test("a PM's unread is hidden while it is on screen, and shows once the rails cover it", async () => {
+    openRoom('p1', null);
+    await mount();
+    // On screen: read as it arrives, so no count, and not on the rail either.
+    expect(aliceRow()?.props.accessibilityLabel).toBe('Alice');
+    expect(aliceButtons()).toHaveLength(1);
+    // Behind the rails its read cursor stands still: what it holds is unread, here and on the rail.
+    await act(async () => openNav());
+    expect(aliceRow()?.props.accessibilityLabel).toMatch(/^Alice, .+/);
+    expect(aliceButtons()).toHaveLength(2);
+    // A tablet shows the conversation beside the rails: on screen again.
+    await act(async () => setShellWide(true));
+    expect(aliceRow()?.props.accessibilityLabel).toBe('Alice');
+  });
+
+  test("a collapsed section's dot leaves out only the room on screen", async () => {
+    openRoom('t1', 's1');
+    await mount();
+    await fireEvent.press(screen.getByRole('button', { name: 'Text rooms' }));
+    expect(screen.getByRole('button', { name: 'Text rooms' })).toBeTruthy();
+    await act(async () => openNav());
+    expect(screen.getByRole('button', { name: 'Text rooms, Unread' })).toBeTruthy();
+    // Expanded again: the collapse is remembered per device.
+    await fireEvent.press(screen.getByRole('button', { name: 'Text rooms, Unread' }));
+  });
+
+  test("a thread's mention pill and pip show once the rails cover it", async () => {
+    const thread = { archived: false, locked: false, private: false, invitable: true, auto_archive_minutes: 60, owner_id: ME, message_count: 2, member_count: 1, joined: true };
+    setSpaces('spaceRoomsBySpaceId', 's1', (list) => [
+      ...list,
+      sroom('th', 6, { parent_id: 't1', name: 'plans', last_message_id: '70', last_read_message_id: '60', thread }),
+    ]);
+    setReadState('byRoom', 'th', { lastReadMessageId: '60', mentionCount: 1 });
+    openRoom('th', 's1');
+    await mount();
+    expect(screen.getByRole('button', { name: /^plans/ }).props.accessibilityLabel).toBe('plans');
+    await act(async () => openNav());
+    expect(screen.getByRole('button', { name: /^plans/ }).props.accessibilityLabel).toMatch(/^plans, 1 mention/);
   });
 });
 

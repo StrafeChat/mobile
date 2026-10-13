@@ -311,7 +311,7 @@ export function SecurityScreen() {
               <SettingItem
                 icon="key"
                 title={t('settings.security.recoveryCodes.rowTitle')}
-                description={t('settings.security.recoveryCodes.remaining', { count: String(s.recovery_codes_remaining) })}
+                description={t('settings.security.recoveryCodes.remaining', { count: s.recovery_codes_remaining })}
               />
               <SettingItem icon="rotate" title={t('settings.security.recoveryCodes.regenerate')} onPress={() => setSheet({ kind: 'regenerateCodes' })} />
             </ListSection>

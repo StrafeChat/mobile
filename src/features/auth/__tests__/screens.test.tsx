@@ -15,7 +15,7 @@ import { VerifyEmailScreen } from '../screens/VerifyEmailScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { RESET_SCRIPT } from '../captcha/captchaPage';
-import { resetPendingAuthLinkForTests } from '../logic/pendingLink';
+import { resetPendingAuthLinkForTests, takeLaunchAuthLink } from '../logic/pendingLink';
 
 const session = jest.requireMock('@/platform/session') as Record<string, jest.Mock> & {
   InstanceResolveError: new (code: string, host: string) => Error;
@@ -27,6 +27,7 @@ const instanceStore = jest.requireMock('@/platform/overrides/runtime/instance') 
   setInstance: (...a: unknown[]) => void;
 };
 const authStore = jest.requireMock('@web/stores/auth') as { mockSetAuth: (k: string, v: unknown) => void };
+const bootMock = jest.requireMock('@/platform/boot') as { mockSetBootOverride: (s: string | null) => void };
 const webview = (jest.requireMock('react-native-webview') as { mockWebView: { props: Record<string, unknown> | null; injected: string[] } }).mockWebView;
 
 const INST = { domain: 'chat.example.org', apiUrl: 'https://chat.example.org/api', stargateUrl: 'wss://chat.example.org/gateway/events' };
@@ -48,6 +49,7 @@ beforeEach(() => {
   instanceStore.setInstance({ loaded: true, inviteOnly: false, email: { enabled: true, verificationRequired: false } });
   instanceStore.setInstance('captcha', { enabled: false, provider: '', siteKey: '', apiUrl: '' });
   authStore.mockSetAuth('token', null);
+  bootMock.mockSetBootOverride(null);
   webview.props = null;
   webview.injected = [];
 });
@@ -385,6 +387,32 @@ describe('email links', () => {
     expect(api.verifyEmail).not.toHaveBeenCalled();
   });
 
+  test('verify: a session stored but not restored yet (a cold start) counts as signed in', async () => {
+    // auth.token is only set once start-up restores the session; the stored token is what
+    // the redeem request would carry, to whichever instance the link named.
+    session.hasStoredSession.mockReturnValueOnce(true);
+    setParams({ token: 'tok-abcdefghijklmnop', instance: 'evil.example' });
+    await render(<VerifyEmailScreen />);
+    expect(await screen.findByText('This link is for evil.example. Sign out to use it, or open it in your browser.')).toBeTruthy();
+    expect(session.chooseInstance).not.toHaveBeenCalled();
+    expect(api.verifyEmail).not.toHaveBeenCalled();
+  });
+
+  test('verify: nothing is redeemed before start-up has settled', async () => {
+    bootMock.mockSetBootOverride('booting');
+    api.verifyEmail.mockResolvedValue({ ok: true });
+    setParams({ token: 'tok-abcdefghijklmnop', instance: 'other.example' });
+    await render(<VerifyEmailScreen />);
+    await act(async () => undefined);
+    expect(session.chooseInstance).not.toHaveBeenCalled();
+    expect(api.verifyEmail).not.toHaveBeenCalled();
+    // Settled signed out: now the link may move the app to its instance, and is redeemed once.
+    await act(async () => bootMock.mockSetBootOverride(null));
+    await screen.findByText(webEn.auth.verifyEmail.successTitle);
+    expect(session.chooseInstance).toHaveBeenCalledWith('other.example');
+    expect(api.verifyEmail).toHaveBeenCalledTimes(1);
+  });
+
   test('verify: without a token it asks for the link, and refuses what is not one', async () => {
     api.verifyEmail.mockRejectedValue(new ApiError('that verification link is not valid or has expired', 400));
     await render(<VerifyEmailScreen />);
@@ -469,5 +497,87 @@ describe('email links', () => {
     await fireEvent.changeText(screen.getByTestId('paste-link-input'), 'strafe://reset-password?token=abcdefghijklmnop42');
     await fireEvent.press(screen.getByTestId('paste-link-submit'));
     expect(screen.getByTestId('reset')).toBeTruthy();
+  });
+
+  test('a link screen shown for a moment while starting up leaves the link for the screen after', async () => {
+    // A cold start: the link's screen mounts before the boot gate moves to the splash.
+    const { Linking } = jest.requireActual('react-native') as typeof import('react-native');
+    const spy = jest.spyOn(Linking, 'getInitialURL').mockResolvedValue('strafe://reset-password?token=abcdefghijklmnop77');
+    bootMock.mockSetBootOverride('booting');
+    setParams({ token: 'abcdefghijklmnop77' });
+    const view = await render(<ResetPasswordScreen />);
+    await view.unmount();
+    await expect(takeLaunchAuthLink()).resolves.toMatchObject({ kind: 'reset-password', token: 'abcdefghijklmnop77' });
+    spy.mockRestore();
+  });
+
+  describe('the launch link after a JS restart (sign-out, account switch, expiry)', () => {
+    // The OS hands the restarted JS the same launch link; only what was written down survives.
+    let spy: jest.SpyInstance | null = null;
+    function launchedFrom(url: string) {
+      const { Linking } = jest.requireActual('react-native') as typeof import('react-native');
+      spy = jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(url);
+    }
+    afterEach(() => {
+      spy?.mockRestore();
+      spy = null;
+    });
+
+    test('reset: a token reset with is not reopened', async () => {
+      launchedFrom('strafe://reset-password?token=abcdefghijklmnop77');
+      authStore.mockSetAuth('token', 'live');
+      api.resetPassword.mockResolvedValue({ ok: true });
+      setParams({ token: 'abcdefghijklmnop77' });
+      await render(<ResetPasswordScreen />);
+      await fireEvent.changeText(screen.getByTestId('reset-password'), 'new password');
+      await fireEvent.changeText(screen.getByTestId('reset-confirm'), 'new password');
+      await act(async () => {
+        await fireEvent.press(screen.getByTestId('reset-submit'));
+      });
+      expect(screen.getByTestId('reset-done')).toBeTruthy();
+      // "Go to sign in" signs out, and the JS restarts with the screen still mounted.
+      resetPendingAuthLinkForTests({ restart: true });
+      await expect(takeLaunchAuthLink()).resolves.toBeNull();
+    });
+
+    test('reset: a screen left without resetting is not reopened either', async () => {
+      launchedFrom('strafe://reset-password?token=abcdefghijklmnop77');
+      setParams({ token: 'abcdefghijklmnop77' });
+      const view = await render(<ResetPasswordScreen />);
+      await view.unmount();
+      resetPendingAuthLinkForTests({ restart: true });
+      await expect(takeLaunchAuthLink()).resolves.toBeNull();
+    });
+
+    test('reset: a screen still open when the app died is reopened, as tapping the link again would', async () => {
+      launchedFrom('strafe://reset-password?token=abcdefghijklmnop77');
+      setParams({ token: 'abcdefghijklmnop77' });
+      await render(<ResetPasswordScreen />);
+      resetPendingAuthLinkForTests({ restart: true });
+      await expect(takeLaunchAuthLink()).resolves.toMatchObject({ kind: 'reset-password', token: 'abcdefghijklmnop77' });
+    });
+
+    test('verify: a redeemed token is not reopened (and not posted again)', async () => {
+      launchedFrom('strafe://verify-email?token=tok-abcdefghijklmnop');
+      authStore.mockSetAuth('token', 'live');
+      api.verifyEmail.mockResolvedValue({ ok: true });
+      setParams({ token: 'tok-abcdefghijklmnop' });
+      await render(<VerifyEmailScreen />);
+      await screen.findByText(webEn.auth.verifyEmail.successTitle);
+      resetPendingAuthLinkForTests({ restart: true });
+      await expect(takeLaunchAuthLink()).resolves.toBeNull();
+    });
+
+    test('verify: a screen left after a refusal is not reopened', async () => {
+      // Signed in elsewhere: "This link is for other.example" - and not again after every switch.
+      launchedFrom('strafe://verify-email?token=tok-abcdefghijklmnop&instance=other.example');
+      authStore.mockSetAuth('token', 'live');
+      setParams({ token: 'tok-abcdefghijklmnop', instance: 'other.example' });
+      const view = await render(<VerifyEmailScreen />);
+      await screen.findByTestId('verify-email-failed');
+      await view.unmount();
+      resetPendingAuthLinkForTests({ restart: true });
+      await expect(takeLaunchAuthLink()).resolves.toBeNull();
+    });
   });
 });

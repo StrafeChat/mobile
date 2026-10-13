@@ -9,13 +9,14 @@
  * it is signed in to another one (the link was for a second account), its session is still
  * good and it goes back into the app; signed out, back to sign in.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, type TextInput } from 'react-native';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { resetPassword } from '@web/api/auth';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
 import { useSolid } from '@/bridge/solid';
+import { useBootState } from '@/platform/boot';
 import { signOut, verifySession } from '@/platform/session';
 import { Button, Input, haptics } from '@/ui';
 import { AuthIconChip, AuthScaffold } from '../components/AuthScaffold';
@@ -23,7 +24,7 @@ import { FormErrors } from '../components/FormErrors';
 import { PasteLinkForm } from '../components/PasteLinkForm';
 import { authErrorLines } from '../logic/errors';
 import { ensureLinkInstance } from '../logic/linkInstance';
-import { markAuthLinkHandled } from '../logic/pendingLink';
+import { markAuthLinkDone, markAuthLinkHandled } from '../logic/pendingLink';
 import { confirmError, passwordError } from '../logic/validation';
 import { AUTH_PATHS, backOr, returnToAuth } from '../nav';
 
@@ -41,7 +42,18 @@ export function ResetPasswordScreen() {
   const [done, setDone] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const confirmRef = useRef<TextInput>(null);
-  markAuthLinkHandled(token);
+  // Taken once start-up has settled. Before that this is a cold start's link: the screen shows
+  // for a moment before the boot gate moves on, and the screen it lands on reopens the link
+  // (useLaunchAuthLink) - unless it was marked handled here, and then it was lost.
+  const { state: boot } = useBootState();
+  const settled = boot === 'ready' || boot === 'signed-out';
+  if (settled) markAuthLinkHandled(token);
+  // Leaving the screen is done with the token, as resetting with it is (submit): a JS restart
+  // is handed the launch link again, and must not reopen it (pendingLink.ts).
+  useEffect(() => {
+    if (!settled || !token) return;
+    return () => markAuthLinkDone(token);
+  }, [settled, token]);
 
   async function submit() {
     if (loading) return;
@@ -66,6 +78,9 @@ export function ResetPasswordScreen() {
         return;
       }
       await resetPassword(token, password);
+      // Now, not only on leaving: signed in to the reset account, "Go to sign in" signs out,
+      // which restarts the JS - possibly before this screen has unmounted.
+      markAuthLinkDone(token);
       haptics.success();
       setDone(true);
     } catch (e) {

@@ -5,10 +5,13 @@
  * checked against the chosen one; signed out, the app switches to it (chooseInstance), signed
  * in it refuses rather than move a live session. A link that names none uses the chosen
  * instance, and with none chosen there is nowhere to send it.
+ *
+ * "Signed in" is any stored session, restored yet or not (hasStoredSession): anyone can make
+ * a link, and switching under a stored token would hand that token to their server with the
+ * redeem request that follows.
  */
 import { t } from '@web/i18n/t';
-import { auth } from '@web/stores/auth';
-import { InstanceResolveError, chooseInstance, currentInstance } from '@/platform/session';
+import { InstanceResolveError, chooseInstance, currentInstance, hasStoredSession } from '@/platform/session';
 import { sameInstanceHost } from './authLinks';
 import { instanceStatusMessage } from './instanceStatus';
 
@@ -30,7 +33,7 @@ export async function ensureLinkInstance(host: string | null): Promise<LinkInsta
     return currentInstance() ? { ok: true } : { ok: false, reason: 'noInstance', message: t('mobile.auth.linkNoInstance') };
   }
   if (knownHosts().some((h) => sameInstanceHost(h, host))) return { ok: true };
-  if (auth.token) {
+  if (hasStoredSession()) {
     return { ok: false, reason: 'otherInstance', message: t('mobile.auth.linkOtherInstance', { host }) };
   }
   try {

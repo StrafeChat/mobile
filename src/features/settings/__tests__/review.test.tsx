@@ -2,25 +2,32 @@
 /**
  * Regressions from the settings review: the notification permission row following the OS, the
  * consent screen's request running once, the mic test never keeping the microphone after the
- * page, edits surviving a slow load or a save elsewhere on the page, and the role hierarchy
- * (locked roles read-only, reorders that never touch a role out of reach).
+ * page, edits surviving a slow load or a save elsewhere on the page, a slow first load never
+ * undoing a save, "log out everywhere" saying when it did not happen, a muted channel reading
+ * as muted, and the role hierarchy (locked roles read-only, reorders that never touch a role
+ * out of reach).
  */
 import './settingsTestSetup';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { setSpaces } from '@web/stores/spaces';
+import { setRooms } from '@web/stores/rooms';
+import { auth } from '@web/stores/auth';
+import { confirmDialogState, settleConfirmDialog } from '@web/stores/confirmDialog';
 import { setSpaceMembers } from '@web/stores/spaceMembers';
 import { PermManageRoles, PermSendMessages } from '@web/lib/spacePermissions';
 import type { SpaceRole } from '@web/api/spaces';
 import { setPushStatus } from '@/platform/push/status';
-import { ME, member, resetStores, role, space } from '../../../data/testing/fixtures';
+import { toastStore } from '@/ui/toast';
+import { ME, member, resetStores, role, space, sroom } from '../../../data/testing/fixtures';
 import { NotificationsScreen } from '../user/NotificationsScreen';
 import { OAuthAuthorizeScreen } from '../OAuthAuthorizeScreen';
 import { VoiceScreen } from '../user/VoiceScreen';
 import { AccountScreen } from '../user/AccountScreen';
 import { DeveloperAppScreen } from '../user/developers/DeveloperAppScreen';
 import { RoleEditorScreen } from '../space/RoleEditorScreen';
+import { RoomNotificationsScreen } from '../room/RoomPagesScreens';
 import { canMoveRole, rolePositionPatches } from '../space/roleLogic';
 
 jest.mock('expo-notifications', () => ({
@@ -41,13 +48,15 @@ jest.mock('@web/api/discover', () => ({
 jest.mock('@web/api/users', () => ({
   ...jest.requireActual('@web/api/users'),
   getMe: jest.fn(),
+  patchMe: jest.fn(),
 }));
 
 const params = useLocalSearchParams as jest.Mock;
 const native = jest.requireMock('../../../platform/overrides/desktop/native') as { nativeNotificationsGranted: jest.Mock };
 const media = jest.requireMock('../../../platform/media') as { startVoiceRecording: jest.Mock };
 const devApi = jest.requireMock('@web/api/developers') as { getAuthorizeInfo: jest.Mock; getApplication: jest.Mock; updateApplication: jest.Mock };
-const usersApi = jest.requireMock('@web/api/users') as { getMe: jest.Mock };
+const usersApi = jest.requireMock('@web/api/users') as { getMe: jest.Mock; patchMe: jest.Mock };
+const session = jest.requireMock('../../../platform/session') as { signOut: jest.Mock };
 
 function deferred<T>() {
   let resolve!: (v: T) => void;
@@ -131,6 +140,55 @@ describe('my account', () => {
     await act(async () => me.resolve({ id: ME, username: 'me', display_name: 'Server name', bio: '', about_me: '', pronouns: '' }));
     expect(screen.getByDisplayValue('Typed early')).toBeTruthy();
     expect(screen.getByTestId('account-save')).toBeTruthy();
+    await screen.unmount();
+  });
+
+  it('a slow first load that lands after a save does not bring the old profile back', async () => {
+    const me = deferred<Record<string, unknown>>();
+    usersApi.getMe.mockImplementationOnce(() => me.promise);
+    usersApi.patchMe.mockImplementationOnce(async (input: Record<string, unknown>) => ({ id: ME, username: 'me', bio: '', about_me: '', pronouns: '', ...input }));
+    await render(<AccountScreen />);
+    await fireEvent.changeText(screen.getByTestId('account-display-name'), 'New name');
+    await fireEvent.press(screen.getByTestId('account-save'));
+    await waitFor(() => expect(screen.queryByTestId('account-save')).toBeNull());
+    expect(auth.user?.display_name).toBe('New name');
+    await act(async () => me.resolve({ id: ME, username: 'me', display_name: 'Old name', bio: '', about_me: '', pronouns: '' }));
+    expect(screen.getByDisplayValue('New name')).toBeTruthy();
+    expect(auth.user?.display_name).toBe('New name');
+    await screen.unmount();
+  });
+
+  it('"log out everywhere" that the instance did not confirm says so, and can be tried again', async () => {
+    usersApi.getMe.mockImplementationOnce(() => new Promise(() => undefined));
+    session.signOut.mockRejectedValueOnce(new Error('Network request failed'));
+    await render(<AccountScreen />);
+    await fireEvent.press(screen.getByTestId('account-log-out-everywhere'));
+    await waitFor(() => expect(confirmDialogState.pending).not.toBeNull());
+    await act(async () => settleConfirmDialog(true));
+    await waitFor(() => expect(toastStore.get()?.message).toBe("Couldn't log out everywhere. Other devices may still be signed in: check your connection and try again."));
+    expect(session.signOut).toHaveBeenCalledWith({ everywhere: true });
+    expect(toastStore.get()?.tone).toBe('error');
+    await waitFor(() => expect(screen.getByTestId('account-log-out-everywhere')).toBeEnabled());
+    await screen.unmount();
+  });
+});
+
+describe('room notifications', () => {
+  afterEach(() => params.mockReturnValue({}));
+  it('a muted channel reads as muted with its conversation open, and offers Unmute', async () => {
+    setSpaces({
+      spaces: [space('S', [role('everyone', 0, PermSendMessages, { name: '@everyone' })], { owner_id: ME })],
+      spaceRoomsBySpaceId: { S: [sroom('c1', 3, { name: 'general', muted: true })] },
+      loading: false,
+      hydrated: true,
+    });
+    setSpaceMembers({ bySpaceId: { S: [member(ME, [])] }, loading: {}, loadedAt: { S: Date.now() } });
+    // The open conversation's mirror of the channel in the rooms store, which has no mute fields.
+    setRooms('rooms', [{ id: 'c1', type: 3, name: 'general', space_id: 'S', recipients: [], participants: [], created_at: '2026-10-01T00:00:00.000Z' }]);
+    params.mockReturnValue({ roomId: 'c1' });
+    await render(<RoomNotificationsScreen />);
+    expect(await screen.findByTestId('room-unmute')).toBeTruthy();
+    expect(screen.queryByTestId('room-mute-1h')).toBeNull();
     await screen.unmount();
   });
 });

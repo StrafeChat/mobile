@@ -30,27 +30,35 @@ export async function handlePick(queue: AttachmentDraft, result: PickResult | nu
   }
 }
 
-export function attachMenuEntries(opts: { queue: AttachmentDraft; onGif?: () => void }): ActionSheetEntry[] {
+export interface AttachMenuOptions {
+  /** The room whose composer this is: a pick that outlives the app (Android) comes back here. */
+  roomId: string;
+  queue: AttachmentDraft;
+  onGif?: () => void;
+}
+
+export function attachMenuEntries(opts: AttachMenuOptions): ActionSheetEntry[] {
   const { queue } = opts;
+  const origin = { kind: 'composer', roomId: opts.roomId } as const;
   const free = () => Math.max(1, ATTACHMENTS_PER_MESSAGE - queue.items().length);
   return [
     {
       key: 'library',
       label: t('mobile.composer.photosVideos'),
       icon: 'images',
-      onSelect: async () => handlePick(queue, await pickFromLibrary({ limit: free() })),
+      onSelect: async () => handlePick(queue, await pickFromLibrary({ limit: free(), origin })),
     },
     {
       key: 'camera',
       label: t('mobile.composer.takePhoto'),
       icon: 'camera',
-      onSelect: async () => handlePick(queue, await takePhoto()),
+      onSelect: async () => handlePick(queue, await takePhoto({ origin })),
     },
     {
       key: 'video',
       label: t('mobile.composer.recordVideo'),
       icon: 'video',
-      onSelect: async () => handlePick(queue, await recordVideo()),
+      onSelect: async () => handlePick(queue, await recordVideo({ origin })),
     },
     {
       key: 'files',
@@ -62,6 +70,6 @@ export function attachMenuEntries(opts: { queue: AttachmentDraft; onGif?: () => 
   ];
 }
 
-export function openAttachMenu(opts: { queue: AttachmentDraft; onGif?: () => void }): void {
+export function openAttachMenu(opts: AttachMenuOptions): void {
   void showActionSheet(attachMenuEntries(opts), { title: t('composer.attachFiles') });
 }

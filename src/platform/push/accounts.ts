@@ -7,6 +7,7 @@
  */
 import { activeDesktopAccountId, desktopAccounts, type DesktopAccount } from '@web/desktop/accounts';
 import { auth } from '@web/stores/auth';
+import { unreadableAccountIds } from '../overrides/packages/tauri-core';
 import type { PushAccount } from './api';
 import { slotFor } from './slots';
 
@@ -32,6 +33,22 @@ export function pushAccounts(excludeId?: string): PushAccount[] {
     .filter((a) => a.id !== excludeId)
     .map((a) => toPushAccount(a, a.id === activeId));
   return list.sort((a, b) => (a.id === activeId ? -1 : b.id === activeId ? 1 : 0));
+}
+
+/**
+ * Whether pushAccounts() is every account on this device. Not after a start that could not
+ * read some account's token (overrides/packages/tauri-core.ts: iOS, launched in the
+ * background while the phone is locked) until that account is in the list again (READY
+ * brings the open one back): it is still here, only missing from the list, so its slot must
+ * not be taken for an orphan, nor dropped from the renderer's config. Checked against the
+ * live list, not the saved one, so a run that READY starts does not wait for the save behind
+ * it. Only those two steps wait on it (registration.ts).
+ */
+export function pushAccountsComplete(): boolean {
+  const unreadable = unreadableAccountIds();
+  if (unreadable.length === 0) return true;
+  const present = new Set(desktopAccounts().map((a) => a.id));
+  return unreadable.every((id) => present.has(id));
 }
 
 /** The account the app is signed in as right now, if any. */

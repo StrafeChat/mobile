@@ -16,9 +16,14 @@
  * - nothing is acked while nobody is looking, and everything is re-evaluated the moment the app
  *   is in front again (the web's visibilitychange/focus).
  *
- * Mobile differences: "looking" is AppState 'active'; the web's last-chance `beforeunload`
- * keepalive ack is sent when the app goes to the background - the moment it may be suspended
- * or killed without another word - and only when it is ahead of the read cursor.
+ * Mobile differences: "looking" is AppState 'active' *and* the room being the conversation on
+ * screen (shell/state.ts roomOnScreen). The app keeps a conversation mounted - and its list
+ * following new messages - behind the rails or under a pushed screen, where a browser tab would
+ * have navigated away; a bottom row reported from there was never seen, so it is neither acked
+ * nor kept for the keepalive, and coming back on screen re-evaluates like coming back to the
+ * foreground. The web's last-chance `beforeunload` keepalive ack is sent when the app goes to
+ * the background - the moment it may be suspended or killed without another word - and only
+ * when it is ahead of the read cursor.
  *
  * Two ways to use it:
  * - createViewportAck(roomId) - the web's Solid primitive, same signature; call it under a
@@ -34,6 +39,7 @@ import { rooms } from '@web/stores/rooms';
 import { messages } from '@web/stores/messages';
 import { clearPendingAck, getPendingAck, setPendingAck } from '@web/stores/pendingAck';
 import { ackRoomKeepalive } from '@web/api/rooms';
+import { conversationOnScreen } from '@/shell/state';
 
 const SNOWFLAKE = /^\d+$/;
 
@@ -115,6 +121,12 @@ export function createViewportAck(roomId: Accessor<string | undefined>): {
       clearPendingAck();
       return;
     }
+    // Tracked too: the conversation coming back on screen (the rails swiped away, the screen
+    // over it closed) re-evaluates, as the foreground does. Until then nothing it shows is
+    // seen: no ack (not even a stranded mention's), and no pending position for the background
+    // keepalive to send. The pending slot is left as it is - it is app-wide, and holds either
+    // a position this room had on screen or the one of the room that is on screen now.
+    if (!conversationOnScreen(id)) return;
     if (!ackID || !SNOWFLAKE.test(ackID)) {
       const r = rooms.rooms.find((x) => x.id === id);
       const roomLast = r?.last_message_id;

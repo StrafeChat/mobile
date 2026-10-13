@@ -34,7 +34,6 @@ import {
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { BackHandler, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { ReduceMotion } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@web/i18n/t';
 import { useTheme } from '@/theme';
 import { withAlpha } from './color';
@@ -43,6 +42,7 @@ import { IconButton } from './IconButton';
 import { dismissKeyboard } from './keyboard';
 import { useReduceMotion } from './motion';
 import type { DialogTone } from './presenter';
+import { physicalSides, useWindowInsets } from './safeArea';
 import { SHEET_MAX_WIDTH, WIDE_BREAKPOINT, largeRadius } from './tokens';
 
 const SheetContext = createContext(false);
@@ -99,7 +99,8 @@ export function Sheet({
   testID,
 }: SheetProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  // The window's: the sheet is portaled to the root, whatever part of the tree declared it.
+  const insets = useWindowInsets();
   const { width, height } = useWindowDimensions();
   const reduce = useReduceMotion();
   const ref = useRef<BottomSheetModal>(null);
@@ -179,6 +180,10 @@ export function Sheet({
   const wide = width >= WIDE_BREAKPOINT;
   const radius = largeRadius(theme.radii.xl);
   const sideMargin = wide ? Math.max(16, (width - SHEET_MAX_WIDTH) / 2) : 0;
+  // Sheets are presented outside every screen's safe-area padding: in landscape, keep the sheet
+  // itself clear of the cutout and a side navigation bar (insets are 0 in portrait).
+  const sides = physicalSides(insets);
+  const sheetMargins = { marginLeft: Math.max(sideMargin, sides.left), marginRight: Math.max(sideMargin, sides.right) };
   const bottomPad = padded ? Math.max(28, insets.bottom + 20) : insets.bottom + 8;
 
   const headerNode =
@@ -210,7 +215,7 @@ export function Sheet({
       topInset={insets.top}
       detached={wide}
       bottomInset={wide ? insets.bottom + 24 : 0}
-      style={wide ? { marginHorizontal: sideMargin } : undefined}
+      style={sheetMargins}
       enablePanDownToClose={dismissible}
       enableContentPanningGesture={dismissible}
       enableHandlePanningGesture={dismissible}

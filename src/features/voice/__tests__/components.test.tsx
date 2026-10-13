@@ -6,7 +6,7 @@
 import '@/ui/__tests__/setup';
 import './voiceMocks';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { reconcile } from 'solid-js/store';
 import { router } from 'expo-router';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -251,7 +251,8 @@ describe('CallScreen', () => {
     expect(screen.getByText('Ringing Ada…')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('voice-more'));
     await fireEvent.press(screen.getByRole('menuitem', { name: 'Ring again' }));
-    expect(store.ringMembers).toHaveBeenCalledWith('p1', ['ada']);
+    // The action runs once the sheet has closed, which is a frame or more away.
+    await waitFor(() => expect(store.ringMembers).toHaveBeenCalledWith('p1', ['ada']));
   });
 });
 

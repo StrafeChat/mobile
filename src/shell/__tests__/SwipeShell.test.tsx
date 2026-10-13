@@ -5,15 +5,20 @@
  * drawer keeps to the physical right edge, and what is in front owns the touches: a covered
  * panel takes none, and on Android nothing laid over the conversation sits below its elevation
  * (Android dispatches touches by elevation, so the conversation's list would scroll under an
- * open drawer).
+ * open drawer). And which conversation is on screen - the one the read cursor follows and
+ * notifications skip: the shell's room while it shows, or a thread's screen in front. And in
+ * landscape, where the shell is narrower than the window, drags and the right-edge strip go by
+ * the shell's own width.
  */
 import '../../ui/__tests__/setup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { useEffect } from 'react';
 import { BackHandler, Keyboard, StyleSheet, Text } from 'react-native';
-import { act, render, screen } from '@testing-library/react-native';
-import { closeView, openNav, openRoom, setMembersAvailable, setMembersOpen, shell } from '../state';
-import { SHELL_ELEVATION, SwipeShell, drawerEdgeStyle, handleShellBack } from '../SwipeShell';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import type { GestureStateManager, GestureTouchEvent, GestureType } from 'react-native-gesture-handler';
+import { closeView, openContent, openNav, openRoom, roomOnScreen, setMembersAvailable, setMembersOpen, shell } from '../state';
+import { SHELL_ELEVATION, ScreenRoomClaim, SwipeShell, drawerEdgeStyle, handleShellBack, useShellGesture } from '../SwipeShell';
+import { EDGE_ZONE_PX } from '../gestures';
 
 let mockFocused = true;
 jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
@@ -218,5 +223,108 @@ describe('member list', () => {
     expect(drawerEdgeStyle(false)).not.toHaveProperty('right');
     expect(drawerEdgeStyle(true)).toMatchObject({ start: 0 });
     expect(drawerEdgeStyle(true)).not.toHaveProperty('end');
+  });
+});
+
+describe('the conversation on screen', () => {
+  test('is the open room while it is in front - not behind the rails, not under a pushed screen', async () => {
+    openRoom('r1', 's1');
+    const view = await render(<Shell />);
+    expect(roomOnScreen()).toEqual({ roomId: 'r1', spaceId: 's1' });
+    await act(async () => openNav());
+    expect(roomOnScreen()).toBeNull();
+    await act(async () => openContent());
+    // The member drawer over it does not hide it (nor does it on the web).
+    await act(async () => {
+      setMembersAvailable(true);
+      setMembersOpen(true);
+    });
+    expect(roomOnScreen()?.roomId).toBe('r1');
+    // A screen pushed over the shell (pins, a profile, settings).
+    mockFocused = false;
+    await view.rerender(<Shell />);
+    expect(roomOnScreen()).toBeNull();
+    mockFocused = true;
+    await view.rerender(<Shell />);
+    expect(roomOnScreen()?.roomId).toBe('r1');
+    await act(async () => view.unmount());
+    expect(roomOnScreen()).toBeNull();
+  });
+
+  test('on a tablet the room shows beside the rails whichever panel is in front', async () => {
+    mockWidth = 1000;
+    openRoom('r1', null);
+    await render(<Shell />);
+    await act(async () => openNav());
+    expect(roomOnScreen()).toEqual({ roomId: 'r1', spaceId: null });
+  });
+
+  test("a thread's screen is it while in front, not while something covers it, and not once closed", async () => {
+    // The shell is under the thread's screen (not mounted here: it is not in front either way).
+    openRoom('c1', 's1');
+    const claim = await render(<ScreenRoomClaim roomId="t1" spaceId="s1" />);
+    expect(roomOnScreen()).toEqual({ roomId: 't1', spaceId: 's1' });
+    mockFocused = false; // a profile pushed over the thread
+    await claim.rerender(<ScreenRoomClaim roomId="t1" spaceId="s1" />);
+    expect(roomOnScreen()).toBeNull();
+    mockFocused = true;
+    await claim.rerender(<ScreenRoomClaim roomId="t1" spaceId="s1" />);
+    expect(roomOnScreen()?.roomId).toBe('t1');
+    await act(async () => claim.unmount());
+    expect(roomOnScreen()).toBeNull();
+  });
+});
+
+describe('landscape: the shell is narrower than the window', () => {
+  // The route group pads the screen by the cutout and a side navigation bar (src/ui/safeArea).
+  const WINDOW = 700;
+  const SIDES = 48;
+  const SHELL = WINDOW - 2 * SIDES;
+
+  const grabbed: { current: ReturnType<typeof useShellGesture> } = { current: { pan: null, edge: null, progress: null } };
+  function GrabGestures() {
+    const ctx = useShellGesture();
+    useEffect(() => {
+      grabbed.current = ctx;
+    });
+    return null;
+  }
+
+  async function landscapeShell() {
+    mockWidth = WINDOW;
+    await render(<SwipeShell nav={<Text>rails</Text>} content={<GrabGestures />} members={<Text>people</Text>} />);
+    await fireEvent(screen.getByTestId('shell'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: SHELL, height: 360 } } });
+  }
+
+  /** A finger coming down at `x` from the shell's left edge: whether the edge strip let it go. */
+  function edgeRefuses(x: number): boolean {
+    const fail = jest.fn();
+    const touch = { id: 0, x, y: 100, absoluteX: x + SIDES, absoluteY: 100 };
+    const event = { changedTouches: [touch], allTouches: [touch], numberOfTouches: 1 } as unknown as GestureTouchEvent;
+    const manager = { fail, activate: jest.fn(), begin: jest.fn(), end: jest.fn() } as unknown as GestureStateManager;
+    (grabbed.current.edge as GestureType).handlers.onTouchesDown!(event, manager);
+    return fail.mock.calls.length > 0;
+  }
+
+  test("the right-edge strip is the shell's own right edge, in its coordinates", async () => {
+    openRoom('r1', null);
+    setMembersAvailable(true);
+    await landscapeShell();
+    // Inside the shell's rightmost strip; against the window's width it would be short of it.
+    expect(edgeRefuses(SHELL - EDGE_ZONE_PX / 2)).toBe(false);
+    expect(edgeRefuses(SHELL - EDGE_ZONE_PX - 10)).toBe(true);
+  });
+
+  test("a drag moves the panels by the shell's width", async () => {
+    openNav();
+    await landscapeShell();
+    const pan = (grabbed.current.pan as GestureType).handlers as unknown as {
+      onStart: () => void;
+      onUpdate: (e: { translationX: number }) => void;
+    };
+    pan.onStart();
+    pan.onUpdate({ translationX: -SHELL / 2 });
+    // Half the shell's width is half way across (half the window's would fall short).
+    expect(grabbed.current.progress!.value).toBeCloseTo(0.5);
   });
 });

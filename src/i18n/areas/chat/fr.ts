@@ -8,6 +8,7 @@ export default {
   loadFailed: 'Impossible de charger les messages.',
   messageHint: 'Appui long pour les actions, balayez vers la gauche pour répondre',
   openProfile: 'Ouvre son profil',
+  openProfileOf: 'Ouvrir le profil : {{name}}',
   jumpToUnread: 'Aller au premier message non lu',
   emojiUnavailable: 'Cet emoji n\'est plus disponible',
   videoUnplayable: 'Cette vidéo ne peut pas être lue sur cet appareil.',
@@ -16,7 +17,10 @@ export default {
   link: {
     open: 'Ouvrir le lien',
     copy: 'Copier le lien',
+    openNamed: 'Ouvrir le lien : {{link}}',
+    openImage: 'Ouvrir l\'image : {{name}}',
   },
+  copyCode: 'Copier le code',
   reactions: {
     title: 'Réactions',
     none: 'Personne à afficher.',

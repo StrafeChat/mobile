@@ -18,7 +18,7 @@ import {
   PermViewChannel,
 } from '@web/lib/spacePermissions';
 import { ME, group, member, pm, resetStores, role, space, sroom, user } from '@/data/testing/fixtures';
-import { closeView, openRoom, setSelectedSpaceId, shell } from '@/shell/state';
+import { closeView, openNav, openRoom, setSelectedSpaceId, setShellFocused, shell } from '@/shell/state';
 import { cleanEntries, isActionItem, type ActionItem, type ActionSheetEntry } from '@/ui';
 
 import * as spacesApi from '@web/api/spaces';
@@ -201,6 +201,22 @@ describe('conversation menu', () => {
     expect(roomsApi.removeRoomParticipant).toHaveBeenCalledWith('g', ME);
     expect(rooms.rooms.some((r) => r.id === 'g')).toBe(false);
     expect(shell.view().kind).toBe('empty');
+  });
+});
+
+describe('the selected conversation', () => {
+  afterEach(() => {
+    setShellFocused(false);
+  });
+
+  test('can be marked as read once the rails cover it, not while it is on screen', () => {
+    setRooms({ rooms: [pm('p', user('a'), { last_message_id: '20', last_read_message_id: '10' })], loading: false, hydrated: true });
+    setReadState({ byRoom: { p: { lastReadMessageId: '10', mentionCount: 0 } } });
+    setShellFocused(true); // SwipeShell's to keep: the shell is the screen in front
+    openRoom('p', null);
+    expect(keys(pmMenuEntries('p'))).not.toContain('mark-read');
+    openNav();
+    expect(keys(pmMenuEntries('p'))).toContain('mark-read');
   });
 });
 

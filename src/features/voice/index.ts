@@ -3,8 +3,8 @@
  * and the platform call engine (src/platform/voice).
  *
  * For the integrator:
- *   <VoiceDock style?/>   the in-call bar, placed above the shell; renders nothing when idle
- *                         or while the call's own stage is on screen.
+ *   <VoiceDock style?/>   the in-call bar, placed under the shell; renders nothing when idle
+ *                         or while the call's own stage is on screen (useVoiceDockVisible()).
  *   <VoiceHosts/>         mount once at the root (inside UiProvider): incoming-call screen,
  *                         per-user voice sheet, statistics, screen-share picker, keep-awake.
  *   route /call           src/app/(main)/call.tsx -> <CallScreen/>.
@@ -19,7 +19,7 @@
  *   <VoiceUserRow roomId spaceId userId indent?/>  a person under a voice room in the room list.
  *   openVoiceUserSheet({ userId, roomId, spaceId? })  volume / mute for me / moderation sheet.
  */
-export { VoiceDock, type VoiceDockProps } from './VoiceDock';
+export { VoiceDock, useVoiceDockVisible, type VoiceDockProps } from './VoiceDock';
 export { VoiceHosts, useCallKeepAwake } from './VoiceHosts';
 export { CallScreen, type CallScreenProps } from './CallScreen';
 export { RoomCallBanner } from './RoomCallBanner';

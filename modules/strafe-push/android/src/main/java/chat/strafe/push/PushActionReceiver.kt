@@ -7,46 +7,60 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import org.json.JSONObject
+import java.security.GeneralSecurityException
 import java.util.concurrent.Executors
 
 /**
  * The notification actions that don't open the app: **Mark as read** (`POST /rooms/:id/ack`)
  * and **Decline** (`POST /rooms/:id/call/decline`), sent natively as the account the
  * notification belongs to. The notification goes away at once; the request follows.
+ *
+ * This runs on the main thread, where anything uncaught kills the process - the open app
+ * included, when the button is pressed with Strafe on screen. So the keystore (the session
+ * token is sealed with it) is only touched on the background thread, and every step is
+ * guarded: a failed action is logged by type and dropped.
  */
 class PushActionReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     val slot = intent.getStringExtra(EXTRA_SLOT)?.takeIf { Slots.isValid(it) } ?: return
     // Only our own PendingIntents reach this receiver, but the ids still become URL paths.
     val roomId = intent.getStringExtra(EXTRA_ROOM_ID)?.takeIf { PushContent.isSnowflake(it) } ?: return
-    val config = PushStore.get(context).displayConfig()
-    val notifier = PushNotifier(context)
     when (intent.action) {
       ACTION_MARK_READ -> {
         val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID)?.takeIf { PushContent.isSnowflake(it) } ?: return
-        notifier.clearRoom(slot, roomId, config)
+        guarded { PushNotifier(context).clearRoom(slot, roomId, PushStore.get(context).displayConfig()) }
         request(context, slot, "/rooms/$roomId/ack", JSONObject().put("last_read_message_id", messageId))
       }
       ACTION_DECLINE -> {
-        notifier.cancelCall(slot, roomId)
+        guarded { PushNotifier(context).cancelCall(slot, roomId) }
         request(context, slot, "/rooms/$roomId/call/decline", null)
       }
     }
   }
 
   private fun request(context: Context, slot: String, path: String, body: JSONObject?) {
-    val store = PushStore.get(context)
-    val account = store.displayConfig().account(slot) ?: return
-    val token = store.token(slot) ?: return
     val pending = goAsync()
     executor.execute {
       try {
-        if (!PushHttp.post(account.apiBase, path, token, body)) Log.w(TAG, "notification action failed")
-      } catch (e: RuntimeException) {
-        Log.w(TAG, "notification action failed: ${e.javaClass.simpleName}")
+        guarded {
+          val store = PushStore.get(context)
+          val account = store.displayConfig().account(slot) ?: return@guarded
+          val token = store.token(slot) ?: return@guarded
+          if (!PushHttp.post(account.apiBase, path, token, body)) Log.w(TAG, "notification action failed")
+        }
       } finally {
         pending.finish()
       }
+    }
+  }
+
+  private inline fun guarded(block: () -> Unit) {
+    try {
+      block()
+    } catch (e: RuntimeException) {
+      Log.w(TAG, "notification action failed: ${e.javaClass.simpleName}")
+    } catch (e: GeneralSecurityException) {
+      Log.w(TAG, "notification action failed: ${e.javaClass.simpleName}")
     }
   }
 

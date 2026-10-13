@@ -29,4 +29,4 @@ export { AuthHosts } from './AuthHosts';
 export { LanguageButton, openLanguagePicker, changeLanguage } from './components/LanguageButton';
 export { CaptchaWebView, type CaptchaWebViewProps } from './captcha/CaptchaWebView';
 export { parseAuthLink, type AuthLink, type AuthLinkKind } from './logic/authLinks';
-export { AUTH_PATHS } from './nav';
+export { AUTH_PATHS, useLaunchAuthLink } from './nav';

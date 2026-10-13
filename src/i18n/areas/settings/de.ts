@@ -11,6 +11,7 @@ export default {
   logOutEverywhere: 'Überall abmelden',
   logOutEverywhereHint: 'Beendet alle Sitzungen dieses Kontos auf allen Geräten.',
   logOutEverywhereConfirm: 'Alle Geräte, die bei diesem Konto angemeldet sind, werden abgemeldet, auch dieses.',
+  logOutEverywhereFailed: 'Überall abmelden hat nicht geklappt. Andere Geräte sind womöglich noch angemeldet: Prüfe deine Verbindung und versuche es erneut.',
   copyFailed: 'Kopieren in die Zwischenablage nicht möglich.',
   genericError: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
   share: 'Teilen',

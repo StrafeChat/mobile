@@ -148,17 +148,41 @@ export class MemFile {
     this.copySync(dest, opts);
   }
 
-  open(): { readBytes(length: number): Uint8Array; close(): void } {
-    const data = this.node().data;
-    let offset = 0;
+  /** A handle with the native one's cursor: `offset` moves it, reads and writes advance it.
+   * Writing needs `FileMode.ReadWrite` and stays inside the file, as an in-place edit does. */
+  open(mode: string = FileMode.ReadOnly): { readBytes(length: number): Uint8Array; writeBytes(bytes: Uint8Array): void; offset: number | null; size: number | null; close(): void } {
+    const node = this.node();
+    let cursor = 0;
+    let open = true;
+    const live = () => {
+      if (!open) throw new Error('file handle is closed');
+    };
     return {
       readBytes(length: number) {
-        const out = data.slice(offset, offset + length);
-        offset += out.length;
+        live();
+        const out = node.data.slice(cursor, cursor + length);
+        cursor += out.length;
         return out;
       },
+      writeBytes(bytes: Uint8Array) {
+        live();
+        if (mode !== FileMode.ReadWrite) throw new Error(`memoryFs: handle opened '${mode}' cannot write`);
+        if (cursor + bytes.length > node.data.length) throw new Error('memoryFs: in-place write past the end of the file');
+        node.data.set(bytes, cursor);
+        cursor += bytes.length;
+        node.mtime = ++clock;
+      },
+      get offset() {
+        return cursor;
+      },
+      set offset(value: number | null) {
+        if (value != null) cursor = value;
+      },
+      get size() {
+        return node.data.length;
+      },
       close() {
-        /* nothing to release */
+        open = false;
       },
     };
   }
@@ -251,6 +275,9 @@ export const Paths = {
 };
 
 export { MemFile as File, MemDirectory as Directory };
+
+/** expo-file-system's FileMode values. */
+export const FileMode = { ReadOnly: 'r', ReadWrite: 'rw', WriteOnly: 'w', Append: 'wa', Truncate: 'wt' } as const;
 
 /** Test controls. */
 export const memoryFs = {

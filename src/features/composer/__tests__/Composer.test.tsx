@@ -1,8 +1,9 @@
 /**
  * The composer against the real web stores: autocomplete insertion and wire serialization on
  * send, typing announcements, the reply strip, edit mode (readable mentions in, wire syntax
- * out), a failed send coming back with its reason, slowmode, and the closed states (official
- * account, no encryption engine).
+ * out; ended by a deletion, not by a jump), a failed send coming back with its reason,
+ * slowmode, the closed states (official account, no encryption engine), and a pick recovered
+ * after Android restarted the app going to the room it was for.
  */
 import '@/ui/__tests__/setup';
 import '@/data/testing/webMocks';
@@ -79,6 +80,7 @@ jest.mock('@/platform/crypto/host', () => {
 });
 
 type MockItem = { localId: string; file: { uri: string; name: string; type: string; size: number }; previewUrl?: string };
+const mockRecover = jest.fn(async (): Promise<unknown> => null);
 
 jest.mock('@/platform/media', () => {
   const { createSignal } = require('solid-js');
@@ -114,7 +116,7 @@ jest.mock('@/platform/media', () => {
     createAttachmentDraft,
     asWebPendingAttachments: (l: unknown) => l,
     isVoiceRecordingSupported: () => true,
-    recoverPendingPick: async () => null,
+    recoverPendingPick: () => mockRecover(),
     startVoiceRecording: async () => {
       throw new VoiceRecorderError('denied');
     },
@@ -141,6 +143,7 @@ beforeEach(() => {
   sendMessage.mockClear();
   editMessage.mockClear();
   sendTyping.mockClear();
+  mockRecover.mockReset().mockResolvedValue(null);
   setRooms({
     rooms: [
       pm('r', user('1', { username: 'alice', display_name: 'Alice' })),
@@ -151,7 +154,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const id of ['r', 'o']) {
+  for (const id of ['r', 'o', 'alice']) {
     forgetComposer(id);
     discardAttachmentQueue(id);
   }
@@ -218,6 +221,67 @@ describe('Composer', () => {
     await fireEvent.press(screen.getByTestId('composer-send'));
     expect(editMessage).not.toHaveBeenCalled();
     expect(composerFor('r').editing).toBeNull();
+  });
+
+  test('an edit survives the loaded window being replaced, and saves once the message is back', async () => {
+    const messagesMock = jest.requireMock<{ jumpToMessage: jest.Mock }>('@web/stores/messages');
+    await render(<Composer roomId="r" spaceId={null} />);
+    await act(async () => startEdit('r', '5'));
+    await fireEvent.changeText(input(), 'hey @alice, edited');
+    // A jump to an older message (a reply's original, a pin) swaps the window for one around it.
+    await act(async () => {
+      setMessages('byRoom', 'r', [message('r', '1', '1'), message('r', '2', '1')]);
+      setMessages('hasMoreNewer', 'r', true);
+    });
+    expect(composerFor('r').editing).toBe('5');
+    expect(input().props.value).toBe('hey @alice, edited');
+    // Saving brings the message back first (an encrypted edit carries its attachments over).
+    messagesMock.jumpToMessage.mockImplementation(async () => {
+      setMessages('byRoom', 'r', [message('r', '5', ME, { plaintext: 'hey <@1>' })]);
+    });
+    await fireEvent.press(screen.getByTestId('composer-send'));
+    expect(messagesMock.jumpToMessage).toHaveBeenCalledWith('r', '5');
+    expect(editMessage).toHaveBeenCalledWith('r', '5', 'hey <@1>, edited');
+    expect(screen.queryByTestId('composer-edit-strip')).toBeNull();
+  });
+
+  test('a save that cannot bring the message back saves nothing', async () => {
+    await render(<Composer roomId="r" spaceId={null} />);
+    await act(async () => startEdit('r', '5'));
+    await fireEvent.changeText(input(), 'changed');
+    await act(async () => {
+      setMessages('byRoom', 'r', [message('r', '1', '1')]);
+      setMessages('hasMoreNewer', 'r', true);
+    });
+    await fireEvent.press(screen.getByTestId('composer-send'));
+    expect(editMessage).not.toHaveBeenCalled();
+    expect(composerFor('r').editing).toBe('5');
+    expect(input().props.value).toBe('changed');
+  });
+
+  test('deleting the message being edited ends the edit', async () => {
+    await render(<Composer roomId="r" spaceId={null} />);
+    await type('my draft');
+    await act(async () => startEdit('r', '5'));
+    await fireEvent.changeText(input(), 'never mind');
+    // Gone from between two loaded messages: deleted, not scrolled away.
+    await act(async () => {
+      setMessages('byRoom', 'r', [message('r', '4', '1'), message('r', '6', '1', { plaintext: 'hello there' })]);
+    });
+    expect(composerFor('r').editing).toBeNull();
+    expect(input().props.value).toBe('my draft');
+  });
+
+  test('a pick recovered after Android restarted the app goes to the room it was picked for', async () => {
+    const { attachmentQueueFor } = require('../attachmentQueues') as typeof import('../attachmentQueues');
+    const photo = { uri: 'file:///cache/p.jpg', name: 'p.jpg', type: 'image/jpeg', size: 10 };
+    mockRecover.mockResolvedValue({ roomId: 'alice', result: { status: 'picked', files: [photo] } });
+    await render(<Composer roomId="r" spaceId={null} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(attachmentQueueFor('alice').items().map((i) => i.file.uri)).toEqual([photo.uri]);
+    expect(attachmentQueueFor('r').items()).toEqual([]);
   });
 
   test('a failed send restores the text and reply and says why', async () => {

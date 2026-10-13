@@ -7,9 +7,16 @@
  * avatar or name for the profile (long-press them for the user menu), tap a continuation to
  * show its time (the web shows it on hover). A mention of the viewer tints the row with a
  * primary bar; a pending send is muted; a jump flashes the row it lands on.
+ *
+ * Screen readers: the header and the text are one element ("name, time: text") carrying the
+ * row's actions - the sheet, reply, the author's profile, and whatever can be tapped inside the
+ * text, which VoiceOver cannot enter: links, the images, invite cards and code blocks under or
+ * among them, mentions, rooms (messageA11y.ts). The row itself is not an element: on iOS that
+ * would hide everything inside it from VoiceOver, so the avatar, the reply line, attachments
+ * (play, open, save), the thread strip and the reactions each stay their own.
  */
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text as RNText, View, type AccessibilityActionEvent } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text as RNText, View, type AccessibilityActionEvent, type AccessibilityActionInfo } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming, cancelAnimation } from 'react-native-reanimated';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
@@ -35,6 +42,7 @@ import { SwipeToReply } from './SwipeToReply';
 import { swipeToReplyEnabled } from '../preferences';
 import { ThreadFooter } from './ThreadFooter';
 import { useListContext } from './listContext';
+import { activateBodyTarget, bodyActionIndex, bodyActionName, bodyTargets } from './messageA11y';
 import { sameMessageItem } from '../list/listLogic';
 
 type MessageItem = Extract<MessageListItem, { kind: 'message' }>;
@@ -131,17 +139,47 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const bodyText = getMessageBodyText(msg);
   // The participant pool walks the room's loaded messages: once per text, not per render.
   const preview = useMemo(() => messagePreviewText(bodyText, roomParticipantPool(roomId), auth.user?.id, 500), [bodyText, roomId]);
-  // Screen readers can neither long-press a row reliably nor swipe it: both as actions.
-  const a11yActions = useMemo(
+  // Screen readers can neither long-press a row reliably nor swipe it: both as actions. The
+  // author's profile too where no avatar is there to reach it (continuations, compact mode),
+  // and what can be tapped inside the text, which is one element with the header.
+  const authorAction = !item.showHeader || compact;
+  const rowActions = useMemo<AccessibilityActionInfo[]>(
     () => [
       { name: 'longpress', label: t('mobile.ui.showActions') },
       ...(canReply ? [{ name: 'reply', label: t('messages.actions.reply') }] : []),
+      ...(authorAction ? [{ name: 'profile', label: t('mobile.chat.openProfileOf', { name }) }] : []),
     ],
-    [canReply],
+    [canReply, authorAction, name],
+  );
+  // Read once per text, like the preview: the names go stale only until the text changes. The
+  // row's own labels are passed so that no target reads like one of them (see messageA11y.ts).
+  const targets = useMemo(
+    () => bodyTargets(bodyText, { roomId, spaceId }, msg.sender_id, rowActions.map((a) => a.label ?? '')),
+    [bodyText, roomId, spaceId, msg.sender_id, rowActions],
+  );
+  const a11yActions = useMemo<AccessibilityActionInfo[]>(
+    () => [
+      // TalkBack's double-tap is ACTION_CLICK, which React Native hands over as the 'activate'
+      // action. This element is not clickable otherwise, and Android would then deliver the
+      // double-tap as a touch at the element's centre - often a link in the text. It opens the
+      // sheet, as VoiceOver's does (onAccessibilityTap below). Android only: on iOS it would be
+      // one more custom action in the rotor (MicButton has the same rule).
+      ...(Platform.OS === 'android' ? [{ name: 'activate', label: t('mobile.ui.showActions') }] : []),
+      ...rowActions,
+      ...targets.map((target, i) => ({ name: bodyActionName(i), label: target.label })),
+    ],
+    [rowActions, targets],
   );
   const onA11yAction = (e: AccessibilityActionEvent) => {
-    if (e.nativeEvent.actionName === 'longpress') openActions();
-    else if (e.nativeEvent.actionName === 'reply') reply();
+    const action = e.nativeEvent.actionName;
+    if (action === 'activate' || action === 'longpress') openActions();
+    else if (action === 'reply') reply();
+    else if (action === 'profile') openProfile();
+    else {
+      const i = bodyActionIndex(action);
+      const target = i === null ? undefined : targets[i];
+      if (target) activateBodyTarget(target, { roomId, spaceId });
+    }
   };
 
   const nameText = (
@@ -214,12 +252,11 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
           dismissKeyboard();
           if (!item.showHeader && !compact) setTimeFor((v) => (v === msg.id ? null : msg.id));
         }}
-        {...rowLongPress}
-        accessibilityRole="text"
-        accessibilityLabel={`${name}, ${formatMessageTimestamp(created)}: ${preview}`}
-        accessibilityHint={t('mobile.chat.messageHint')}
-        accessibilityActions={a11yActions}
-        onAccessibilityAction={onA11yAction}
+        onLongPress={rowLongPress.onLongPress}
+        delayLongPress={rowLongPress.delayLongPress}
+        // Not an element itself (see the top of the file): the message element is inside.
+        accessible={false}
+        importantForAccessibility="no"
         style={[
           styles.row,
           item.showHeader ? styles.headerRow : styles.continuation,
@@ -253,17 +290,29 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
         ) : null}
         <View style={styles.content}>
           {msg.reply_to_id ? <ReplyReference roomId={roomId} messageId={msg.id} compact={compact} /> : null}
-          {!compact && item.showHeader ? (
-            <View style={styles.header}>
-              <View style={styles.nameWrap}>{nameText}</View>
-              <BotTag bot={sender?.bot} size="sm" />
-              <OfficialTag system={sender?.system} size="sm" />
-              <Text variant="caption" numberOfLines={1} style={styles.time}>
-                {formatMessageTimestamp(created)}
-              </Text>
-            </View>
-          ) : null}
-          {body}
+          <View
+            accessible
+            accessibilityRole="text"
+            accessibilityLabel={`${name}, ${formatMessageTimestamp(created)}: ${preview}`}
+            accessibilityHint={t('mobile.chat.messageHint')}
+            accessibilityActions={a11yActions}
+            onAccessibilityAction={onA11yAction}
+            // VoiceOver's double-tap would otherwise land as a tap on whatever sits at the
+            // element's centre - often a link in the text. It opens the message sheet instead.
+            onAccessibilityTap={openActions}
+          >
+            {!compact && item.showHeader ? (
+              <View style={styles.header}>
+                <View style={styles.nameWrap}>{nameText}</View>
+                <BotTag bot={sender?.bot} size="sm" />
+                <OfficialTag system={sender?.system} size="sm" />
+                <Text variant="caption" numberOfLines={1} style={styles.time}>
+                  {formatMessageTimestamp(created)}
+                </Text>
+              </View>
+            ) : null}
+            {body}
+          </View>
           {extras}
         </View>
       </Pressable>

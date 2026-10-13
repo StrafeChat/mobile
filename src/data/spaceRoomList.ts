@@ -6,6 +6,11 @@
  * one row - not the list, not its neighbours. Row rules are SpaceChannelRow's and
  * SpaceThreadRow's: unread is 0 for the room on screen; muted rooms show the bell-slash and
  * suppress the pip, the bold name and the mention pill.
+ *
+ * "On screen" is shell/state.ts roomOnScreen, passed in by the caller as `onScreenRoomId`: not
+ * merely the selected room, which collects unread like any other while the rails or another
+ * screen cover it (its read cursor only moves while it is seen). The selected room still
+ * decides the highlight (the caller's) and which unjoined thread shows in the tree.
  */
 import { spaces } from '@web/stores/spaces';
 import type { SpaceRoom } from '@web/api/spaces';
@@ -57,14 +62,23 @@ function mentionCount(roomId: string): number {
   return readState.byRoom[roomId]?.mentionCount ?? 0;
 }
 
-/** The flattened room list (see spaceRoomTree.ts for the layout rules). */
-export function spaceRoomTree(spaceId: string, activeRoomId: string | null, withVoiceUsers: boolean): SpaceRoomTreeItem[] {
+/**
+ * The flattened room list (see spaceRoomTree.ts for the layout rules). `activeRoomId` is the
+ * selected room, `onScreenRoomId` the one on screen (left out: the selected one).
+ */
+export function spaceRoomTree(
+  spaceId: string,
+  activeRoomId: string | null,
+  withVoiceUsers: boolean,
+  onScreenRoomId?: string | null,
+): SpaceRoomTreeItem[] {
   const all = spaces.spaceRoomsBySpaceId[spaceId] ?? [];
   return buildSpaceRoomTree({
     rooms: all,
     canView: (r) => viewerCanSeeRoom(spaceId, r),
     collapsedSectionIds: collapsedSectionIds(),
     activeRoomId,
+    ...(onScreenRoomId !== undefined ? { onScreenRoomId } : {}),
     hasUnreadOrMention: (r) => mentionCount(r.id) > 0 || spaceCopyUnread(spaceId, r) > 0,
     ...(withVoiceUsers
       ? {
@@ -80,17 +94,19 @@ export function spaceRoomTree(spaceId: string, activeRoomId: string | null, with
  * getItemType). Voice occupants are rows of their own unless `withVoiceUsers` is false (then
  * render them inside the voice row with useVoiceOccupants). Re-renders when the structure
  * changes: rooms added/moved/renumbered, visibility, collapse, joined threads, voice joins -
- * and a collapsed section's dot - but not on ordinary messages.
+ * and a collapsed section's dot - but not on ordinary messages. `activeRoomId` is the selected
+ * room, `onScreenRoomId` the one on screen.
  */
 export function useSpaceRoomTree(
   spaceId: string,
   activeRoomId: string | null,
+  onScreenRoomId: string | null,
   opts: { withVoiceUsers?: boolean } = {},
 ): SpaceRoomTreeItem[] {
   const withVoice = opts.withVoiceUsers !== false;
   return useDerived(
-    `spaceTree:${spaceId}:${activeRoomId ?? ''}:${withVoice ? 1 : 0}`,
-    () => spaceRoomTree(spaceId, activeRoomId, withVoice),
+    `spaceTree:${spaceId}:${activeRoomId ?? ''}:${onScreenRoomId ?? ''}:${withVoice ? 1 : 0}`,
+    () => spaceRoomTree(spaceId, activeRoomId, withVoice, onScreenRoomId),
     deepEqual,
   );
 }
@@ -129,14 +145,14 @@ export interface ChannelRowView {
   latestMessageId: string | null;
 }
 
-export function channelRowView(spaceId: string, roomId: string, activeRoomId: string | null): ChannelRowView | undefined {
+export function channelRowView(spaceId: string, roomId: string, onScreenRoomId: string | null): ChannelRowView | undefined {
   const room = spaces.spaceRoomsBySpaceId[spaceId]?.find((r) => r.id === roomId);
   if (!room) return undefined;
   const isText = room.type === ROOM_TYPE_TEXT;
   const isVoice = room.type === ROOM_TYPE_VOICE;
   const sp = spaces.spaces.find((s) => s.id === spaceId);
   const mentions = isText ? mentionCount(room.id) : 0;
-  const unread = !isText || activeRoomId === room.id ? 0 : channelUnread(spaceId, room);
+  const unread = !isText || onScreenRoomId === room.id ? 0 : channelUnread(spaceId, room);
   const muted = isRoomMuted(room);
   const voiceCount = isVoice ? voiceStatesForRoom(room.id).length : 0;
   const userLimit = room.user_limit ?? 0;
@@ -163,10 +179,10 @@ export function channelRowView(spaceId: string, roomId: string, activeRoomId: st
 }
 
 /** One text/voice channel row. Re-renders only when what it shows changes. */
-export function useChannelRow(spaceId: string, roomId: string, activeRoomId: string | null): ChannelRowView | undefined {
+export function useChannelRow(spaceId: string, roomId: string, onScreenRoomId: string | null): ChannelRowView | undefined {
   return useDerived(
-    `channelRow:${spaceId}:${roomId}:${activeRoomId ?? ''}`,
-    () => channelRowView(spaceId, roomId, activeRoomId),
+    `channelRow:${spaceId}:${roomId}:${onScreenRoomId ?? ''}`,
+    () => channelRowView(spaceId, roomId, onScreenRoomId),
     deepEqual,
   );
 }
@@ -181,21 +197,21 @@ export interface ThreadRowView {
   mentions: number;
   /** 0 for the thread on screen. */
   unread: number;
-  /** Pip + bold name: unread or mentions, not open, not muted. */
+  /** Pip + bold name: unread or mentions, not on screen, not muted. */
   highlight: boolean;
-  /** Mention pill (hidden on the open thread). */
+  /** Mention pill (hidden on the thread on screen). */
   showMentionBadge: boolean;
   hasUnreadOrMentions: boolean;
   latestMessageId: string | null;
 }
 
-export function threadRowView(spaceId: string, roomId: string, activeRoomId: string | null): ThreadRowView | undefined {
+export function threadRowView(spaceId: string, roomId: string, onScreenRoomId: string | null): ThreadRowView | undefined {
   const room = spaces.spaceRoomsBySpaceId[spaceId]?.find((r) => r.id === roomId);
   if (!room) return undefined;
-  const active = activeRoomId === room.id;
+  const onScreen = onScreenRoomId === room.id;
   const mentions = mentionCount(room.id);
   const anyUnread = spaceCopyUnread(spaceId, room);
-  const unread = active ? 0 : anyUnread;
+  const unread = onScreen ? 0 : anyUnread;
   const muted = isRoomMuted(room);
   return {
     id: room.id,
@@ -206,18 +222,18 @@ export function threadRowView(spaceId: string, roomId: string, activeRoomId: str
     muted,
     mentions,
     unread,
-    highlight: !active && !muted && (unread > 0 || mentions > 0),
-    showMentionBadge: mentions > 0 && !active,
+    highlight: !onScreen && !muted && (unread > 0 || mentions > 0),
+    showMentionBadge: mentions > 0 && !onScreen,
     hasUnreadOrMentions: mentions > 0 || anyUnread > 0,
     latestMessageId: latestSnowflakeId(messages.byRoom[room.id], room.last_message_id),
   };
 }
 
 /** One thread row nested under its channel. */
-export function useThreadRow(spaceId: string, roomId: string, activeRoomId: string | null): ThreadRowView | undefined {
+export function useThreadRow(spaceId: string, roomId: string, onScreenRoomId: string | null): ThreadRowView | undefined {
   return useDerived(
-    `threadRow:${spaceId}:${roomId}:${activeRoomId ?? ''}`,
-    () => threadRowView(spaceId, roomId, activeRoomId),
+    `threadRow:${spaceId}:${roomId}:${onScreenRoomId ?? ''}`,
+    () => threadRowView(spaceId, roomId, onScreenRoomId),
     deepEqual,
   );
 }
@@ -225,7 +241,7 @@ export function useThreadRow(spaceId: string, roomId: string, activeRoomId: stri
 export interface SectionRowView {
   id: string;
   name: string;
-  /** The long-press sheet's Mark as read: a text child (not the open one) is unread or mentioned. */
+  /** The long-press sheet's Mark as read: a text child (not the one on screen) is unread or mentioned. */
   hasUnread: boolean;
   /** Mute toggles the whole section: "Mute section" while any child is unmuted. */
   anyUnmuted: boolean;
@@ -234,7 +250,7 @@ export interface SectionRowView {
   childIds: string[];
 }
 
-export function sectionRowView(spaceId: string, sectionId: string, activeRoomId: string | null): SectionRowView | undefined {
+export function sectionRowView(spaceId: string, sectionId: string, onScreenRoomId: string | null): SectionRowView | undefined {
   const all = spaces.spaceRoomsBySpaceId[spaceId] ?? [];
   const section = all.find((r) => r.id === sectionId && r.type === ROOM_TYPE_SECTION);
   if (!section) return undefined;
@@ -244,7 +260,7 @@ export function sectionRowView(spaceId: string, sectionId: string, activeRoomId:
     id: section.id,
     name: section.name ?? '',
     hasUnread: textKids.some(
-      (r) => r.id !== activeRoomId && (mentionCount(r.id) > 0 || spaceCopyUnread(spaceId, r) > 0),
+      (r) => r.id !== onScreenRoomId && (mentionCount(r.id) > 0 || spaceCopyUnread(spaceId, r) > 0),
     ),
     anyUnmuted: kids.some((r) => !isRoomMuted(r)),
     markReadTargets: textKids
@@ -255,10 +271,10 @@ export function sectionRowView(spaceId: string, sectionId: string, activeRoomId:
 }
 
 /** A section header's long-press facts (its collapsed state and dot come with the tree). */
-export function useSectionRow(spaceId: string, sectionId: string, activeRoomId: string | null): SectionRowView | undefined {
+export function useSectionRow(spaceId: string, sectionId: string, onScreenRoomId: string | null): SectionRowView | undefined {
   return useDerived(
-    `sectionRow:${spaceId}:${sectionId}:${activeRoomId ?? ''}`,
-    () => sectionRowView(spaceId, sectionId, activeRoomId),
+    `sectionRow:${spaceId}:${sectionId}:${onScreenRoomId ?? ''}`,
+    () => sectionRowView(spaceId, sectionId, onScreenRoomId),
     deepEqual,
   );
 }
