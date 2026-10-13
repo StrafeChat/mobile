@@ -21,10 +21,13 @@ import { message, pm, resetStores, space, sroom, user } from '@/data/testing/fix
 import chatEn from '@/i18n/areas/chat/en';
 import { ListContext, type ListContextValue } from '../listContext';
 
-// The app's window.location shim (the instance's web origin), which invite links are read against.
+// The app's window.location shim (the instance's web origin), which invite links are read
+// against: only a link to this instance's host has an invite card.
 const g = globalThis as unknown as { window?: { location?: unknown } };
 g.window = g.window ?? (globalThis as never);
-if (!g.window!.location) g.window!.location = { origin: 'https://chat.example', pathname: '/', search: '', href: 'https://chat.example/' };
+if (!g.window!.location) {
+  g.window!.location = { origin: 'https://chat.example', host: 'chat.example', pathname: '/', search: '', href: 'https://chat.example/' };
+}
 
 // The chat area's own strings, so assertions read as users hear them.
 i18next.addResourceBundle('en', 'translation', { mobile: { chat: chatEn } }, true, true);
@@ -167,7 +170,7 @@ describe('message row accessibility', () => {
   test('an image, an invite card and a code block in the text do what a tap on them does', async () => {
     const code = 'const a = 1;';
     setMessages('byRoom', 'r', [
-      message('r', '1', '7', { plaintext: `look https://cdn.example/cat.png and https://other.example/invite/abc123\n\`\`\`\n${code}\n\`\`\`\n\`\`\`\nmore\n\`\`\`` }),
+      message('r', '1', '7', { plaintext: `look https://cdn.example/cat.png and https://chat.example/invite/abc123\n\`\`\`\n${code}\n\`\`\`\n\`\`\`\nmore\n\`\`\`` }),
     ]);
     await row('1');
     const el = messageElement();
@@ -176,12 +179,27 @@ describe('message row accessibility', () => {
     // The viewer, as a tap on the picture - not the browser.
     await run('body:0');
     expect(router.push).toHaveBeenLastCalledWith('/media');
-    // The invite page in the app (the card's Join), even for another instance's link.
+    // The invite page in the app (the card's Join).
     await run('body:1');
     expect(router.push).toHaveBeenLastCalledWith({ pathname: '/invite/[code]', params: { code: 'abc123' } });
     expect(externalLink.requestOpenExternalLink).not.toHaveBeenCalled();
     await run('body:2');
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith(code);
+  });
+
+  test("another site's /invite/ link is an ordinary link, as it is to a tap: no card, no lookup here", async () => {
+    // Another instance's invite (or anyone's /invite/<code>, discord.com's say) names a code
+    // this instance never issued; the web reads only this instance's links as invites, so
+    // the row has no card for it and the action opens the page, through the link guard.
+    setMessages('byRoom', 'r', [message('r', '1', '7', { plaintext: 'https://other.example/invite/abc123' })]);
+    await row('1');
+    const el = messageElement();
+    expect(actionLabels(el)).toEqual(['Show actions', 'Reply', 'Open link: https://other.example/invite/abc123']);
+    await act(async () => {
+      fireEvent(el, 'accessibilityAction', { nativeEvent: { actionName: 'body:0' } });
+    });
+    expect(externalLink.requestOpenExternalLink).toHaveBeenCalledWith('https://other.example/invite/abc123');
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   test('no two actions read alike: VoiceOver would run the first of them for both', async () => {

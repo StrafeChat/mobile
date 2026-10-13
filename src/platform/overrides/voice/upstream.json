@@ -1,9 +1,9 @@
 {
-  "comment": "sha256 of the web files the voice overrides were written against (web submodule 943b13639ac7). When check-drift fails: diff the web file against the commit above, port the change into the override (stores/voice.ts keeps its M1-M9 list), then update the hash here.",
+  "comment": "sha256 of the web files the voice overrides were written against (web submodule e31323f8397c). When check-drift fails: diff the web file against the commit above, port the change into the override (stores/voice.ts keeps its M1-M9 list), then update the hash here.",
   "files": {
-    "stores/voice.ts": "e160147d3e20de759dd9cf25dbcc77e19121926808636d57cdbdc4269c2c8746",
+    "stores/voice.ts": "49bad8e974f5f9de3afc29e7f6ffc67e3e2e85838d897b7cbf471acc5d36e3fb",
     "lib/voice/e2ee.ts": "8dfaec7812cc4f1b0946dc4dc4e1c37ce4864e50345a76b0187fa28258c38560",
-    "lib/voice/micPipeline.ts": "a56e5ab35d9a886d0965b02620a02e63b00d8493c27f2a5bc4e99a355a8c09f0",
+    "lib/voice/micPipeline.ts": "b79e13fc8c1bc9fa4e21b6084ccc4b8ed8f6f7c99f48002820346d406758e7f6",
     "lib/voice/ringtone.ts": "8ded105745d811da705c6fd38dcd4154c98c6a9d4eed1e6ad417f491d2b30424",
     "lib/voice/rnnoise.ts": "7e5eb662fc3891e8a2facfe941197fcaaa039bb759aefe6fad47aee8ccc70ce9"
   }

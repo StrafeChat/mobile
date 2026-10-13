@@ -5,12 +5,15 @@
  * Same exports as the desktop module; window chrome, autostart and Discord presence have no
  * meaning on a phone and are inert.
  */
+import * as Application from 'expo-application';
 import * as Notifications from 'expo-notifications';
 import * as WebBrowser from 'expo-web-browser';
 import { Linking } from 'react-native';
 import { router } from 'expo-router';
 import { reloadApp } from '../../reload';
 import { showLocalNotification } from '../../notifications';
+
+export type { ScreenSource } from '@web-original/desktop/electronBridge';
 
 // ---- window ----------------------------------------------------------------------------------
 
@@ -171,4 +174,20 @@ export function setDiscordPresence(_presence: DiscordPresence): Promise<void> {
 
 export function discordPresenceAvailable(): Promise<boolean> {
   return Promise.resolve(false);
+}
+
+// ---- app and screen share --------------------------------------------------------------------
+
+/** The installed app's version, as the desktop shells report theirs. */
+export function desktopAppVersion(): Promise<string> {
+  return Promise.resolve(Application.nativeApplicationVersion ?? '0.0.0');
+}
+
+/** No app-drawn screen picker on a phone: the system's capture prompt chooses. */
+export function screenShareSources(): Promise<null> {
+  return Promise.resolve(null);
+}
+
+export function chooseScreenShareSource(_id: string): Promise<void> {
+  return Promise.resolve();
 }

@@ -89,7 +89,16 @@ function mockInstanceStore() {
     email: { enabled: true, verificationRequired: false },
     instanceAdmin: false,
   });
-  return { instance, setInstance, loadInstanceInfo: jest.fn(async () => undefined), resetInstanceInfo: jest.fn() };
+  // A signal, as in the real wrapper, so a test can say GET / failed and the form re-renders.
+  const [failed, setFailed] = require('solid-js').createSignal(false);
+  return {
+    instance,
+    setInstance,
+    loadInstanceInfo: jest.fn(async () => undefined),
+    resetInstanceInfo: jest.fn(),
+    instanceInfoFailed: () => failed(),
+    mockSetInstanceInfoFailed: (v: boolean) => setFailed(v),
+  };
 }
 // '@web/stores/instance' resolves to this same override file (jest/resolver.js), so this one
 // mock serves both import paths.

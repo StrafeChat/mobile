@@ -64,7 +64,6 @@ export interface InstanceInfo {
 export function useInstance(): InstanceInfo {
   return useSolid(() => ({
     loaded: instance.loaded,
-    // Not instance.version: it holds a sentinel while GET / is being retried.
     version: instanceVersion(),
     federationEnabled: instance.federationEnabled,
     domain: instance.domain,

@@ -8,8 +8,8 @@
  * voice settings. Push-to-talk mode adds a large hold-to-talk button above the row.
  *
  * Gates are the web's: mute is locked under a server mute or without Speak; deafen under a
- * server deafen; camera and screen share need the Video permission; screen share needs a
- * platform that can publish one.
+ * server deafen; camera and screen share need the Video permission and wait for the call's
+ * frame encryption (videoReady); screen share needs a platform that can publish one.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
@@ -24,6 +24,7 @@ import { chooseAudioRoute, currentRoute, pickedRouteStore, pressSpeakerButton, r
 import type { CallSessionView } from './hooks';
 import { useCallSettings } from './hooks';
 import { toggleCameraFromUi } from './join';
+import { videoReady } from './model';
 import { openScreenShareSheet, toggleVoiceStats } from './sheets';
 
 export type ControlTone = 'idle' | 'on' | 'off';
@@ -172,6 +173,7 @@ export function CallControls({ roomId, kind, session: s, perms, absentIds, onLea
   const deafened = s.selfDeaf || s.serverDeaf;
   const route = currentRoute(settings.speakerphone, picked);
   const canShare = screenShareSupported();
+  const videoOk = perms.video && videoReady(s);
 
   const moreEntries = (): ActionSheetEntry[] => [
     s.camera && {
@@ -184,7 +186,7 @@ export function CallControls({ roomId, kind, session: s, perms, absentIds, onLea
       key: 'screen',
       label: s.screen ? t('voice.stopSharing') : t('voice.shareScreen'),
       icon: 'display',
-      disabled: !perms.video,
+      disabled: !videoOk,
       onSelect: () => (s.screen ? setScreenShareEnabled(false) : openScreenShareSheet()),
     },
     {
@@ -228,7 +230,7 @@ export function CallControls({ roomId, kind, session: s, perms, absentIds, onLea
           label={s.camera ? t('voice.cameraOff') : t('voice.cameraOn')}
           tone={s.camera ? 'on' : 'idle'}
           selected={s.camera}
-          disabled={!perms.video}
+          disabled={!videoOk}
           onPress={() => {
             haptics.toggle(!s.camera);
             void toggleCameraFromUi();

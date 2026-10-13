@@ -51,13 +51,16 @@ describe('loadInstanceInfo (mobile)', () => {
   test('signed out, a failure resolves with the defaults (the forms render) and is not sticky', async () => {
     const m = load(flakyIndex(1));
     await m.loadInstanceInfo();
-    expect(m.instance.loaded).toBe(true);
+    // Resolved, so the sign-in forms render - with the defaults, but never as `loaded`: that
+    // means the instance answered, and the E2EE identity is named from the answer. (This used
+    // to expect `loaded` here, as the web store then set it on a failure - the very thing the
+    // web fixed: a device provisioned under the no-federation name.)
+    expect(m.instance.loaded).toBe(false);
     expect(m.instance.domain).toBe('');
     expect(m.instance.version).toBe('');
     expect(m.instanceInfoFailed()).toBe(true);
-    // The web store would never ask again; here the next call does.
     await m.loadInstanceInfo();
-    expect(m.instance.domain).toBe('chat.example.org');
+    expect(m.instance).toMatchObject({ loaded: true, domain: 'chat.example.org' });
     expect(m.instanceInfoFailed()).toBe(false);
   });
 
@@ -73,6 +76,8 @@ describe('loadInstanceInfo (mobile)', () => {
     // with the pre-federation default.
     expect(resolved).toBe(false);
     expect(m.instance.domain).toBe('');
+    // Nor may anything that checks rather than waits take the defaults for the answer.
+    expect(m.instance.loaded).toBe(false);
     expect(m.instanceInfoFailed()).toBe(true);
     await jest.advanceTimersByTimeAsync(2_000);
     expect(resolved).toBe(false);
@@ -105,7 +110,11 @@ describe('loadInstanceInfo (mobile)', () => {
     m.retryInstanceInfoNow();
     await flush(10);
     expect(m.instanceInfoFailed()).toBe(false);
-    expect(m.instance.domain).toBe('chat.example.org');
+    expect(m.instance).toMatchObject({ loaded: true, domain: 'chat.example.org' });
+    // Once it has answered there is nothing to retry.
+    m.retryInstanceInfoNow();
+    await flush(10);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   test('resetInstanceInfo makes the next load ask the newly chosen instance', async () => {
@@ -132,7 +141,6 @@ describe('loadInstanceInfo (mobile)', () => {
     const m = load(fetch);
     const first = m.loadInstanceInfo();
     await flush(10);
-    // The store holds the in-flight sentinel now; what the screens show must not.
     expect(m.instanceVersion()).toBe('');
     // The person picked another instance while the first one's GET / was still out.
     m.resetInstanceInfo();
@@ -146,5 +154,33 @@ describe('loadInstanceInfo (mobile)', () => {
     expect(m.instance).toMatchObject({ domain: 'chat.example.org', inviteOnly: false, loaded: true });
     expect(m.instanceVersion()).toBe('1.2.3');
     expect(m.instanceInfoFailed()).toBe(false);
+  });
+
+  test("the previous instance's late answer is not taken for the new one's after it failed", async () => {
+    const OLD = { strafe: { version: '0.9' }, federation: { enabled: true, domain: 'old.example' }, features: { invite_only: { enabled: true } } };
+    let answerOld: (r: ReturnType<typeof reply>) => void = () => undefined;
+    let calls = 0;
+    const fetch = routeFetch({
+      '/': () => {
+        calls += 1;
+        if (calls === 1) return new Promise((resolve) => (answerOld = resolve));
+        throw new TypeError('Network request failed');
+      },
+    });
+    const m = load(fetch);
+    const first = m.loadInstanceInfo();
+    await flush(10);
+    m.resetInstanceInfo();
+    await m.loadInstanceInfo();
+    expect(m.instanceInfoFailed()).toBe(true);
+    answerOld(reply(200, OLD));
+    await first;
+    await flush(20);
+    // The old answer set `loaded` in the web store; it is not this instance's, so it goes.
+    expect(m.instance).toMatchObject({ loaded: false, domain: '', federationEnabled: false, inviteOnly: false, version: '' });
+    expect(m.instanceInfoFailed()).toBe(true);
+    // And the next call still asks.
+    await m.loadInstanceInfo();
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });

@@ -1,11 +1,11 @@
 /**
  * Overrides owned by the boot / session area (merged by ./manifest.js).
  *
- * stores/instance: the web store marks instance info "loaded" (every feature off, no
- * federation domain) when GET / fails, and never asks again. A browser tab cannot start
- * offline, so on the web that is a cosmetic gap; a phone starts offline all the time, and
- * the E2EE engine names this account's identity from that domain. The wrapper keeps the
- * web store and its parsing, and only changes what a failure means. See the file.
+ * stores/instance: when GET / fails the web store stays unloaded and resolves at once, so
+ * whatever awaited it (the E2EE engine, which names this account's identity from the
+ * instance's domain) fails until something asks again. A phone starts offline all the time;
+ * the wrapper keeps the web store and its parsing, and makes a signed-in caller wait for the
+ * answer instead, retrying as the network allows. See the file.
  */
 module.exports = {
   WEB_MODULE_OVERRIDES: {

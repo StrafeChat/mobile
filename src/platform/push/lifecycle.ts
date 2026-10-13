@@ -119,8 +119,8 @@ export function installPushLifecycle(): () => void {
     focusComposer: requestComposerFocus,
     callState: (roomId) => {
       if (voice.incoming?.roomId === roomId) return 'ringing';
-      // After a cold start READY fills voice.calls but never voice.incoming (as on the web), so
-      // a call still ringing this account is joined like an ongoing one.
+      // READY sets voice.incoming only for a call that started within the ring timeout; one
+      // still ringing this account past that, in voice.calls, is joined like an ongoing one.
       const me = auth.user?.id;
       const ringingMe = !!me && (voice.calls[roomId]?.ringing.includes(me) ?? false);
       return ringingMe || voiceStatesForRoom(roomId).length > 0 ? 'ongoing' : 'none';

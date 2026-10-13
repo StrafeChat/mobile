@@ -23,7 +23,7 @@ import { t } from '@web/i18n/t';
 import { instance } from '@web/stores/instance';
 import { useSolid } from '@/bridge/solid';
 import { finishSignIn } from '@/platform/session';
-import { loadInstanceInfo } from '@/platform/overrides/runtime/instance';
+import { instanceInfoFailed, loadInstanceInfo } from '@/platform/overrides/runtime/instance';
 import { useTheme } from '@/theme';
 import { Button, Input, Text, haptics, toast } from '@/ui';
 import { CaptchaWebView } from '../captcha/CaptchaWebView';
@@ -45,6 +45,9 @@ export function RegisterScreen() {
   const navigation = useNavigation();
   const info = useSolid(() => ({
     loaded: instance.loaded,
+    // GET / failed: the store keeps its defaults but is not `loaded` (the E2EE identity must
+    // never be named from them). The form still works, as before, and the server decides.
+    unreachable: instanceInfoFailed(),
     inviteOnly: instance.inviteOnly,
     federationEnabled: instance.federationEnabled,
     domain: instance.domain,
@@ -416,8 +419,9 @@ export function RegisterScreen() {
               size="lg"
               loading={loading}
               // Until the instance has said whether it runs a captcha or wants an invite,
-              // the form cannot know what it is missing.
-              disabled={!info.loaded || (captchaRequired && !captchaToken)}
+              // the form cannot know what it is missing - unless asking failed, when it goes
+              // ahead with the defaults and the server's answer says what is missing.
+              disabled={!(info.loaded || info.unreachable) || (captchaRequired && !captchaToken)}
               onPress={() => void create()}
               testID="register-submit"
             />

@@ -53,9 +53,12 @@ type ContextState = 'suspended' | 'running' | 'closed';
 
 /**
  * The few members of AudioContext stores/voice.ts touches. Like a real context, `resume()`
- * flips the state only once its promise settles - stores/voice.ts relies on that ordering
- * (a join resumes, then may tear the previous call down, which suspends only a context that
- * is already running).
+ * flips the state only once its promise settles. A join tears the previous call down first
+ * (which suspends a running context) and then resumes whatever the state reads, so the
+ * context the new call holds ends up running; a teardown issued after the resume could
+ * otherwise read the old state and undo it. Nothing native hangs off this object - the
+ * call's audio session follows the voice session's status (./runtime.ts) - so the state
+ * only has to stay coherent for the store and createMicPipeline below.
  */
 class CallAudioContext {
   private _state: ContextState = 'suspended';
@@ -186,6 +189,9 @@ export async function createMicPipeline(opts: MicPipelineOptions): Promise<Mobil
   try {
     stream = await media.getUserMedia({ audio: constraints, video: false });
   } catch (err) {
+    // Nothing to release. The web closes the AudioContext it made for this pipeline here
+    // (each refused microphone test used to strand one); this one never makes a context,
+    // and the processing switches above are settings for the next capture, not something held.
     throw normaliseError(err);
   }
   const track = stream.getAudioTracks()[0];

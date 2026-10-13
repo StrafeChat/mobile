@@ -96,6 +96,16 @@ describe('createVoiceAudioContext', () => {
     await ctx.close();
     await expect(ctx.resume()).rejects.toThrow();
   });
+
+  it('runs again when a join resumes it straight after the teardown of the call before', async () => {
+    // stores/voice.ts joinVoiceRoom: teardownLocal() suspends the running context, then
+    // callAudioContext() resumes without looking at the state.
+    const ctx = createVoiceAudioContext();
+    await ctx.resume();
+    if (ctx.state === 'running') void ctx.suspend();
+    await ctx.resume();
+    expect(ctx.state).toBe('running');
+  });
 });
 
 describe('createMicPipeline', () => {

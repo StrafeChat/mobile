@@ -193,6 +193,27 @@ describe('CallScreen', () => {
     expect(screen.getByText('A moderator deafened you.')).toBeTruthy();
   });
 
+  test('camera and screen share wait for the call to be encrypted, as the store does', async () => {
+    await act(async () => {
+      setVoice('byRoom', { v1: [st('me')] });
+      connect('v1', 's1', { status: 'connecting', encrypted: false });
+    });
+    await render(
+      <UiProvider>
+        <CallScreen />
+      </UiProvider>,
+    );
+    expect(screen.getByTestId('voice-camera')).toBeDisabled();
+    await fireEvent.press(screen.getByTestId('voice-more'));
+    expect(screen.getByRole('menuitem', { name: 'Share your screen' })).toBeDisabled();
+    await act(async () => closeActionSheet());
+
+    await act(async () => connect());
+    expect(screen.getByTestId('voice-camera')).toBeEnabled();
+    await fireEvent.press(screen.getByTestId('voice-more'));
+    expect(screen.getByRole('menuitem', { name: 'Share your screen' })).toBeEnabled();
+  });
+
   test('push to talk shows a hold button that transmits only while held', async () => {
     await act(async () => {
       setVoiceSettings({ inputMode: 'ptt' });
@@ -340,10 +361,12 @@ describe('VoiceHosts', () => {
     await act(async () => openVoiceUserSheet({ userId: 'b', roomId: 'v1', spaceId: 's1' }));
     expect(screen.getByLabelText('User volume')).toBeTruthy();
     expect(screen.getByText('Mute for me')).toBeTruthy();
-    expect(screen.queryByText('Server deafen')).toBeNull();
+    // Mute Members without Deafen Members: the one row, not the other.
+    expect(screen.getByText('Mute for everyone')).toBeTruthy();
+    expect(screen.queryByText('Deafen for everyone')).toBeNull();
     await fireEvent.press(screen.getByText('Mute for me'));
     expect(store.setUserLocalMuted).toHaveBeenCalledWith('b', true);
-    await fireEvent.press(screen.getByText('Server mute'));
+    await fireEvent.press(screen.getByText('Mute for everyone'));
     for (let i = 0; i < 5; i++) {
       await act(async () => {
         await Promise.resolve();
@@ -365,7 +388,7 @@ describe('VoiceHosts', () => {
   test('nobody but the owner moderates the owner; your own sheet has no volume', async () => {
     (voicePermsFor as jest.Mock).mockImplementation(() => ({ connect: true, muteMembers: true, deafenMembers: true, moveMembers: true }));
     await act(async () => {
-      setVoice('byRoom', { v1: [st('me'), st('owner')] });
+      setVoice('byRoom', { v1: [st('me'), st('owner'), st('b')] });
       connect();
     });
     await render(
@@ -373,9 +396,15 @@ describe('VoiceHosts', () => {
         <VoiceHosts />
       </UiProvider>,
     );
+    // The same permissions moderate anyone else...
+    await act(async () => openVoiceUserSheet({ userId: 'b', roomId: 'v1', spaceId: 's1' }));
+    expect(screen.getByText('Mute for everyone')).toBeTruthy();
+    expect(screen.getByText('Deafen for everyone')).toBeTruthy();
+    // ...but not the owner.
     await act(async () => openVoiceUserSheet({ userId: 'owner', roomId: 'v1', spaceId: 's1' }));
     expect(screen.getByLabelText('User volume')).toBeTruthy();
-    expect(screen.queryByText('Server mute')).toBeNull();
+    expect(screen.queryByText('Mute for everyone')).toBeNull();
+    expect(screen.queryByText('Deafen for everyone')).toBeNull();
     await act(async () => openVoiceUserSheet({ userId: 'me', roomId: 'v1', spaceId: 's1' }));
     expect(screen.queryByLabelText('User volume')).toBeNull();
     expect(screen.getByText('View profile')).toBeTruthy();

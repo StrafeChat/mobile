@@ -28,7 +28,7 @@ import { openCallScreen } from './callView';
 import { toggleCameraFromUi } from './join';
 import { PushToTalkButton } from './CallControls';
 import { useCallSession, useCallSettings, useOtherOccupants, useRoomVoicePerms } from './hooks';
-import { DOCK_MAX_AVATARS, avatarOverflow, qualityIcon, statusKey } from './model';
+import { DOCK_MAX_AVATARS, avatarOverflow, qualityIcon, statusKey, videoReady } from './model';
 import { openScreenShareSheet, openVoiceUserSheet } from './sheets';
 
 export interface VoiceDockProps {
@@ -64,6 +64,8 @@ function DockBar({ roomId, spaceId, style }: { roomId: string; spaceId: string |
   const where = spaceId ? (space?.name ?? '') : t('nav.privateMessages');
   const micOff = s.selfMute || s.selfDeaf || s.serverMute || s.suppress;
   const deafened = s.selfDeaf || s.serverDeaf;
+  // Camera and screen wait for the call's frame encryption (the store refuses them until then).
+  const videoOk = perms.video && videoReady(s);
 
   const sheetEntries = (): ActionSheetEntry[] => [
     others.length > 0 && { section: t('voice.participants', { count: others.length }) },
@@ -79,7 +81,7 @@ function DockBar({ roomId, spaceId, style }: { roomId: string; spaceId: string |
       label: s.camera ? t('voice.cameraOff') : t('voice.cameraOn'),
       icon: s.camera ? 'video' : 'video-slash',
       selected: s.camera,
-      disabled: !perms.video,
+      disabled: !videoOk,
       onSelect: () => toggleCameraFromUi(),
     },
     screenShareSupported() && {
@@ -87,7 +89,7 @@ function DockBar({ roomId, spaceId, style }: { roomId: string; spaceId: string |
       label: s.screen ? t('voice.stopSharing') : t('voice.shareScreen'),
       icon: 'display',
       selected: s.screen,
-      disabled: !perms.video,
+      disabled: !videoOk,
       onSelect: () => (s.screen ? setScreenShareEnabled(false) : openScreenShareSheet()),
     },
     { key: 'open', label: t('mobile.voice.openCall'), icon: 'up-right-and-down-left-from-center', onSelect: () => openCallScreen() },

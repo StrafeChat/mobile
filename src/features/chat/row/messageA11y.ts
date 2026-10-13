@@ -108,6 +108,8 @@ export function bodyTargets(
       if (seen.has(`l:${seg.href}`)) return;
       seen.add(`l:${seg.href}`);
       const embed = linkEmbedOf(seg);
+      // Only this instance's invite links have a card: another site's /invite/<code> names a
+      // code this instance never issued, so it is an ordinary link here, as it is to a tap.
       if (embed?.kind === 'invite') {
         add({ kind: 'invite', code: embed.code, label: t('invite.openPage') }, embed.code);
       } else if (embed?.kind === 'media' && embed.media !== 'video' && !hasRecentMediaFailure(seg.href)) {

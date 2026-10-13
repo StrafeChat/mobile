@@ -79,6 +79,25 @@ const ESTABLISHED_STORE_KEY = 'strafe_e2ee_store_device';
  * won't reuse an account created under the old @id:strafe.internal name, so the federated
  * identity gets its own scope (and a one-time migration, see getMachine).
  */
+/** The instance has not answered GET / yet (offline, restarting); nothing has been derived. */
+class InstanceInfoUnavailableError extends Error {
+  constructor() {
+    super('[e2ee] instance info unavailable - not deriving this device identity yet');
+    this.name = 'InstanceInfoUnavailableError';
+  }
+}
+
+/**
+ * The device identity is named after the instance's federation domain, so it is never derived
+ * from the defaults a failed GET / leaves in place: signed out, loadInstanceInfo resolves after
+ * a failure (the forms render), and a sign-out racing an open ends it the same way. As on the
+ * web (requireInstanceInfo), refuse instead; the next call asks again.
+ */
+async function requireInstanceInfo(): Promise<void> {
+  await loadInstanceInfo();
+  if (!instance.loaded) throw new InstanceInfoUnavailableError();
+}
+
 function identityScope(userId: string): string {
   return instance.federationEnabled && instance.domain ? `${userId}@${instance.domain}` : userId;
 }
@@ -210,7 +229,7 @@ async function getOrCreateStorePassphrase(userId: string, storeExists: boolean):
  * old device is revoked server-side (best effort). The caller reloads the app afterwards.
  */
 export async function resetLocalE2eeStore(userId: string): Promise<void> {
-  await loadInstanceInfo();
+  await requireInstanceInfo();
   openAttempt++;
   const scope = identityScope(userId);
   const oldDeviceId = readLocalDeviceId(scope);
@@ -237,7 +256,7 @@ export async function resetLocalE2eeStore(userId: string): Promise<void> {
  * user's device and forget *every* account's device id, so no id outlives its store.
  */
 export async function forgetLocalDeviceIdentities(userId: string): Promise<void> {
-  await loadInstanceInfo();
+  await requireInstanceInfo();
   openAttempt++;
   const oldDeviceId = readLocalDeviceId(identityScope(userId));
   if (oldDeviceId) {
@@ -367,7 +386,7 @@ function machineFor(userId: string): Promise<OlmMachine> {
   const promise = (async () => {
     // The engine's user id depends on whether this instance federates (its domain) - make
     // sure that's known before the first UserId is built.
-    await loadInstanceInfo();
+    await requireInstanceInfo();
     await migrateLegacyIdentity(userId);
     const scope = identityScope(userId);
     const storeName = storeNameFor(userId);
@@ -418,9 +437,11 @@ function machineFor(userId: string): Promise<OlmMachine> {
   })();
   machinePromise = promise;
   // A store that cannot be used stays cached, as on the web. A host that was down, slow or
-  // restarting says nothing about the store: forget that failure so the next call retries.
+  // restarting says nothing about the store, nor does an instance that has not answered yet:
+  // forget those failures so the next call retries.
   promise.catch((e: unknown) => {
-    if (machinePromise === promise && e instanceof Error && e.name.startsWith('CryptoHost')) machinePromise = null;
+    const transient = e instanceof InstanceInfoUnavailableError || (e instanceof Error && e.name.startsWith('CryptoHost'));
+    if (machinePromise === promise && transient) machinePromise = null;
   });
   return promise;
 }

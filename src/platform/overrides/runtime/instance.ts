@@ -1,28 +1,30 @@
 /**
  * Mobile wrapper for web/src/stores/instance.ts: the same store and exports, with one
- * behaviour changed - what a failed GET / means.
+ * behaviour changed - how long a caller waits when GET / cannot be reached.
  *
- * The web's loadInstanceInfo() asks GET / once. When that fails it still marks the store
- * `loaded` with every feature off and no federation domain, and never asks again. In a
- * browser tab that only hides a few controls until the next page load. In the app it is
- * worse, because the app starts offline as a matter of course and the E2EE engine
- * (lib/e2ee/machine.ts) awaits this very call to learn the instance's domain before it
- * names the account's identity: `@id:<domain>` on a federating instance, the legacy
- * `@id:strafe.internal` otherwise. Resolving with the defaults after a failure would open
- * (or provision) the engine under the wrong identity - a silent crypto downgrade.
+ * `instance.loaded` means "this instance has answered GET /", and nothing less: the E2EE
+ * engine names the account's identity from the answer (`@id:<domain>` on a federating
+ * instance, the legacy `@id:strafe.internal` otherwise), and the web's requireInstanceInfo
+ * (lib/e2ee/machine.ts) refuses to name one while `loaded` is false. An identity built from
+ * the defaults after a failed request opens (or provisions) a device under the wrong name - a
+ * silent crypto downgrade. The web store keeps that rule: a failure leaves `loaded` false and
+ * the next call asks again. This wrapper only ever clears `loaded`, never sets it, so the rule
+ * holds here too.
  *
- * So, here:
+ * What the web store does not do is wait. A browser tab cannot start offline; a phone does as
+ * a matter of course, and on the web a failed E2EE open just fails until something retries
+ * it. So, here:
  * - while a session exists, loadInstanceInfo() does not resolve until the instance has
  *   actually answered. It retries with backoff, and at once when the network returns or
  *   the app comes to the foreground. Anything awaiting it (the engine above all) waits
- *   rather than guessing;
- * - signed out (the sign-in forms), a failure resolves with the defaults as on the web, so
- *   the forms render. instanceInfoFailed() says so, and the next call asks again;
+ *   rather than failing;
+ * - signed out (the sign-in forms), a failure resolves as on the web, so the forms render
+ *   with the store's defaults - still not `loaded`. instanceInfoFailed() says so, and the
+ *   next call (retryInstanceInfoNow, on the network's return) asks again;
  * - a failure is never sticky: any later call retries.
  *
- * The parsing of GET / stays in the web module. To tell its success from its failure
- * without copying it, `version` is set to a sentinel before each attempt: a successful
- * answer always overwrites `version`, the failure path never touches it.
+ * The parsing of GET / stays in the web module, whose `loaded` tells its success from its
+ * failure.
  */
 import { createSignal } from 'solid-js';
 import {
@@ -34,11 +36,13 @@ import {
 
 export * from '@web-original/stores/instance';
 
-const PENDING_VERSION = '\u0000strafe:pending';
 const RETRY_BASE_MS = 2_000;
 const RETRY_MAX_MS = 60_000;
 
-/** The last attempt reached the instance (as opposed to `loaded`, which a failure also sets). */
+/**
+ * This instance's own answer is in the store. `loaded` alone can also be the answer of the
+ * instance chosen before it, landing late (see resetInstanceInfo).
+ */
 let reached = false;
 let running: Promise<void> | null = null;
 /** Cuts the current backoff short (network back, app foregrounded, an explicit retry). */
@@ -46,12 +50,9 @@ let wake: (() => void) | null = null;
 
 const [failed, setFailed] = createSignal(false);
 
-/**
- * The instance's version for display: '' while an attempt is out (the store then holds the
- * sentinel, which must never reach the screen). Reactive.
- */
+/** The instance's version for display ('' until it has answered). Reactive. */
 export function instanceVersion(): string {
-  return instance.version === PENDING_VERSION ? '' : instance.version;
+  return instance.version;
 }
 
 /** True after an attempt to read the instance failed, until one succeeds. Reactive. */
@@ -76,13 +77,13 @@ let generation = 0;
 
 /** One GET /; null when the instance was changed meanwhile (the answer is not this one's). */
 async function attemptOnce(gen: number): Promise<boolean | null> {
-  // The web function returns at once while `loaded` is set, which a failure leaves behind.
+  // The web function returns at once while `loaded` is set. Here that can only be a previous
+  // instance's late answer (loadInstanceInfo returns early once this one has answered), so
+  // it must not pass for this one's.
   setInstance('loaded', false);
-  setInstance('version', PENDING_VERSION);
   await loadInstanceInfoOnce();
   if (gen !== generation) return null;
-  const ok = instance.version !== PENDING_VERSION;
-  if (!ok) setInstance('version', '');
+  const ok = instance.loaded;
   reached = ok;
   setFailed(!ok);
   return ok;
@@ -144,7 +145,8 @@ export function retryInstanceInfoNow(): void {
     wake();
     return;
   }
-  if (!reached && instance.loaded) void loadInstanceInfo();
+  // An attempt still out is shared rather than doubled (loadInstanceInfo returns it).
+  if (failed()) void loadInstanceInfo();
 }
 
 /** Forget what was loaded (a different instance was picked); the next load asks again. */
@@ -154,14 +156,19 @@ export function resetInstanceInfo(): void {
   setFailed(false);
   resetInstanceInfoOriginal();
   // A load for the old instance is not the new one's: the next call starts its own. The old
-  // request still lands in the web store when it answers, so if the new instance had already
-  // been read by then, read it again.
+  // request still lands in the web store when it answers, `loaded` and all, so whatever it
+  // wrote is wiped once it has - it is the old instance's domain, captcha and invite rule,
+  // which neither the sign-in forms nor the engine may take for this one's. If the new
+  // instance had been read by then, read it again; a read still out lands on the clean store,
+  // and a failed one leaves it unloaded.
   const stale = running;
   running = null;
   if (stale) {
     const gen = generation;
     void stale.then(() => {
-      if (gen === generation && reached) {
+      if (gen !== generation) return;
+      resetInstanceInfoOriginal();
+      if (reached) {
         reached = false;
         void loadInstanceInfo();
       }

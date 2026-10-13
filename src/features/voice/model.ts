@@ -224,6 +224,17 @@ export function statusKey(status: string): string {
 }
 
 /**
+ * Whether the camera and screen share may be turned on yet (the web's VoiceDock and
+ * VoiceStage `videoReady`). The call controls appear the moment a join starts, but frame
+ * encryption only comes on once the call has connected: the store refuses video until then,
+ * since anything published earlier would leave unencrypted, so the buttons wait with it
+ * instead of doing nothing when pressed.
+ */
+export function videoReady(s: { status: string; encrypted: boolean }): boolean {
+  return s.status !== 'connecting' && s.encrypted;
+}
+
+/**
  * Store error keys whose web wording is about a browser ("allow it in your browser") have
  * a phone version; every other key reads as the web's.
  */

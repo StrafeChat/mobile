@@ -25,6 +25,7 @@ const instanceApi = jest.requireMock('@web/api/instance') as Record<string, jest
 const routerMod = jest.requireMock('expo-router') as { router: Record<string, jest.Mock>; mockParams: Record<string, string> };
 const instanceStore = jest.requireMock('@/platform/overrides/runtime/instance') as {
   setInstance: (...a: unknown[]) => void;
+  mockSetInstanceInfoFailed: (v: boolean) => void;
 };
 const authStore = jest.requireMock('@web/stores/auth') as { mockSetAuth: (k: string, v: unknown) => void };
 const bootMock = jest.requireMock('@/platform/boot') as { mockSetBootOverride: (s: string | null) => void };
@@ -47,6 +48,7 @@ beforeEach(() => {
   session.defaultInstanceAddress.mockReturnValue('');
   session.peekSignOutNotice.mockReturnValue(null);
   instanceStore.setInstance({ loaded: true, inviteOnly: false, email: { enabled: true, verificationRequired: false } });
+  instanceStore.mockSetInstanceInfoFailed(false);
   instanceStore.setInstance('captcha', { enabled: false, provider: '', siteKey: '', apiUrl: '' });
   authStore.mockSetAuth('token', null);
   bootMock.mockSetBootOverride(null);
@@ -304,6 +306,21 @@ describe('register', () => {
     });
     expect(api.login).toHaveBeenCalledWith({ email: 'new@example.org', password: 'long enough' });
     expect(session.finishSignIn).toHaveBeenCalled();
+  });
+
+  test('while the instance is being asked the form waits; once asking failed it goes ahead', async () => {
+    // A failed GET / leaves `loaded` false (the E2EE identity is never named from defaults),
+    // which must not lock the form for good: the server's answer says what is missing.
+    instanceStore.setInstance({ loaded: false });
+    await render(<RegisterScreen />);
+    await fillStep1();
+    await fireEvent.changeText(screen.getByTestId('register-username'), 'newbie');
+    await fireEvent.changeText(screen.getByTestId('register-password'), 'long enough');
+    expect(screen.getByTestId('register-submit').props.accessibilityState.disabled).toBe(true);
+    await act(async () => {
+      instanceStore.mockSetInstanceInfoFailed(true);
+    });
+    expect(screen.getByTestId('register-submit').props.accessibilityState.disabled).toBe(false);
   });
 
   test('an invite the server already called invalid blocks the form', async () => {

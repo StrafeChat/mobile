@@ -671,6 +671,9 @@ export async function chooseInstance(raw: string, signal?: AbortSignal): Promise
     apiUrl: found.apiUrl,
     stargateUrl: found.stargateUrl,
     ...(cdnUrl ? { cdnUrl } : {}),
+    // Where the instance's web client lives: links copied from the app (invites, profiles)
+    // and the recognition of this instance's own invite links use it.
+    ...(found.webOrigin ? { webOrigin: found.webOrigin } : {}),
   };
   setDesktopInstance(inst);
   resetInstanceInfo();

@@ -52,9 +52,11 @@ jest.mock('@web/api/devices', () => ({
 }));
 
 jest.mock('@web/stores/instance', () => ({
-  instance: { federationEnabled: false, domain: '' },
+  // An instance that has answered GET / (and does not federate), unless a test says otherwise.
+  instance: { loaded: true, federationEnabled: false, domain: '' },
   loadInstanceInfo: async () => undefined,
 }));
+const mockedInstance = (jest.requireMock('@web/stores/instance') as { instance: { loaded: boolean } }).instance;
 
 const mockRetry = jest.fn(async () => undefined);
 jest.mock('@web/stores/messages', () => ({ retryPendingDecrypts: mockRetry }));
@@ -98,6 +100,21 @@ beforeAll(async () => {
 });
 
 afterAll(() => cryptoHost.resetForTests());
+
+// First, while nothing is open yet: the device identity is named after the instance's answer,
+// so an instance that has not answered (a signed-out failure leaves the defaults in place) gets
+// no device at all, and the refusal is not cached - the next open, once it has, goes ahead.
+test('no device is provisioned or opened before the instance has answered', async () => {
+  mockedInstance.loaded = false;
+  try {
+    await expect(getMachine(USER)).rejects.toMatchObject({ name: 'InstanceInfoUnavailableError' });
+    await expect(resetLocalE2eeStore(USER)).rejects.toMatchObject({ name: 'InstanceInfoUnavailableError' });
+    expect(mockDevices.created).toBe(0);
+    expect(mockLocal.get(`strafe_e2ee_device_id:${USER}`)).toBeUndefined();
+  } finally {
+    mockedInstance.loaded = true;
+  }
+});
 
 test('provisions a device, opens its store and records both halves of the coupling', async () => {
   const machine = await getMachine(USER);

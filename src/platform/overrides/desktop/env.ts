@@ -18,3 +18,11 @@ export type DesktopPlatform = 'mac' | 'windows' | 'linux';
 export function desktopPlatform(): DesktopPlatform {
   return Platform.OS === 'ios' ? 'mac' : 'linux';
 }
+
+export type DesktopShell = 'tauri' | 'electron';
+
+/** Which desktop shell hosts the page: neither. The app is its own native client, so nothing
+ * that picks a shell's window chrome, screen picker or storage wipe applies here. */
+export function desktopShell(): DesktopShell | null {
+  return null;
+}
