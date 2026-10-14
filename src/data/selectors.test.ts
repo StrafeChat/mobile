@@ -122,6 +122,11 @@ describe('PM list and the rail under Home', () => {
     expect(roomInfo('notes')).toMatchObject({ kind: 'notes', name: 'nav.notes', callable: false });
     expect(roomInfo('g1')).toMatchObject({ kind: 'group', e2ee: true, muted: true, hasMemberList: true });
   });
+
+  test("the official account's PM is one-way: no calls", () => {
+    setRooms({ rooms: [pm('p-official', user('o', { system: true }), { last_message_id: '40' })] });
+    expect(roomInfo('p-official')).toMatchObject({ kind: 'pm', official: true, callable: false });
+  });
 });
 
 describe('space room list rows', () => {

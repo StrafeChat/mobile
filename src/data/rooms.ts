@@ -215,7 +215,8 @@ export interface RoomInfo {
   thread?: ThreadInfo;
   /** The header's member toggle exists (group PMs and space text channels/threads). */
   hasMemberList: boolean;
-  /** Calls are offered (PM or group, not Notes); still subject to instance.voiceEnabled. */
+  /** Calls are offered (PM or group, not Notes, not the official account's one-way PM); still
+   * subject to instance.voiceEnabled. */
   callable: boolean;
 }
 
@@ -285,7 +286,8 @@ export function roomInfo(roomId: string, spaceId?: string | null): RoomInfo | un
     slowmodeSeconds: 0,
     userLimit: 0,
     hasMemberList: r.type === ROOM_TYPE_GROUP,
-    callable: (r.type === ROOM_TYPE_PM || r.type === ROOM_TYPE_GROUP) && !!uid && !notes,
+    // Nobody answers in the official account's PM (the server refuses that call too).
+    callable: (r.type === ROOM_TYPE_PM || r.type === ROOM_TYPE_GROUP) && !!uid && !notes && other?.system !== true,
   };
 }
 
