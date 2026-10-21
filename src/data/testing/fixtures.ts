@@ -14,8 +14,9 @@ import { setNewHeaderDismissed } from '@web/stores/newHeaderDismissed';
 import { setMessages, type DecryptedMessage } from '@web/stores/messages';
 import { setVoice } from '@web/stores/voice';
 import type { Room, RoomParticipant } from '@web/api/rooms';
-import type { Space, SpaceMember, SpaceRole, SpaceRoom } from '@web/api/spaces';
+import type { Space, SpaceRole, SpaceRoom } from '@web/api/spaces';
 import type { VoiceState } from '@web/api/voice';
+import type { MemberWithSpaceProfile } from '../spaceProfileCompat';
 
 export const ME = '100';
 
@@ -114,7 +115,8 @@ export function sroom(id: string, type: number, extra: Partial<SpaceRoom> = {}):
   };
 }
 
-export function member(id: string, roles: string[] = [], extra: Partial<SpaceMember> = {}): SpaceMember {
+/** A space member; `extra` may carry their space profile (nick, space_avatar...). */
+export function member(id: string, roles: string[] = [], extra: Partial<MemberWithSpaceProfile> = {}): MemberWithSpaceProfile {
   return { ...user(id), roles, joined_at: '2026-01-01T00:00:00.000Z', ...extra };
 }
 

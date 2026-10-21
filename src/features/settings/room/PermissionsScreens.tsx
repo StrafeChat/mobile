@@ -7,6 +7,9 @@
  *
  * Manage Roles edits overrides and privacy; Manage Rooms toggles sync (the server materialises
  * or clears the channel's overrides and the gateway updates the store).
+ *
+ * Members are named by their space profile here (nickname, space avatar) with the handle, and
+ * the picker finds them by nickname, display name or username.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -22,6 +25,7 @@ import {
 } from '@web/api/spaces';
 import { applyRoomRoleOverride, applyRoomUserOverride, refreshSpaceRooms, removeRoomRoleOverride, removeRoomUserOverride } from '@web/stores/spaces';
 import { formatHandle } from '@web/stores/instance';
+import { resolveProfile, type MemberWithSpaceProfile } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, Button, ListSection, SearchInput, Sheet, SheetFlatList, Text, Touchable, showActionSheet } from '@/ui';
 import { intToHex } from '../color';
@@ -33,6 +37,20 @@ import { everyoneRoleId, isEveryone } from '../space/roleLogic';
 import { isChannelInSection, isPrivateSection, isSyncLocked, overrideCounts, overrideRowsFor, privateSectionChange } from './overrideLogic';
 import { RoomPage } from './RoomPage';
 import { ROOM_TYPE_SECTION, type RoomSettingsData } from './useRoomSettings';
+
+/** A member as these screens name them: their space profile (the nickname, the space avatar). */
+function profileOf(m: SpaceMember) {
+  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+}
+
+/** Members not yet overridden whose nickname, display name or username contains the query (first 100). */
+export function pickableMembers(members: readonly SpaceMember[], exclude: ReadonlySet<string>, query: string): SpaceMember[] {
+  const q = query.trim().toLowerCase();
+  return members
+    .filter((m) => !exclude.has(m.id))
+    .filter((m) => !q || [(m as MemberWithSpaceProfile).nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q)))
+    .slice(0, 100);
+}
 
 function MemberPickerSheet({
   open,
@@ -51,13 +69,7 @@ function MemberPickerSheet({
   useEffect(() => {
     if (open) setQuery('');
   }, [open]);
-  const list = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return members
-      .filter((m) => !exclude.has(m.id))
-      .filter((m) => !q || (m.display_name || '').toLowerCase().includes(q) || (m.username || '').toLowerCase().includes(q))
-      .slice(0, 100);
-  }, [members, exclude, query]);
+  const list = useMemo(() => pickableMembers(members, exclude, query), [members, exclude, query]);
   return (
     <Sheet open={open} onClose={onClose} title={t('mobile.settings.addMemberOverride')} icon="user" closeButton snapPoints={['80%']} contentStyle={{ flex: 1 }}>
       <View style={{ flex: 1, gap: 8 }}>
@@ -66,22 +78,25 @@ function MemberPickerSheet({
           data={list}
           keyExtractor={(m: SpaceMember) => m.id}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item }: { item: SpaceMember }) => (
-            <Touchable
-              onPress={() => onPick(item)}
-              accessibilityRole="button"
-              accessibilityLabel={item.display_name || item.username}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingVertical: 6 }}
-            >
-              <Avatar uri={item.avatar} name={item.display_name || item.username} size="md" />
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1}>{item.display_name || item.username}</Text>
-                <Text variant="caption" numberOfLines={1}>
-                  {formatHandle(item)}
-                </Text>
-              </View>
-            </Touchable>
-          )}
+          renderItem={({ item }: { item: SpaceMember }) => {
+            const view = profileOf(item);
+            return (
+              <Touchable
+                onPress={() => onPick(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`${view.name}, ${formatHandle(item)}`}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingVertical: 6 }}
+              >
+                <Avatar uri={view.avatar} name={view.name} size="md" />
+                <View style={{ flex: 1 }}>
+                  <Text numberOfLines={1}>{view.name}</Text>
+                  <Text variant="caption" numberOfLines={1}>
+                    {formatHandle(item)}
+                  </Text>
+                </View>
+              </Touchable>
+            );
+          }}
         />
       </View>
     </Sheet>
@@ -212,16 +227,19 @@ function Permissions({ data, setError }: { data: RoomSettingsData; setError: (m:
 
       <ListSection title={t('mobile.settings.memberOverrides')}>
         {userOverrides.length === 0 ? <SettingItem title={t('mobile.settings.noOverrides')} /> : null}
-        {userOverrides.map(({ o, member }) => (
-          <SettingItem
-            key={o.user_id}
-            leading={<Avatar uri={member?.avatar} name={member?.display_name || member?.username || o.user_id} size="sm" />}
-            title={member?.display_name || member?.username || o.user_id}
-            description={summary(o)}
-            chevron
-            onPress={() => openEditor({ kind: 'user', id: o.user_id })}
-          />
-        ))}
+        {userOverrides.map(({ o, member }) => {
+          const view = member ? profileOf(member) : undefined;
+          return (
+            <SettingItem
+              key={o.user_id}
+              leading={<Avatar uri={view?.avatar} name={view?.name ?? o.user_id} size="sm" />}
+              title={view?.name ?? o.user_id}
+              description={summary(o)}
+              chevron
+              onPress={() => openEditor({ kind: 'user', id: o.user_id })}
+            />
+          );
+        })}
         {data.canManageRoles && !locked ? <SettingItem icon="plus" title={t('mobile.settings.addMemberOverride')} onPress={() => setPickMember(true)} testID="room-add-member-override" /> : null}
       </ListSection>
       <Note>{t('roomSettings.pages.overrides.description', { room: room.name })}</Note>
@@ -268,7 +286,8 @@ function OverrideEditor({ data, target, setError }: { data: RoomSettingsData; ta
 
   const role = target.kind === 'role' ? data.roles.find((r) => r.id === target.id) : undefined;
   const member = target.kind === 'user' ? data.members.find((m) => m.id === target.id) : undefined;
-  const name = target.kind === 'role' ? (role?.name ?? target.id) : member?.display_name || member?.username || target.id;
+  const memberView = member ? profileOf(member) : undefined;
+  const name = target.kind === 'role' ? (role?.name ?? target.id) : (memberView?.name ?? target.id);
 
   async function save() {
     if (!data.spaceId || !canEdit) return;
@@ -314,7 +333,7 @@ function OverrideEditor({ data, target, setError }: { data: RoomSettingsData; ta
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 12 }}>
-        {member ? <Avatar uri={member.avatar} name={name} size="lg" /> : null}
+        {member ? <Avatar uri={memberView?.avatar} name={name} size="lg" /> : null}
         <View style={{ flex: 1 }}>
           <Text variant="heading">{name}</Text>
           <Text variant="caption">{target.kind === 'role' ? t('roomSettings.roleOverride') : t('roomSettings.memberOverride')}</Text>

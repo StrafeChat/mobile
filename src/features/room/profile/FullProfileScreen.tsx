@@ -7,7 +7,8 @@
  *
  * The subject is the one the profile sheet handed over (stores/userProfileFullModal) when it
  * matches; otherwise it is built by the web's canonical builders from where the person was
- * seen (?roomId= / ?spaceId=).
+ * seen (?roomId= / ?spaceId=). Seen in a space, it is their space profile there: the nickname
+ * with the global name under it, and the space's avatar, banner, pronouns and bio.
  */
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -20,7 +21,6 @@ import { openAppWindow } from '@web/lib/openWindow';
 import { addOrUpdateRoom } from '@web/stores/rooms';
 import { RelType, removeRelationshipLocally } from '@web/stores/relationships';
 import { closeUserProfileFullModal, userProfileFullModal } from '@web/stores/userProfileFullModal';
-import type { UserProfilePopoverSubject } from '@web/stores/userProfilePopover';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { buildUserMenuItems } from '@web/lib/userContextMenu';
 import { t } from '@web/i18n/t';
@@ -48,7 +48,7 @@ import { copyText, errorMessage } from '../util';
 import { BioView } from './BioView';
 import { IdentityBlock } from './IdentityBlock';
 import { ProfileArt } from './ProfileArt';
-import { BirthdayFact, SectionLabel } from './ProfileSheetHost';
+import { BirthdayFact, SectionLabel, type FullProfileSubject } from './ProfileSheetHost';
 import { useMutualSpaceIds } from './mutual';
 import { ReadableWidth } from '../shared/ReadableWidth';
 
@@ -100,7 +100,7 @@ export function FullProfileScreen() {
   );
   const storedOnMessage = useSolid(() => (userProfileFullModal.subject?.userId === userId ? userProfileFullModal.onMessageUser : undefined), [userId]);
   const built = useProfileSubject(userId, { roomId, spaceId });
-  const subject: UserProfilePopoverSubject | undefined = stored ?? built;
+  const subject: (FullProfileSubject | NonNullable<typeof built>) | undefined = (stored as FullProfileSubject | null) ?? built;
   const rel = useRelationshipType(userId);
   const mutual = useMutualSpaceIds(userId, me);
   const botInstallable = useBotApp(userId, subject?.bot);
@@ -250,6 +250,7 @@ export function FullProfileScreen() {
           <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 16 }}>
             <IdentityBlock
               displayName={subject.displayName}
+              globalName={subject.globalName}
               username={subject.username}
               homeDomain={subject.homeDomain}
               alwaysShowDomain

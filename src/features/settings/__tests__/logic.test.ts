@@ -13,6 +13,7 @@ import {
   spaceSettingsPath,
   themeEditorPath,
   userSettingsPath,
+  spaceProfilePath,
   adminPath,
 } from '../routes';
 import { hexToHsv, hexToInt, hsvToHex, intToHex, saturateHex } from '../color';
@@ -58,6 +59,13 @@ describe('routes', () => {
     // Desktop-only and unknown sections open the list.
     expect(userSettingsPath('desktop')).toBe('/settings');
     expect(userSettingsPath('nope')).toBe('/settings');
+  });
+
+  it('opens Space Profiles, on one space when given', () => {
+    expect(userSettingsPath('spaceProfiles')).toBe('/settings/spaceProfiles');
+    expect(spaceProfilePath('123')).toBe('/settings/spaceProfiles?space=123');
+    expect(spaceProfilePath()).toBe('/settings/spaceProfiles');
+    expect(spaceProfilePath(null)).toBe('/settings/spaceProfiles');
   });
 
   it("accepts the web's space page ids, Overview as 'general' too", () => {
@@ -109,6 +117,13 @@ describe('settings list', () => {
     expect(groups[0]!.items.map((i) => i.id)).toEqual(['security']);
     expect(entryMatches(ACCOUNT_ENTRIES.find((e) => e.id === 'authorizedApps')!, 'authorizedapps')).toBe(true);
     expect(settingsGroups('zzzz', { instanceAdmin: true })).toEqual([]);
+  });
+
+  it('lists Space Profiles right after My Account', () => {
+    const account = settingsGroups('', { instanceAdmin: false })[0]!.items.map((i) => i.id);
+    expect(account.slice(0, 2)).toEqual(['account', 'spaceProfiles']);
+    expect(ACCOUNT_ENTRIES.find((e) => e.id === 'spaceProfiles')!.label()).toBe('Space Profiles');
+    expect(settingsGroups('nickname', { instanceAdmin: false })[0]!.items.map((i) => i.id)).toEqual(['spaceProfiles']);
   });
 
   it('has no Desktop app page and calls keybinds Behaviour', () => {

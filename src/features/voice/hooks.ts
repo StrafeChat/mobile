@@ -6,12 +6,12 @@
 import type { RoomParticipant } from '@web/api/rooms';
 import { auth } from '@web/stores/auth';
 import { rooms } from '@web/stores/rooms';
-import { spaceMembers } from '@web/stores/spaceMembers';
 import { noiseSuppressionEnabled, voice, voiceStatesForRoom } from '@web/stores/voice';
 import { voiceSettings } from '@web/stores/voiceSettings';
 import { voiceParticipantName, voicePermsFor } from '@web/lib/voice/perms';
 import type { VoicePerms } from '@web/lib/spacePermissions';
 import { useSolid } from '@/bridge/solid';
+import { resolveSpaceUser, spaceMemberOf } from '@/data/spaceProfileCompat';
 import { cameraFacing, speakerphone } from '@/platform/voice';
 import { buildCallTiles, sortByJoined, type CallTile, type VoiceStateLike } from './model';
 
@@ -51,20 +51,22 @@ export function roomParticipants(roomId: string | null | undefined): RoomPartici
 /** Who a voice participant is: their id and the summary their voice state carries. */
 export type ParticipantRef = Pick<VoiceStateLike, 'user_id' | 'user'>;
 
-/** Name for a voice participant: PM participants, then the space member, then the state's user. */
+/** Name for a voice participant: PM participants, then the space member (by their space
+ * profile), then the state's user. */
 export function callParticipantName(st: ParticipantRef, roomId: string, spaceId: string | null | undefined): string {
   const p = roomParticipants(roomId)?.find((x) => x.id === st.user_id);
   if (p) return p.display_name || p.username;
+  const m = spaceMemberOf(spaceId, st.user_id);
+  if (m) return resolveSpaceUser(spaceId, st.user_id, m).name;
   return voiceParticipantName(st.user_id, st, spaceId ?? undefined);
 }
 
 export function callParticipantAvatar(st: ParticipantRef, roomId: string, spaceId: string | null | undefined): string | undefined {
   const p = roomParticipants(roomId)?.find((x) => x.id === st.user_id);
   if (p?.avatar) return p.avatar;
-  if (spaceId) {
-    const m = spaceMembers.bySpaceId[spaceId]?.find((x) => x.id === st.user_id);
-    if (m?.avatar) return m.avatar;
-  }
+  const m = spaceMemberOf(spaceId, st.user_id);
+  const avatar = m ? resolveSpaceUser(spaceId, st.user_id, m).avatar : undefined;
+  if (avatar) return avatar;
   return st.user?.avatar;
 }
 

@@ -16,6 +16,7 @@ import {
   type SearchHasFilter,
   type SearchMatch,
 } from '@web/lib/messageSearch';
+import { resolveProfile } from '@/data/spaceProfileCore';
 
 export { HAS_VALUES };
 export type { SearchHasFilter };
@@ -99,15 +100,26 @@ export interface PickablePerson {
   display_name?: string;
   avatar?: string;
   bot?: boolean;
+  /** A space search picks members by their space profile: name and face. */
+  nick?: string | null;
+  space_avatar?: string | null;
 }
 
+/** The name a picker row and its chip show: the nickname in a space, else the display name. */
 export function personLabel(p: PickablePerson): string {
-  return p.display_name || p.username;
+  return resolveProfile(p, p, p.username).name;
 }
 
-/** People whose name or username contains `query` (case-insensitive, a leading @ ignored). */
+/** The face a picker row shows: the space avatar, else the global one. */
+export function personAvatar(p: PickablePerson): string | undefined {
+  return resolveProfile(p, p, p.username).avatar;
+}
+
+/** People whose nickname, name or username contains `query` (case-insensitive, a leading @ ignored). */
 export function filterPeople<T extends PickablePerson>(people: readonly T[], query: string): T[] {
   const q = query.trim().replace(/^@/, '').toLowerCase();
   if (!q) return [...people];
-  return people.filter((p) => p.username.toLowerCase().includes(q) || (p.display_name ?? '').toLowerCase().includes(q));
+  return people.filter(
+    (p) => p.username.toLowerCase().includes(q) || (p.display_name ?? '').toLowerCase().includes(q) || (p.nick ?? '').toLowerCase().includes(q),
+  );
 }

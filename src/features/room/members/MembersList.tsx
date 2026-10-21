@@ -6,8 +6,10 @@
  *   highest hoisted role it is, then "Online — N", then "Offline — N" (dimmed) - only the
  *   people who can see the channel.
  *
- * A row: avatar with presence, the name in its role colour, BOT tag, the crown for the
- * group's creator or the space's owner, and the custom status (or status) while online.
+ * A row: avatar with presence, the name in its role colour (in a space, their space profile's
+ * nickname and avatar), BOT tag, the crown for the group's creator or the space's owner, and
+ * the custom status (or status) while online. Search matches the nickname, the global name and
+ * the username.
  * Tap: the profile sheet (with role editing where allowed). Long press: the user menu plus
  * Remove from group / Kick / Ban. A group's creator also gets a remove button on each row.
  * The list grouping is the data layer's port of the web's (useMemberList).
@@ -149,7 +151,8 @@ export function MembersList({ roomId, spaceId, inSheet, safeTop }: MembersListPr
     return items.filter((it) => {
       if (it.kind !== 'member') return false;
       const r = memberRowView(source, it.userId);
-      return !!r && (r.displayName.toLowerCase().includes(q) || r.username.toLowerCase().includes(q));
+      // The shown name is a space nickname when one applies; the global name still finds them.
+      return !!r && [r.displayName, r.globalName, r.username].some((n) => !!n && n.toLowerCase().includes(q));
     });
   }, [items, query, source]);
 

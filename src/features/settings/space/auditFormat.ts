@@ -19,6 +19,8 @@ export const AUDIT_ACTION_ICON: Record<string, string> = {
   member_ban_add: 'ban',
   member_ban_remove: 'user-check',
   member_roles_update: 'user-tag',
+  member_nick_update: 'signature',
+  member_profile_reset: 'eraser',
   bot_add: 'robot',
   invite_create: 'link',
   invite_delete: 'link-slash',
@@ -33,7 +35,9 @@ export const AUDIT_ACTION_ICON: Record<string, string> = {
   member_voice_disconnect: 'phone-slash',
 };
 
-export const AUDIT_DESTRUCTIVE = new Set(['room_delete', 'role_delete', 'member_kick', 'member_ban_add', 'invite_delete', 'emoji_delete', 'override_delete', 'member_voice_disconnect']);
+// A moderator's reset deletes what the member uploaded and wrote for the space, so it reads as
+// destructive; a nickname change does not.
+export const AUDIT_DESTRUCTIVE = new Set(['room_delete', 'role_delete', 'member_kick', 'member_ban_add', 'member_profile_reset', 'invite_delete', 'emoji_delete', 'override_delete', 'member_voice_disconnect']);
 
 export interface AuditLookups {
   users: Record<string, UserSummary>;
@@ -51,6 +55,7 @@ export function auditLookups(users: Record<string, UserSummary>, roles: readonly
   };
 }
 
+/** Names in the audit log are global (a nickname shows in a nickname change's own row). */
 export function auditUserName(id: string, l: AuditLookups): string {
   const u = l.users[id];
   if (u) return u.display_name || u.username;
@@ -69,6 +74,8 @@ export function auditTargetLabel(e: AuditLogEntry, l: AuditLookups): string {
     case 'member_ban_add':
     case 'member_ban_remove':
     case 'member_roles_update':
+    case 'member_nick_update':
+    case 'member_profile_reset':
     case 'bot_add':
     case 'member_voice_mute':
     case 'member_voice_deafen':
@@ -105,7 +112,17 @@ export function auditTargetLabel(e: AuditLogEntry, l: AuditLookups): string {
 }
 
 export function auditSentence(e: AuditLogEntry, l: AuditLookups): string {
-  return t(`spaceSettings.audit.actions.${e.action_type}`, { actor: auditUserName(e.user_id, l), target: auditTargetLabel(e, l), defaultValue: e.action_type });
+  const names = { actor: auditUserName(e.user_id, l), target: auditTargetLabel(e, l) };
+  // The reset's sentence may land as spaceSettings.audit.memberProfileReset rather than under
+  // actions.*: try both before falling back to the action's id.
+  const fallback = e.action_type === 'member_profile_reset' ? t('spaceSettings.audit.memberProfileReset', { ...names, defaultValue: e.action_type }) : e.action_type;
+  return t(`spaceSettings.audit.actions.${e.action_type}`, { ...names, defaultValue: fallback });
+}
+
+/** Most changes are an {old, new} pair; a space-profile reset's is just the list of fields it
+ * cleared (`{"fields": ["avatar", "bio"]}`), shown as a value of its own. */
+export function isAuditChangePair(c: unknown): c is { old?: unknown; new?: unknown } {
+  return !!c && typeof c === 'object' && !Array.isArray(c);
 }
 
 export function auditFieldLabel(key: string): string {
@@ -121,6 +138,8 @@ function fmtValue(v: unknown): string {
 
 export function auditChangeValue(key: string, v: unknown, l: AuditLookups): string {
   if (key === 'roles' && Array.isArray(v)) return v.map((rid) => l.roles.get(String(rid))?.name ?? String(rid)).join(', ') || '—';
+  // A profile reset lists the fields it cleared (avatar, about_me...): name them as fields.
+  if (key === 'fields' && Array.isArray(v)) return v.map((f) => auditFieldLabel(String(f))).join(', ') || '—';
   if ((key === 'system_room_id' || key === 'afk_room_id' || key === 'widget_room_id') && typeof v === 'string' && v) {
     return `#${l.rooms.get(v)?.name ?? v}`;
   }

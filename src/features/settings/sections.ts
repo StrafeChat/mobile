@@ -35,6 +35,8 @@ const item = (id: UserSettingsSectionId, icon: string, label?: string, descripti
 
 export const ACCOUNT_ENTRIES: SettingsNavEntry[] = [
   item('account', 'user'),
+  // The web's titles for it are not at the pinned web yet, so the mobile copy names it.
+  item('spaceProfiles', 'id-badge', 'mobile.settings.spaceProfiles.title', 'mobile.settings.spaceProfiles.description'),
   item('security', 'lock'),
   item('devices', 'shield-halved'),
   item('privacy', 'user-shield', 'mobile.settings.privacyTitle', 'mobile.settings.privacyDescription'),

@@ -21,6 +21,7 @@ import {
   developerAppPath,
   oauthConsentPath,
   roomSettingsPath,
+  spaceProfilePath,
   spaceSettingsPath,
   themeEditorPath,
   userSettingsPath,
@@ -39,6 +40,12 @@ function go(path: string): void {
 /** User settings: the list, or straight to one page (the web's section ids). */
 export function openSettings(section?: string): void {
   go(userSettingsPath(section));
+}
+
+/** Your space profile (Settings -> Space Profiles), on `spaceId` when given. Every member may
+ * open it: it edits only your own profile there, never the space. */
+export function openSpaceProfile(spaceId?: string | null): void {
+  go(spaceProfilePath(spaceId));
 }
 
 /** A space's settings: the page list, or one page (`general`/`overview`, `roles`, `members`...). */

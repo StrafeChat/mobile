@@ -10,11 +10,14 @@
  */
 import type { SpaceRole, SpaceRoomOverride, SpaceRoomUserOverride } from '@web/api/spaces';
 import { effectiveChannelPermissionsForMember, hasPerm, highestHoistedRole, PermViewChannel } from '@web/lib/spacePermissions';
+import { resolveProfile } from './spaceProfileCore';
 
 export interface MemberLike {
   id: string;
   username: string;
   display_name: string;
+  /** Their nickname in the space, which they are listed (and sorted) by. */
+  nick?: string | null;
   roles?: string[];
 }
 
@@ -22,9 +25,11 @@ export function isOnlineStatus(status: string | undefined): boolean {
   return status === 'online' || status === 'idle' || status === 'dnd';
 }
 
-/** Case- and accent-insensitive by display name (falling back to username). */
+/** Case- and accent-insensitive by the name the list shows: the nickname, else the display
+ * name, else the username. */
 export function compareByDisplayName(a: MemberLike, b: MemberLike): number {
-  return (a.display_name || a.username).localeCompare(b.display_name || b.username, undefined, { sensitivity: 'base' });
+  const name = (m: MemberLike) => resolveProfile(m, m, m.username).name;
+  return name(a).localeCompare(name(b), undefined, { sensitivity: 'base' });
 }
 
 export type MemberListItem =

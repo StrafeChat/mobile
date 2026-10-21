@@ -4,7 +4,8 @@
  * viewer may not join is inert, though their own can always be taken back. The web's hover
  * tooltip ("A, B and 3 others reacted with :x:") becomes a long-press: a sheet listing who
  * reacted, one tab per emoji (lazy GET of the reactors, once per emoji). A trailing "+" pill
- * opens the picker when the viewer may add reactions.
+ * opens the picker when the viewer may add reactions. In a space room a reactor is named and
+ * pictured by their space profile (the server sends the global one), the username under it.
  */
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -12,7 +13,8 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { t } from '@web/i18n/t';
 import { listReactors, type Reactor } from '@web/api/messages';
 import { auth } from '@web/stores/auth';
-import { parseReactionKey, reactionPillDisabled, useCustomEmoji, useMessageReactions } from '@/data';
+import { useSolid } from '@/bridge/solid';
+import { parseReactionKey, reactionPillDisabled, resolveSpaceUser, spaceIdOfRoom, useCustomEmoji, useMessageReactions } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, haptics, Icon, ListRow, Sheet, SheetScrollView, Spinner, Text, Touchable, useLongPress, withAlpha } from '@/ui';
 import { CustomEmojiImage, EmojiGlyph } from '../body/inline';
@@ -139,6 +141,23 @@ export const MessageReactionsRow = memo(function MessageReactionsRow({
 
 // ---- who reacted --------------------------------------------------------------------------------------
 
+/** One reactor: the API's global user, with their space profile on top in a space room. */
+function ReactorRow({ reactor, roomId, onPress }: { reactor: Reactor; roomId: string; onPress: () => void }) {
+  const view = useSolid(() => {
+    const r = resolveSpaceUser(spaceIdOfRoom(roomId), reactor.id, reactor);
+    return { name: r.name, avatar: r.avatar ?? null };
+  }, [roomId, reactor]);
+  return (
+    <ListRow
+      title={view.name}
+      subtitle={reactor.username && reactor.username !== view.name ? reactor.username : undefined}
+      leading={<Avatar uri={view.avatar} name={view.name} size="md" />}
+      onPress={onPress}
+      accessibilityHint={reactor.id === auth.user?.id ? t('common.you') : undefined}
+    />
+  );
+}
+
 function ReactorsSheet({
   roomId,
   messageId,
@@ -170,7 +189,8 @@ function ReactorsSheet({
   }, [active, lists, roomId, messageId]);
 
   const list = lists[active];
-  const ctx = { roomId };
+  // The space too, so a reactor's profile sheet carries the space's role context.
+  const ctx = { roomId, spaceId: spaceIdOfRoom(roomId) ?? null };
   return (
     <Sheet open={open} onClose={onClose} title={t('mobile.chat.reactions.title')} snapPoints={['55%']} padded={false} contentStyle={styles.fill}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs} style={styles.tabBar} accessibilityRole="tablist">
@@ -208,16 +228,14 @@ function ReactorsSheet({
           </Text>
         ) : (
           list.map((u) => (
-            <ListRow
+            <ReactorRow
               key={u.id}
-              title={u.display_name || u.username}
-              subtitle={u.display_name && u.username !== u.display_name ? u.username : undefined}
-              leading={<Avatar uri={u.avatar ?? null} name={u.display_name || u.username} size="md" />}
+              reactor={u}
+              roomId={roomId}
               onPress={() => {
                 setOpen(false);
                 openUserProfile(u.id, ctx);
               }}
-              accessibilityHint={u.id === auth.user?.id ? t('common.you') : undefined}
             />
           ))
         )}

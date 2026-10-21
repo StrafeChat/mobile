@@ -13,14 +13,18 @@
  *   Unicode emoji (max 8, the viewer's skin tone applied);
  * - '#' offers text channels whose name starts with the query;
  * - '@' offers people (yourself included, labelled You), mentionable roles, and @everyone /
- *   @here where the viewer may use them;
+ *   @here where the viewer may use them; a person matches by the start of their nickname,
+ *   display name or username, and is shown by their space profile (name and face) - but the
+ *   inserted text is always `@username`, the only form serializeDraft turns into a mention, so
+ *   a nickname that copies someone's username can never take their mentions;
  * - at most 12 rows; picking replaces [trigger, caret) with the insert text.
  */
 import { t } from '@web/i18n/t';
 import { spaceRoleColorHex } from '@web/lib/spacePermissions';
 import { searchEmoji, withSkinTone, type EmojiCatalog } from '@web/lib/emoji/data';
+import { resolveProfile, type SpaceProfileFields } from '@/data/spaceProfileCore';
 
-export interface CompletionPerson {
+export interface CompletionPerson extends SpaceProfileFields {
   id: string;
   username: string;
   display_name?: string;
@@ -88,10 +92,6 @@ export function isWordChar(c: string | undefined): boolean {
   return c != null && /[\p{L}\p{N}_]/u.test(c);
 }
 
-function personName(p: CompletionPerson): string {
-  return p.display_name || p.username || t('common.unknown');
-}
-
 /** The open completion for `draft` with the caret at `caret`, or null. */
 export function computeCompletion(draft: string, caret: number, ctx: CompletionContext): Completion | null {
   const pos = Math.max(0, Math.min(caret, draft.length));
@@ -136,19 +136,19 @@ export function computeCompletion(draft: string, caret: number, ctx: CompletionC
     }
   } else {
     for (const p of ctx.participants) {
-      const name = personName(p);
       const username = p.username ?? '';
       if (!username) continue;
-      if (q !== '' && !name.toLowerCase().startsWith(q) && !username.toLowerCase().startsWith(q)) continue;
+      const view = resolveProfile(p, p);
+      if (q !== '' && ![view.nick, p.display_name, username].some((n) => !!n && n.toLowerCase().startsWith(q))) continue;
       const isSelf = !!ctx.currentUserId && p.id === ctx.currentUserId;
       candidates.push({
         kind: 'user',
         key: `user:${p.id}`,
-        label: name,
+        label: view.name,
         sublabel: isSelf ? t('common.you') : `@${username}`,
         insertText: `@${username} `,
         userId: p.id,
-        ...(p.avatar ? { avatar: p.avatar } : {}),
+        ...(view.avatar ? { avatar: view.avatar } : {}),
         bot: p.bot === true,
       });
     }

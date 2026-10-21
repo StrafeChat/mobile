@@ -15,6 +15,7 @@ import { deepEqual, useDerived } from '@/data/derived';
 import { sourceMembers } from '@/data/members';
 import { findPmRoom, findSpaceRoom } from '@/data/rooms';
 import { useCustomEmojiList } from '@/data/reactions';
+import { SPACE_PROFILE_KEYS, type SpaceProfileFields } from '@/data/spaceProfileCore';
 import type { CompletionPerson, CompletionRole, CompletionRoom } from '../logic/completion';
 
 export interface ComposerContextData {
@@ -25,14 +26,21 @@ export interface ComposerContextData {
   rooms: CompletionRoom[];
 }
 
-function person(p: RoomParticipant): CompletionPerson {
-  return {
+/** A person as completion needs them - with their space profile, so a nickname can be typed
+ * and shown (the label and face are the space's; the inserted handle stays `@username`). */
+function person(p: RoomParticipant & SpaceProfileFields): CompletionPerson {
+  const out: CompletionPerson = {
     id: p.id,
     username: p.username,
     ...(p.display_name ? { display_name: p.display_name } : {}),
     ...(p.avatar ? { avatar: p.avatar } : {}),
     ...(p.bot ? { bot: true } : {}),
   };
+  for (const key of SPACE_PROFILE_KEYS) {
+    const v = p[key];
+    if (typeof v === 'string' && v.trim() !== '') out[key] = v;
+  }
+  return out;
 }
 
 export function composerContextData(roomId: string, spaceId?: string | null): ComposerContextData {

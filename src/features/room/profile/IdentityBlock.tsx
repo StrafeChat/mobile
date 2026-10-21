@@ -1,6 +1,7 @@
 /**
  * The identity block every profile surface shows (the web's ProfileIdentity): the display
- * name in the member's role colour with the BOT / OFFICIAL tags and the 🎂, the handle (with
+ * name in the member's role colour with the BOT / OFFICIAL tags and the 🎂, under a space
+ * nickname the global name in small (as Discord shows a server nickname), the handle (with
  * the home instance for a remote account - always in the full profile), pronouns, "It's
  * their birthday!" and the badge row. One component for the sheet and the full profile so
  * the same person never looks different on the two.
@@ -20,7 +21,11 @@ import { copyText } from '../util';
 export const PROFILE_BADGE_CAP = 5;
 
 export interface IdentityBlockProps {
+  /** The name shown here: a space nickname when one applies. */
   displayName: string;
+  /** Their global name, shown small under a nickname (the web's secondaryName); left out
+   * when it is the same as `displayName`. */
+  globalName?: string;
   username: string;
   homeDomain?: string;
   bot?: boolean;
@@ -82,6 +87,12 @@ export function IdentityBlock(props: IdentityBlockProps) {
           </Text>
         ) : null}
       </View>
+
+      {props.globalName && props.globalName !== props.displayName ? (
+        <Text variant="body" tone="muted" numberOfLines={1} style={{ marginTop: -2 }}>
+          {props.globalName}
+        </Text>
+      ) : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 8, rowGap: 2 }}>
         <Touchable

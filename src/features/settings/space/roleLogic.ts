@@ -5,6 +5,7 @@
  */
 import type { SpaceMember, SpaceRole } from '@web/api/spaces';
 import { memberHighestRolePosition } from '@web/lib/spacePermissions';
+import { resolveProfile, type SpaceProfileFields } from '@/data/spaceProfileCore';
 
 export const EVERYONE = '@everyone';
 
@@ -113,23 +114,32 @@ export function memberRolesWith(member: Pick<SpaceMember, 'roles'>, roles: reado
 
 export type MemberSort = 'joined_desc' | 'joined_asc' | 'name';
 
-const memberName = (m: SpaceMember) => m.display_name || m.username;
+/** A member as these pages list them: by their space profile. */
+type ListedMember = SpaceMember & SpaceProfileFields;
 
-/** SpaceMembersPage's search (name, username or exact id), role filter and sort. */
-export function filterMembers(members: readonly SpaceMember[], opts: { query: string; roleId: string; sort: MemberSort }): SpaceMember[] {
+/** The name a member is listed by here: their nickname, else display name, else username. */
+const memberName = (m: ListedMember) => resolveProfile(m, m, m.username).name;
+
+/** The nickname, display name or username contains the (lowercased) query. */
+function nameMatches(m: ListedMember, q: string): boolean {
+  return [m.nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q));
+}
+
+/** SpaceMembersPage's search (nickname, name, username or exact id), role filter and sort. */
+export function filterMembers<M extends ListedMember>(members: readonly M[], opts: { query: string; roleId: string; sort: MemberSort }): M[] {
   const q = opts.query.trim().toLowerCase();
   let list = members.filter((m) => {
     if (opts.roleId && !(m.roles ?? []).includes(opts.roleId)) return false;
     if (!q) return true;
-    return memberName(m).toLowerCase().includes(q) || (m.username ?? '').toLowerCase().includes(q) || m.id === q;
+    return nameMatches(m, q) || m.id === q;
   });
-  const joined = (m: SpaceMember) => (m.joined_at ? new Date(m.joined_at).getTime() : 0);
+  const joined = (m: M) => (m.joined_at ? new Date(m.joined_at).getTime() : 0);
   switch (opts.sort) {
     case 'joined_asc':
       list = [...list].sort((a, b) => joined(a) - joined(b));
       break;
     case 'name':
-      list = [...list].sort((a, b) => memberName(a).localeCompare(memberName(b)));
+      list = [...list].sort((a, b) => memberName(a).localeCompare(memberName(b), undefined, { sensitivity: 'base' }));
       break;
     default:
       list = [...list].sort((a, b) => joined(b) - joined(a));
@@ -138,10 +148,10 @@ export function filterMembers(members: readonly SpaceMember[], opts: { query: st
 }
 
 /** Members who could be given a role: not holding it, assignable by the viewer, matching the search (max 50). */
-export function addableMembers(members: readonly SpaceMember[], roleId: string, query: string, ctx: Pick<HierarchyContext, 'ownerId' | 'viewerId'>): SpaceMember[] {
+export function addableMembers<M extends ListedMember>(members: readonly M[], roleId: string, query: string, ctx: Pick<HierarchyContext, 'ownerId' | 'viewerId'>): M[] {
   const q = query.trim().toLowerCase();
   return members
     .filter((m) => !m.roles?.includes(roleId) && canAssignRoleTo(m.id, ctx))
-    .filter((m) => !q || (m.display_name || '').toLowerCase().includes(q) || (m.username || '').toLowerCase().includes(q))
+    .filter((m) => !q || nameMatches(m, q))
     .slice(0, 50);
 }

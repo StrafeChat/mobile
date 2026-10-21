@@ -59,6 +59,7 @@ import { initUserProfileHandler } from '@web/stores/userProfile';
 import { applyVoiceSettingsToSession, initVoiceHandlers, voice } from '@web/stores/voice';
 import { voiceSettings } from '@web/stores/voiceSettings';
 import { useSolid } from '@/bridge/solid';
+import { initSpaceProfileCompatHandlers } from '@/data/spaceProfileCompat';
 import { closeView, currentRoomId } from '@/shell/state';
 import { isOnline, startConnectivity } from './connectivity';
 import { announceRoomGone } from './roomGone';
@@ -236,6 +237,8 @@ function registerGatewayHandlers(): void {
   initRoomHandlers();
   initSpaceHandlers();
   initSpaceMembersHandlers();
+  // Right after the web's member handlers, which drop the space-profile keys at this pin.
+  initSpaceProfileCompatHandlers();
   initUserProfileHandler();
   initE2EESyncHandlers();
   initCustomEmojiHandlers();

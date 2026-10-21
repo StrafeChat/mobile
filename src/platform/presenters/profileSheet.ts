@@ -11,8 +11,10 @@
  *
  *   {
  *     open: boolean;
- *     subject: UserProfilePopoverSubject | null; // who: names, avatar, banner, about me, roles,
- *                                                //   badges... built by lib/userProfilePopoverHelpers
+ *     subject: MobileProfileSubject | null;      // who: names, avatar, banner, about me, roles,
+ *                                                //   badges... built by lib/userProfilePopoverHelpers;
+ *                                                //   in a space also spaceId, and globalName under
+ *                                                //   a nickname (the space profile on top)
  *     currentUserId: string | undefined;         // the viewer, to tell "this is you" apart
  *     onMessageUser: ((userId) => void) | undefined; // offer "Message" when set
  *     spaceRoleContext: SpaceMemberRoleEditContext | null; // role toggles, when permitted
@@ -26,18 +28,19 @@ import { createStore } from 'solid-js/store';
 import { popoverSubjectFromParticipant } from '@web/lib/userProfilePopoverHelpers';
 import type { RoomParticipant } from '@web/api/rooms';
 import type { SpaceRole } from '@web/api/spaces';
-import type { SpaceMemberRoleEditContext, UserProfilePopoverSubject } from '@web/stores/userProfilePopover';
+import type { SpaceMemberRoleEditContext } from '@web/stores/userProfilePopover';
+import { overlayProfileSubject, type MobileProfileSubject, type SpaceProfileFields } from '@/data/spaceProfileCore';
 
 export interface ProfileSheetState {
   open: boolean;
-  subject: UserProfilePopoverSubject | null;
+  subject: MobileProfileSubject | null;
   currentUserId: string | undefined;
   onMessageUser: ((userId: string) => void) | undefined;
   spaceRoleContext: SpaceMemberRoleEditContext | null;
 }
 
 export interface PresentProfileOptions {
-  subject: UserProfilePopoverSubject;
+  subject: MobileProfileSubject;
   currentUserId?: string;
   onMessageUser?: (userId: string) => void;
   spaceRoleContext?: SpaceMemberRoleEditContext | null;
@@ -61,16 +64,25 @@ export function presentProfileSheet(opts: PresentProfileOptions): void {
   });
 }
 
-/** For a member row or a voice tile: the subject is built from the room participant. */
+/**
+ * For a member row or a voice tile: the subject is built from the room participant. In a space
+ * (`spaceId`, else the role context's) the participant is the member row, so its space profile
+ * goes on top - the pinned web builder reads only the global one. The overlay is also what
+ * sets subject.spaceId: at the web bump pass `{ spaceId }` (the same spaceId as here) to
+ * popoverSubjectFromParticipant before dropping the overlay, or the sheet loses the space.
+ */
 export function presentProfileSheetForParticipant(opts: {
   participant: RoomParticipant;
   currentUserId?: string;
   onMessageUser?: (userId: string) => void;
   spaceRoles?: SpaceRole[];
   spaceRoleContext?: SpaceMemberRoleEditContext | null;
+  spaceId?: string | null;
 }): void {
+  const spaceId = opts.spaceId ?? opts.spaceRoleContext?.spaceId ?? null;
+  const subject = popoverSubjectFromParticipant(opts.participant, opts.spaceRoles);
   presentProfileSheet({
-    subject: popoverSubjectFromParticipant(opts.participant, opts.spaceRoles),
+    subject: overlayProfileSubject(subject, spaceId ? (opts.participant as RoomParticipant & SpaceProfileFields) : null, spaceId),
     currentUserId: opts.currentUserId,
     onMessageUser: opts.onMessageUser,
     spaceRoleContext: opts.spaceRoleContext,

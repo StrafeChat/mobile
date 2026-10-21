@@ -6,7 +6,8 @@
  * - Permissions: the permission matrix grouped like the web's, searchable, each group with an
  *   all-on/off switch, plus Clear all.
  * - Members: who holds the role (remove), and adding members by search. Not for @everyone
- *   (everyone has it), a bot's managed role, or a role at or above the viewer's own.
+ *   (everyone has it), a bot's managed role, or a role at or above the viewer's own. Members
+ *   are named by their space profile (nickname, space avatar) with the handle under it.
  *
  * Display and Permissions edits are a draft with an unsaved-changes bar (Reset / Save) and a
  * prompt when leaving with it; membership changes save at once, as on the web. Per-room
@@ -16,12 +17,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { t } from '@web/i18n/t';
-import { deleteSpaceRole, patchSpaceRole, setMemberSpaceRoles, type SpaceRole } from '@web/api/spaces';
+import { deleteSpaceRole, patchSpaceRole, setMemberSpaceRoles, type SpaceMember, type SpaceRole } from '@web/api/spaces';
 import { SPACE_ROLE_PERM_GROUPS, hasPerm, togglePerm } from '@web/lib/spacePermissions';
 import { removeSpaceRole, upsertSpaceRole } from '@web/stores/spaces';
 import { loadSpaceMembers } from '@web/stores/spaceMembers';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { formatHandle } from '@web/stores/instance';
+import { resolveProfile, type MemberWithSpaceProfile } from '@/data';
 import { Avatar, BotTag, Button, EmptyState, Icon, IconButton, Input, ListSection, SearchInput, SegmentedControl, Text, Toggle, toast } from '@/ui';
 import { ROLE_COLOR_SWATCHES, hexToInt, intToHex } from '../color';
 import { ColorField } from '../components/ColorField';
@@ -72,6 +74,16 @@ export function rolePatch(r: SpaceRole, d: RoleDraft): { permissions?: number; c
   if (d.permissions !== r.permissions) body.permissions = d.permissions;
   if (!isEveryone(r) && d.name.trim()) body.name = d.name.trim();
   return body;
+}
+
+/** A member as these lists name them: their space profile (the nickname, the space avatar). */
+function profileOf(m: SpaceMember) {
+  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+}
+
+function MemberAvatar({ member }: { member: SpaceMember }) {
+  const view = profileOf(member);
+  return <Avatar uri={view.avatar} name={view.name} size="md" />;
 }
 
 export function RoleEditorScreen() {
@@ -320,8 +332,8 @@ export function RoleEditorScreen() {
                 holders.map((m) => (
                   <SettingItem
                     key={m.id}
-                    leading={<Avatar uri={m.avatar} name={m.display_name || m.username} size="md" />}
-                    title={m.display_name || m.username}
+                    leading={<MemberAvatar member={m} />}
+                    title={profileOf(m).name}
                     titleAccessory={m.bot ? <BotTag bot /> : null}
                     description={formatHandle(m)}
                     trailing={
@@ -346,8 +358,8 @@ export function RoleEditorScreen() {
                     addable.map((m) => (
                       <SettingItem
                         key={m.id}
-                        leading={<Avatar uri={m.avatar} name={m.display_name || m.username} size="md" />}
-                        title={m.display_name || m.username}
+                        leading={<MemberAvatar member={m} />}
+                        title={profileOf(m).name}
                         titleAccessory={m.bot ? <BotTag bot /> : null}
                         description={formatHandle(m)}
                         disabled={busy}

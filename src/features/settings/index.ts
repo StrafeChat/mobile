@@ -14,6 +14,7 @@ import { installSettingsWiring } from './navigation';
 
 export {
   openSettings,
+  openSpaceProfile,
   openSpaceSettings,
   openRoomSettings,
   openAdminDashboard,
@@ -24,6 +25,7 @@ export {
 } from './navigation';
 export {
   userSettingsPath,
+  spaceProfilePath,
   spaceSettingsPath,
   roomSettingsPath,
   adminPath,

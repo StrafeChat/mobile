@@ -43,6 +43,7 @@ import { useSolidScope } from './scope';
 import { buildMessageList, stableRowKeys, type MessageListModel } from './messageListModel';
 import { findSpaceRoom, spaceIdOfRoom } from './rooms';
 import { isSnowflakeId } from './constants';
+import { overlaySenderDisplay, spaceMemberOf } from './spaceProfileCompat';
 
 // ---- ids and paging ---------------------------------------------------------------------------
 
@@ -327,7 +328,8 @@ export function replyReferenceView(roomId: string, replyToId: string, embedded: 
   if (!replied) return { state: 'missing', replyToId };
   const pool = roomParticipantPool(roomId);
   const me = auth.user?.id;
-  const sender = getSenderDisplay(replied.sender_id, pool, me);
+  // The author by their space profile in a space room (the pinned web reads only the global one).
+  const sender = overlaySenderDisplay(getSenderDisplay(replied.sender_id, pool, me), spaceMemberOf(spaceIdOfRoom(roomId), replied.sender_id));
   return {
     state: 'found',
     replyToId,

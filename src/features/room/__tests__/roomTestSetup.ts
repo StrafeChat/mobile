@@ -89,7 +89,7 @@ jest.mock('@/features/nav', () => ({
   FriendsView: () => null,
   NotesView: () => null,
 }));
-jest.mock('@/features/settings', () => ({ openRoomSettings: jest.fn() }));
+jest.mock('@/features/settings', () => ({ openRoomSettings: jest.fn(), openSpaceProfile: jest.fn() }));
 
 jest.mock('@/platform/crypto', () => ({ cryptoHost: { state: 'ready', onStateChange: () => () => undefined } }));
 jest.mock('@web/lib/e2ee/keyBackup', () => ({ getBackupStatus: jest.fn(async () => ({ exists: false })), stopBackupSync: () => undefined }));

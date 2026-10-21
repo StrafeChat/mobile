@@ -1,7 +1,8 @@
 /**
  * People in a conversation: the profile sheet for an author or a mention, and the long-press
  * user menu - the web list's openProfileForUser / openAuthorMenu, with the same builders
- * (lib/userProfilePopoverHelpers through src/data's profileSubject, lib/userContextMenu).
+ * (lib/userProfilePopoverHelpers through src/data's profileSubject, lib/userContextMenu). In a
+ * space the menu also carries the nickname and space-profile entries the member drawer has.
  */
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
@@ -14,6 +15,8 @@ import { buildSpaceModerationItems, buildUserMenuItems } from '@web/lib/userCont
 import type { SpaceMemberRoleEditContext } from '@web/stores/userProfilePopover';
 import { findParticipant, profileSubject, roomGates, userDisplay, type UserContext } from '@/data';
 import { presentProfileSheet } from '@/platform/presenters';
+// Its module directly, not '@/features/room': that index pulls RoomView, which pulls the chat.
+import { spaceProfileMenuItems } from '@/features/room/nicknameSheet';
 import { showActionSheet, toast } from '@/ui';
 import { errorText, messageUser } from './navigation';
 
@@ -83,7 +86,8 @@ async function ban(spaceId: string, userId: string): Promise<void> {
   }
 }
 
-/** The user menu items for a message author (the same as a member row's). */
+/** The user menu items for a message author (the same as a member row's), the nickname
+ * entries before kick and ban. */
 export function authorMenuItems(userId: string, ctx: UserContext) {
   const me = auth.user?.id;
   const d = userDisplay(userId, ctx);
@@ -101,19 +105,26 @@ export function authorMenuItems(userId: string, ctx: UserContext) {
     onMessage: messageUser,
     spaceId: spaceId ?? undefined,
     roomId: ctx.roomId ?? undefined,
-    extraItems: buildSpaceModerationItems({
-      spaceId: spaceId ?? undefined,
-      targetUserId: userId,
-      targetRoleIds: p?.roles,
-      currentUserId: me,
-      spaceOwnerId: space?.owner_id,
-      spaceRoles: spaceId ? spaceRoles(spaceId) : undefined,
-      viewerHighestRolePosition: gates?.viewerHighestRolePosition,
-      canKickMembers: gates?.canKickMembers,
-      canBanMembers: gates?.canBanMembers,
-      onKick: spaceId ? (uid) => void kick(spaceId, uid) : undefined,
-      onBan: spaceId ? (uid) => void ban(spaceId, uid) : undefined,
-    }),
+    extraItems: [
+      // At the web bump these fields move into the buildSpaceModerationItems call below, with
+      // onEditNickname only when spaceMemberOf(spaceId, userId) has a row: the web builder
+      // offers Change Nickname without checking, and an old message's author who has left has
+      // no nickname to change (the PATCH answers 404).
+      ...spaceProfileMenuItems(spaceId, userId, p?.roles),
+      ...buildSpaceModerationItems({
+        spaceId: spaceId ?? undefined,
+        targetUserId: userId,
+        targetRoleIds: p?.roles,
+        currentUserId: me,
+        spaceOwnerId: space?.owner_id,
+        spaceRoles: spaceId ? spaceRoles(spaceId) : undefined,
+        viewerHighestRolePosition: gates?.viewerHighestRolePosition,
+        canKickMembers: gates?.canKickMembers,
+        canBanMembers: gates?.canBanMembers,
+        onKick: spaceId ? (uid) => void kick(spaceId, uid) : undefined,
+        onBan: spaceId ? (uid) => void ban(spaceId, uid) : undefined,
+      }),
+    ],
   });
 }
 

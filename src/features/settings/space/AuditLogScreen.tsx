@@ -1,7 +1,7 @@
 /**
  * Space settings -> Audit log (SpaceAuditLogPage): who changed what, newest first, 50 at a
  * time with more loading as you scroll, filterable by action; each entry expands to show the
- * fields that changed (old struck through -> new).
+ * fields that changed (old struck through -> new; a space-profile reset lists what it cleared).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -10,7 +10,7 @@ import { formatDate, t } from '@web/i18n/t';
 import { AUDIT_ACTION_TYPES, listSpaceAuditLog, type AuditLogEntry, type UserSummary } from '@web/api/spaces';
 import { useTheme } from '@/theme';
 import { Avatar, EmptyState, Icon, Select, Spinner, Text, Touchable, withAlpha } from '@/ui';
-import { AUDIT_ACTION_ICON, AUDIT_DESTRUCTIVE, auditChangeValue, auditFieldLabel, auditLookups, auditSentence, auditUserName, type AuditLookups } from './auditFormat';
+import { AUDIT_ACTION_ICON, AUDIT_DESTRUCTIVE, auditChangeValue, auditFieldLabel, auditLookups, auditSentence, auditUserName, isAuditChangePair, type AuditLookups } from './auditFormat';
 import { SpacePage } from './SpacePage';
 import type { SpaceSettingsData } from './useSpaceSettings';
 
@@ -69,15 +69,21 @@ function Entry({ entry, lookups, open, onToggle }: { entry: AuditLogEntry; looku
                   {auditFieldLabel(key)}
                 </Text>
                 <Text variant="caption" tone="default">
-                  {c.old !== undefined ? (
+                  {isAuditChangePair(c) ? (
                     <>
-                      <Text variant="caption" style={{ textDecorationLine: 'line-through', opacity: 0.6 }}>
-                        {auditChangeValue(key, c.old, lookups)}
-                      </Text>
-                      {'  →  '}
+                      {c.old !== undefined ? (
+                        <>
+                          <Text variant="caption" style={{ textDecorationLine: 'line-through', opacity: 0.6 }}>
+                            {auditChangeValue(key, c.old, lookups)}
+                          </Text>
+                          {'  →  '}
+                        </>
+                      ) : null}
+                      {auditChangeValue(key, c.new, lookups)}
                     </>
-                  ) : null}
-                  {auditChangeValue(key, c.new, lookups)}
+                  ) : (
+                    auditChangeValue(key, c, lookups)
+                  )}
                 </Text>
               </View>
             ))}

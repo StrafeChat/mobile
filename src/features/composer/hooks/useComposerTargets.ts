@@ -9,10 +9,11 @@ import { auth } from '@web/stores/auth';
 import { rooms } from '@web/stores/rooms';
 import { spaces } from '@web/stores/spaces';
 import { isSnowflake, messageIdGt } from '@web/stores/readState';
-import { getMessageBodyText, getSenderDisplay, messagePreviewText } from '@web/components/messageList/utils';
+import { getMessageBodyText, messagePreviewText } from '@web/components/messageList/utils';
 import { t } from '@web/i18n/t';
 import { deepEqual, useDerived } from '@/data/derived';
 import { roomParticipantPool } from '@/data/messages';
+import { userDisplay } from '@/data/users';
 
 /** The reply strip's preview length (the web's 120 characters). */
 export const REPLY_PREVIEW_CHARS = 120;
@@ -30,10 +31,10 @@ export function replyTargetView(roomId: string, messageId: string): ReplyTargetV
   if (!target) return { id: messageId, name: t('room.replyFallback'), preview: '', loaded: false };
   const pool = roomParticipantPool(roomId);
   const me = auth.user?.id;
-  const sender = getSenderDisplay(target.sender_id, pool, me);
   return {
     id: messageId,
-    name: sender.name,
+    // userDisplay, not the web's getSenderDisplay: it names the author by their space profile.
+    name: userDisplay(target.sender_id, { roomId }).name,
     preview: messagePreviewText(getMessageBodyText(target), pool, me, REPLY_PREVIEW_CHARS),
     loaded: true,
   };

@@ -1,7 +1,11 @@
 /**
  * A member row's long-press menu: the shared web builders (lib/userContextMenu) with the
  * space moderation extras - kick / ban against members below the viewer, or "Remove from
- * group" for a group's creator - and the confirms the web's pages put in front of them.
+ * group" for a group's creator - and the confirms the web's pages put in front of them. In a
+ * space the nickname entries come first: "Edit Space Profile" / "Change Nickname" on your own
+ * row, "Change Nickname" and "Reset Space Profile" on someone you outrank with Manage
+ * Nicknames (nicknameSheet.spaceProfileMenuItems, whose fields move into the
+ * buildSpaceModerationItems call below at the web bump).
  */
 import { banSpaceMember, kickSpaceMember } from '@web/api/spaces';
 import { buildSpaceModerationItems, buildUserMenuItems } from '@web/lib/userContextMenu';
@@ -14,6 +18,7 @@ import { t } from '@web/i18n/t';
 import { mySpaceMember, spaceAbilities, type MemberRowView } from '@/data';
 import { toast, type ActionItem } from '@/ui';
 import { messageUser } from '../navigation';
+import { spaceProfileMenuItems } from '../nicknameSheet';
 import { removeFromGroup } from '../roomActions';
 import { errorMessage } from '../util';
 
@@ -64,19 +69,22 @@ export function memberMenuItems(row: MemberRowView, ctx: MemberMenuContext): Act
     const sp = spaces.spaces.find((s) => s.id === sid);
     const roles = spaceRoles(sid);
     const abilities = spaceAbilities(sp, roles, mySpaceMember(sid), me);
-    extraItems = buildSpaceModerationItems({
-      spaceId: sid,
-      targetUserId: row.id,
-      targetRoleIds: row.roleIds,
-      currentUserId: me,
-      spaceOwnerId: sp?.owner_id,
-      spaceRoles: roles,
-      viewerHighestRolePosition: abilities.viewerHighestRolePosition,
-      canKickMembers: abilities.canKickMembers,
-      canBanMembers: abilities.canBanMembers,
-      onKick: (id) => void kickMember(sid, id),
-      onBan: (id) => void banMember(sid, id),
-    });
+    extraItems = [
+      ...spaceProfileMenuItems(sid, row.id, row.roleIds),
+      ...buildSpaceModerationItems({
+        spaceId: sid,
+        targetUserId: row.id,
+        targetRoleIds: row.roleIds,
+        currentUserId: me,
+        spaceOwnerId: sp?.owner_id,
+        spaceRoles: roles,
+        viewerHighestRolePosition: abilities.viewerHighestRolePosition,
+        canKickMembers: abilities.canKickMembers,
+        canBanMembers: abilities.canBanMembers,
+        onKick: (id) => void kickMember(sid, id),
+        onBan: (id) => void banMember(sid, id),
+      }),
+    ];
   } else {
     const room = rooms.rooms.find((r) => r.id === ctx.roomId);
     const creator = room?.creator_id && room.creator_id !== '0' ? room.creator_id : undefined;

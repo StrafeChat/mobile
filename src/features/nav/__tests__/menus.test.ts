@@ -19,7 +19,7 @@ import {
 } from '@web/lib/spacePermissions';
 import { ME, group, member, pm, resetStores, role, space, sroom, user } from '@/data/testing/fixtures';
 import { closeView, openNav, openRoom, setSelectedSpaceId, setShellFocused, shell } from '@/shell/state';
-import { cleanEntries, isActionItem, type ActionItem, type ActionSheetEntry } from '@/ui';
+import { cleanEntries, isActionItem, runActionItem, type ActionItem, type ActionSheetEntry } from '@/ui';
 
 import * as spacesApi from '@web/api/spaces';
 import * as usersApi from '@web/api/users';
@@ -28,6 +28,9 @@ import { channelMenuEntries, pmMenuEntries, sectionMenuEntries, spaceMenuEntries
 import { deleteRoomFlow, leaveGroupFlow, leaveSpaceFlow } from '../actions';
 import { moveRoomStep } from '../reorder';
 import { setOwnCustomStatus, setOwnStatus } from '../you/ownPresence';
+
+// navTestSetup stands in for the other feature areas (links.ts).
+const links = jest.requireMock('../links') as { openSpaceProfile: jest.Mock };
 
 jest.mock('@web/api/spaces', () => ({
   ...jest.requireActual<object>('@web/api/spaces'),
@@ -93,17 +96,28 @@ afterEach(() => {
 });
 
 describe('space menu', () => {
-  test('a plain member: mark read, copy id, leave on the rail; report and leave in the header', () => {
+  test('a plain member: their space profile, mark read, copy id, leave on the rail; report and leave in the header', () => {
     seedSpace();
-    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['mark-read', 'copy-id', 'leave']);
-    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['mark-read', 'copy-id', '---', 'report', 'leave']);
+    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['space-profile', 'mark-read', 'copy-id', 'leave']);
+    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['space-profile', '---', 'mark-read', 'copy-id', '---', 'report', 'leave']);
     expect(item(spaceMenuEntries('s1', 'rail'), 'mark-read').disabled).toBe(false);
   });
 
   test('the owner can invite and manage, and never leaves', () => {
     seedSpace({ owner: true });
-    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['invite', 'settings', 'mark-read', 'copy-id']);
-    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['invite', 'settings', 'create-room', 'create-section', '---', 'mark-read', 'copy-id']);
+    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['invite', 'space-profile', 'settings', 'mark-read', 'copy-id']);
+    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['invite', 'space-profile', 'settings', 'create-room', 'create-section', '---', 'mark-read', 'copy-id']);
+  });
+
+  test('"Edit Space Profile" opens Settings -> Space Profiles on that space, from both menus', () => {
+    seedSpace();
+    for (const variant of ['rail', 'header'] as const) {
+      links.openSpaceProfile.mockClear();
+      const entry = item(spaceMenuEntries('s1', variant), 'space-profile');
+      expect(entry.icon).toBe('fa-id-badge');
+      runActionItem(entry);
+      expect(links.openSpaceProfile).toHaveBeenCalledWith('s1');
+    }
   });
 
   test('"Mark space as read" is greyed out with nothing unread', () => {

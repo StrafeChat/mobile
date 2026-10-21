@@ -1,10 +1,12 @@
 /**
- * Space settings -> Members (SpaceMembersPage): every member, searchable (name, username or
- * exact id), filterable by role and sortable (newest, oldest, name), as a virtualised list of
- * cells - avatar, name, BOT tag, owner crown, online dot, up to four role chips and the join
- * date. Tapping a member (or long-pressing) opens Edit roles / Kick / Ban, with the web's
- * hierarchy rules: actions on someone ranked at or above you are shown disabled, so the rule
- * is visible.
+ * Space settings -> Members (SpaceMembersPage): every member, searchable (nickname, name,
+ * username or exact id), filterable by role and sortable (newest, oldest, name), as a
+ * virtualised list of cells - avatar, name, BOT tag, owner crown, online dot, up to four role
+ * chips and the join date. Members are shown by their space profile here (nickname and space
+ * avatar), with the handle beside it. Tapping a member (or long-pressing) opens Edit roles /
+ * Change Nickname / Reset Space Profile / Kick / Ban, with the web's hierarchy rules: actions
+ * on someone ranked at or above you are shown disabled, so the rule is visible; the reset is
+ * offered only when there is something to reset.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -16,6 +18,10 @@ import { confirmDialog } from '@web/stores/confirmDialog';
 import { formatHandle } from '@web/stores/instance';
 import { isVisibleStatus, presence } from '@web/stores/presence';
 import { useSolid } from '@/bridge/solid';
+import { hasResettableSpaceProfile, memberCanEditNickname, memberCanResetSpaceProfile, resolveProfile, useSpaceAbilities, type MemberWithSpaceProfile } from '@/data';
+// The room area's nickname sheet and reset (mounted app-wide); its module directly, not the
+// room index, which pulls the conversation screens.
+import { presentNicknameSheet, resetMemberSpaceProfile } from '@/features/room/nicknameSheet';
 import { useTheme } from '@/theme';
 import {
   Avatar,
@@ -41,6 +47,11 @@ import { TextPromptSheet } from '../components/sheets';
 import { canEditMemberRoles, canModerateMember, customRolesDesc, everyoneRoleId, filterMembers, roleLocked, type HierarchyContext, type MemberSort } from './roleLogic';
 import { SpacePage } from './SpacePage';
 import type { SpaceSettingsData } from './useSpaceSettings';
+
+/** A member as this page names them: their space profile (the nickname, the space avatar). */
+function profileOf(m: SpaceMember) {
+  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+}
 
 function RoleChip({ role }: { role: SpaceRole }) {
   const theme = useTheme();
@@ -68,7 +79,8 @@ function MemberCell({
   const theme = useTheme();
   const status = useSolid(() => presence.byUser[member.id]?.status ?? member.presence?.status, [member.id]);
   const online = isVisibleStatus(status);
-  const name = member.display_name || member.username;
+  const view = profileOf(member);
+  const name = view.name;
   const joined = member.joined_at ? formatDate(member.joined_at, { dateStyle: 'medium' }) : '—';
   return (
     <Touchable
@@ -76,11 +88,11 @@ function MemberCell({
       onLongPress={onPress}
       disabled={!onPress}
       accessibilityRole="button"
-      accessibilityLabel={[name, formatHandle(member), isOwner ? t('room.members.owner') : '', roles.map((r) => r.name).join(', '), joined].filter(Boolean).join(', ')}
+      accessibilityLabel={[name, view.nick ? view.globalName : '', formatHandle(member), isOwner ? t('room.members.owner') : '', roles.map((r) => r.name).join(', '), joined].filter(Boolean).join(', ')}
       accessibilityHint={onPress ? t('mobile.settings.memberActionsHint') : undefined}
       style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 10, minHeight: 56, alignItems: 'center' }}
     >
-      <Avatar uri={member.avatar} name={name} size="lg" overlay={<View style={{ position: 'absolute', bottom: -1, end: -1, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: theme.colors.background, backgroundColor: online ? theme.colors.success : withAlpha(theme.colors.mutedForeground, 0.5) }} />} />
+      <Avatar uri={view.avatar} name={name} size="lg" overlay={<View style={{ position: 'absolute', bottom: -1, end: -1, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: theme.colors.background, backgroundColor: online ? theme.colors.success : withAlpha(theme.colors.mutedForeground, 0.5) }} />} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text weight="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>
@@ -90,7 +102,8 @@ function MemberCell({
           {isOwner ? <Icon name="crown" size={11} color={theme.colors.warning} /> : null}
         </View>
         <Text variant="caption" numberOfLines={1}>
-          {formatHandle(member)} · {t('mobile.settings.joinedOn', { date: joined })}
+          {/* Under a nickname, who they are everywhere too (SpaceMembersPage shows both). */}
+          {[view.nick ? view.globalName : '', formatHandle(member), t('mobile.settings.joinedOn', { date: joined })].filter(Boolean).join(' · ')}
         </Text>
         {roles.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
@@ -146,7 +159,7 @@ function EditRolesSheet({
     <Sheet
       open={!!member}
       onClose={onClose}
-      title={member ? t('spaceSettings.members.editRolesTitle', { name: member.display_name || member.username }) : undefined}
+      title={member ? t('spaceSettings.members.editRolesTitle', { name: profileOf(member).name }) : undefined}
       description={t('spaceSettings.membersExplain')}
       dismissible={!busy}
       closeButton
@@ -203,6 +216,8 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
   const [banTarget, setBanTarget] = useState<SpaceMember | null>(null);
   const space = data.space!;
   const { canKick, canBan, canManageRoles } = data.gates;
+  const { canManageNicknames, canChangeOwnNickname } = useSpaceAbilities(data.spaceId);
+  const viewerRow = data.members.find((m) => m.id === data.viewerId);
   const everyoneId = everyoneRoleId(space, data.roles);
   const ctx: HierarchyContext = { ownerId: space.owner_id, viewerId: data.viewerId, roles: data.roles, everyoneId, viewerHighest: data.gates.viewerHighestPosition };
   const rolesById = useMemo(() => new Map(data.roles.map((r) => [r.id, r])), [data.roles]);
@@ -215,12 +230,18 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
       .sort((a, b) => b.position - a.position);
 
   const isOwner = (id: string) => id === space.owner_id;
-  const hasMenu = (m: SpaceMember) => (canManageRoles && (canEditMemberRoles(m, ctx, canManageRoles) || !isOwner(m.id))) || canKick || canBan;
+  const isSelf = (id: string) => id === data.viewerId;
+  // Your own row: Change Nickname needs that bit (or Manage Nicknames); anyone else's needs
+  // Manage Nicknames, and is then shown - disabled when outranked - except on the owner.
+  const offersNickname = (m: SpaceMember) => (isSelf(m.id) ? canChangeOwnNickname : canManageNicknames && !isOwner(m.id));
+  const nicknameAllowed = (m: SpaceMember) => memberCanEditNickname(space, data.roles, viewerRow, m);
+  const hasMenu = (m: SpaceMember) =>
+    (canManageRoles && (canEditMemberRoles(m, ctx, canManageRoles) || !isOwner(m.id))) || canKick || canBan || offersNickname(m) || nicknameAllowed(m);
 
   async function kick(m: SpaceMember) {
     const ok = await confirmDialog({
       title: t('room.members.kick'),
-      body: t('spaceSettings.members.kickBody', { name: m.display_name || m.username }),
+      body: t('spaceSettings.members.kickBody', { name: profileOf(m).name }),
       confirmLabel: t('room.members.kick'),
       tone: 'danger',
       icon: 'fa-solid fa-user-minus',
@@ -247,10 +268,29 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
           disabled: !canEditMemberRoles(m, ctx, canManageRoles),
           onSelect: () => setRolesTarget(m),
         },
+      // This page's own entries, not the shared menu builders' (as on the web's
+      // SpaceMembersPage): they stay at the web bump, where only resetMemberSpaceProfile
+      // becomes @web/lib/userContextMenu's confirmResetSpaceProfile.
+      (offersNickname(m) || nicknameAllowed(m)) && {
+        key: 'nickname',
+        label: t('mobile.room.nickname.change'),
+        icon: 'pen',
+        disabled: !nicknameAllowed(m),
+        onSelect: () => presentNicknameSheet({ spaceId: data.spaceId, userId: m.id }),
+      },
+      // Someone else's, when you may and they have set something (their nickname stays).
+      memberCanResetSpaceProfile(space, data.roles, viewerRow, m) &&
+        hasResettableSpaceProfile(m as MemberWithSpaceProfile, { ignoreNick: true }) && {
+          key: 'reset-profile',
+          label: t('mobile.room.resetSpaceProfile'),
+          icon: 'eraser',
+          danger: true,
+          onSelect: () => void resetMemberSpaceProfile(data.spaceId, m.id),
+        },
       canKick && { key: 'kick', label: t('room.members.kick'), icon: 'user-minus', danger: true, disabled: !mod, onSelect: () => void kick(m) },
       canBan && { key: 'ban', label: t('room.members.ban'), icon: 'ban', danger: true, disabled: !mod, onSelect: () => setBanTarget(m) },
     ];
-    void showActionSheet(entries, { title: m.display_name || m.username, subtitle: formatHandle(m) });
+    void showActionSheet(entries, { title: profileOf(m).name, subtitle: formatHandle(m) });
   }
 
   const header = (
@@ -296,7 +336,7 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
       <EditRolesSheet data={data} member={rolesTarget} onClose={() => setRolesTarget(null)} />
       <TextPromptSheet
         open={!!banTarget}
-        title={banTarget ? t('spaceSettings.members.banTitle', { name: banTarget.display_name || banTarget.username }) : ''}
+        title={banTarget ? t('spaceSettings.members.banTitle', { name: profileOf(banTarget).name }) : ''}
         description={t('spaceSettings.members.banBody')}
         icon="ban"
         tone="danger"
@@ -314,7 +354,7 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
           } catch (e) {
             throw new Error(e instanceof Error ? e.message : t('spaceSettings.members.banFailed'));
           }
-          toast.success(t('mobile.settings.memberBanned', { name: banTarget.display_name || banTarget.username }));
+          toast.success(t('mobile.settings.memberBanned', { name: profileOf(banTarget).name }));
           setBanTarget(null);
           await loadSpaceMembers(data.spaceId).catch(() => undefined);
         }}

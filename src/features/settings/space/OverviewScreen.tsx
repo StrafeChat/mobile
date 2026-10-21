@@ -2,7 +2,8 @@
  * Space settings -> Overview (SpaceOverviewPage + SpaceDangerZone): icon, name and
  * description; the banner; birthday announcements; and, for the owner only, transferring
  * ownership (searchable member picker, explicit acknowledgement) and deleting the space (type
- * its name; the server checks the name too).
+ * its name; the server checks the name too). The picker names members by their space profile
+ * (nickname, space avatar) beside their handle.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -13,6 +14,7 @@ import { deleteSpace, patchSpace, transferSpaceOwnership, uploadSpaceBanner, upl
 import { addOrUpdateSpace, removeSpace } from '@web/stores/spaces';
 import { formatHandle } from '@web/stores/instance';
 import { setSelectedSpaceId, shell } from '@/shell/state';
+import { resolveProfile, type MemberWithSpaceProfile } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, Button, Input, ListSection, SearchInput, Select, Sheet, SheetFlatList, Text, TextArea, Toggle, Touchable, withAlpha } from '@/ui';
 import { FormCard, Note, SectionTitle, SettingItem } from '../components/rows';
@@ -23,12 +25,17 @@ import type { SpaceSettingsData } from './useSpaceSettings';
 
 const ROOM_TYPE_TEXT = 3;
 
-/** Transfer candidates: everyone but the owner, filtered by name, username or exact id. */
+/** Transfer candidates: everyone but the owner, filtered by nickname, name, username or exact id. */
 export function transferCandidates(members: readonly SpaceMember[], ownerId: string | undefined, query: string): SpaceMember[] {
   const q = query.trim().toLowerCase();
   return members
     .filter((m) => m.id !== ownerId)
-    .filter((m) => !q || (m.display_name || '').toLowerCase().includes(q) || (m.username || '').toLowerCase().includes(q) || m.id === q);
+    .filter((m) => !q || [(m as MemberWithSpaceProfile).nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q)) || m.id === q);
+}
+
+/** A member as the picker names them: their space profile (the nickname, the space avatar). */
+function profileOf(m: SpaceMember) {
+  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
 }
 
 function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open: boolean; onClose: () => void }) {
@@ -47,6 +54,7 @@ function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open:
     }
   }, [open]);
   const list = useMemo(() => transferCandidates(data.members, data.space?.owner_id, query).slice(0, 100), [data.members, data.space?.owner_id, query]);
+  const targetView = target ? profileOf(target) : null;
 
   async function transfer() {
     if (!target || !ack || busy) return;
@@ -79,9 +87,9 @@ function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open:
         <Text variant="label">{t('spaceSettings.danger.transferSelect')}</Text>
         {target ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: theme.radii.md, backgroundColor: withAlpha(theme.colors.primary, 0.1) }}>
-            <Avatar uri={target.avatar} name={target.display_name || target.username} size="md" />
+            <Avatar uri={targetView?.avatar} name={targetView?.name ?? ''} size="md" />
             <View style={{ flex: 1 }}>
-              <Text weight="semibold">{target.display_name || target.username}</Text>
+              <Text weight="semibold">{targetView?.name}</Text>
               <Text variant="caption">{formatHandle(target)}</Text>
             </View>
             <Button title={t('mobile.settings.change')} size="sm" variant="ghost" onPress={() => setTarget(null)} disabled={busy} />
@@ -94,22 +102,25 @@ function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open:
               keyExtractor={(m: SpaceMember) => m.id}
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item }: { item: SpaceMember }) => (
-                <Touchable
-                  onPress={() => setTarget(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.display_name || item.username}, ${formatHandle(item)}`}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, minHeight: 48 }}
-                >
-                  <Avatar uri={item.avatar} name={item.display_name || item.username} size="md" />
-                  <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1}>{item.display_name || item.username}</Text>
-                    <Text variant="caption" numberOfLines={1}>
-                      {formatHandle(item)}
-                    </Text>
-                  </View>
-                </Touchable>
-              )}
+              renderItem={({ item }: { item: SpaceMember }) => {
+                const view = profileOf(item);
+                return (
+                  <Touchable
+                    onPress={() => setTarget(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${view.name}, ${formatHandle(item)}`}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, minHeight: 48 }}
+                  >
+                    <Avatar uri={view.avatar} name={view.name} size="md" />
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={1}>{view.name}</Text>
+                      <Text variant="caption" numberOfLines={1}>
+                        {formatHandle(item)}
+                      </Text>
+                    </View>
+                  </Touchable>
+                );
+              }}
             />
           </>
         )}

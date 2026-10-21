@@ -52,7 +52,7 @@ import { roomLink } from './invites';
 import { openPmWith } from './navigation';
 import { moveOptions } from './reorder';
 import { openCreateRoomSheet, openCreateSectionSheet, openInviteSheet } from './sheets/store';
-import { openRoomSettings, openSpaceSettings } from './links';
+import { openRoomSettings, openSpaceProfile, openSpaceSettings } from './links';
 
 /**
  * The room whose unread the menus leave out, as the rows do: the one on screen, being read as
@@ -158,6 +158,13 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
     icon: 'fa-user-plus',
     onSelect: () => openInviteSheet(spaceId),
   };
+  // Every member has a space profile of their own (SpaceRoomsBar's "Edit Space Profile").
+  const spaceProfile: ActionItem = {
+    key: 'space-profile',
+    label: t('mobile.room.nickname.editSpaceProfile'),
+    icon: 'fa-id-badge',
+    onSelect: () => openSpaceProfile(spaceId),
+  };
   const settings: ActionSheetEntry = ab.showSettings && {
     key: 'settings',
     label: t('space.settings'),
@@ -179,9 +186,10 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
     danger: true,
     onSelect: () => void leaveSpaceFlow(spaceId),
   };
-  if (variant === 'rail') return [invite, settings, markRead, copyId, leave];
+  if (variant === 'rail') return [invite, spaceProfile, settings, markRead, copyId, leave];
   return [
     invite,
+    spaceProfile,
     settings,
     ab.canManageRooms && {
       key: 'create-room',

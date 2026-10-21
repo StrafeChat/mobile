@@ -8,8 +8,9 @@
  * - the report sheet (presenters reportSheet - the web's openReportDialog);
  * - the key-backup prompts (stores/recoveryPrompt) and the encryption-store reset dialog;
  * - "Leaving Strafe" for external links (stores/externalLink);
- * - the room area's own sheets: create thread, members over a pushed screen, and the
- *   one-line text prompt (notification settings are the settings area's page).
+ * - the room area's own sheets: create thread, members over a pushed screen, the one-line
+ *   text prompt (notification settings are the settings area's page) and "Change Nickname"
+ *   (nicknameSheet - the web's NicknameDialog).
  *
  * Mount once, inside the UI provider (bottom sheets) and the router.
  */
@@ -22,6 +23,7 @@ import { E2eeEnvironmentHost } from './e2ee/E2eeEnvironmentHost';
 import { RecoveryHost } from './e2ee/RecoveryHost';
 import { ExternalLinkHost } from './links/ExternalLinkHost';
 import { MembersSheetHost } from './members/MembersPanel';
+import { NicknameSheetHost } from './members/NicknameSheet';
 import { openProfileScreen, openSafetyScreen } from './navigation';
 import { ProfileSheetHost } from './profile/ProfileSheetHost';
 import { ReportSheetHost } from './report/ReportSheetHost';
@@ -38,7 +40,10 @@ function FullProfileBridge() {
     }
     if (shown.current === subject) return;
     shown.current = subject;
-    openProfileScreen(subject.userId);
+    // The space it was opened in (the profile sheet hands it over), so the screen's own
+    // subject - built when the hand-over is gone - shows the same space profile.
+    const spaceId = (subject as { spaceId?: string }).spaceId;
+    openProfileScreen(subject.userId, spaceId ? { spaceId } : {});
   }, [subject]);
   return null;
 }
@@ -62,6 +67,7 @@ export function RoomHosts() {
       <CreateThreadSheetHost />
       <MembersSheetHost />
       <TextPromptHost />
+      <NicknameSheetHost />
       <RecoveryHost />
       <ExternalLinkHost />
       <E2eeEnvironmentHost />

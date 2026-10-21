@@ -30,6 +30,7 @@ import {
 } from '@web/lib/spacePermissions';
 import { snapshot, useSolid } from '@/bridge/solid';
 import { deepEqual, sameArray, useDerived } from './derived';
+import { memberCanChangeNickname, memberCanManageNicknames, type SpaceProfileFields } from './spaceProfileCore';
 import { ROOM_TYPE_GROUP, ROOM_TYPE_PM, ROOM_TYPE_TEXT, ROOM_TYPE_THREAD } from './constants';
 
 // ---- selectors (reactive in Solid, plain functions everywhere else) ---------------------------
@@ -127,7 +128,13 @@ export interface SpaceAbilities {
   canManageEmojis: boolean;
   canKickMembers: boolean;
   canBanMembers: boolean;
-  /** The settings entry exists (Manage Space or Manage Roles), as in the space menu. */
+  /** May set or clear their own nickname here (Change Nickname or Manage Nicknames). */
+  canChangeOwnNickname: boolean;
+  /** May change others' nicknames and reset their space profiles; whose, canEditNicknameOf
+   * decides per target (ranked below viewerHighestRolePosition, never the owner's). */
+  canManageNicknames: boolean;
+  /** The settings entry exists (Manage Space, Manage Roles or Manage Nicknames), as in the
+   * web's space menus. */
   showSettings: boolean;
   /** The owner never leaves - they transfer or delete. */
   canLeave: boolean;
@@ -146,6 +153,7 @@ export function spaceAbilities(
   const isOwner = !!space && !!userId && space.owner_id === userId;
   const canManageSpace = memberCanManageSpace(space, roles, member, userId);
   const canManageRoles = memberCanManageRoles(space, roles, member, userId);
+  const canManageNicknames = memberCanManageNicknames(space, roles, member, userId);
   return {
     isOwner,
     canInvite: memberCanCreateInvite(space, roles, member, userId),
@@ -155,7 +163,11 @@ export function spaceAbilities(
     canManageEmojis: memberCanManageEmojis(space, roles, member, userId),
     canKickMembers: memberCanKickMembers(space, roles, member, userId),
     canBanMembers: memberCanBanMembers(space, roles, member, userId),
-    showSettings: canManageSpace || canManageRoles,
+    canChangeOwnNickname: memberCanChangeNickname(space, roles, member, userId),
+    canManageNicknames,
+    // Manage Nicknames opens Space Settings too (the web's space header and rail menus): its
+    // Members page is where that moderator changes nicknames and resets space profiles.
+    showSettings: canManageSpace || canManageRoles || canManageNicknames,
     canLeave: !isOwner,
     viewerHighestRolePosition: !userId
       ? -1
@@ -165,8 +177,8 @@ export function spaceAbilities(
   };
 }
 
-/** The viewer's own member row in a space (roles, joined_at), if loaded. */
-export function mySpaceMember(spaceId: string): { id: string; roles?: string[]; joined_at?: string } | undefined {
+/** The viewer's own member row in a space (roles, joined_at, space profile), if loaded. */
+export function mySpaceMember(spaceId: string): ({ id: string; roles?: string[]; joined_at?: string } & SpaceProfileFields) | undefined {
   const uid = auth.user?.id;
   if (!uid) return undefined;
   return spaceMembers.bySpaceId[spaceId]?.find((m) => m.id === uid);

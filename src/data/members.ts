@@ -19,6 +19,7 @@ import { useSolid } from '@/bridge/solid';
 import { deepEqual, useDerived } from './derived';
 import { buildMemberList, isOnlineStatus, membersWhoCanView, type MemberListItem } from './memberList';
 import { isTextLike } from './constants';
+import { resolveProfile, resolveSpaceUser, type SpaceProfileFields } from './spaceProfileCompat';
 
 /** Whose members: a space (optionally narrowed to who can see one of its channels), or a group PM. */
 export type MemberSource = { spaceId: string; roomId?: string | null } | { pmRoomId: string };
@@ -31,7 +32,7 @@ function sourceKey(source: MemberSource): string {
  * The people a source lists: a group's participants, or the space's members filtered to those
  * with View Channel in the open text channel/thread (SpacePage.visibleMembers).
  */
-export function sourceMembers(source: MemberSource): (RoomParticipant & { roles?: string[]; joined_at?: string })[] {
+export function sourceMembers(source: MemberSource): (RoomParticipant & SpaceProfileFields & { roles?: string[]; joined_at?: string })[] {
   if ('pmRoomId' in source) return rooms.rooms.find((r) => r.id === source.pmRoomId)?.participants ?? [];
   const { spaceId, roomId } = source;
   const members: SpaceMember[] = spaceMembers.bySpaceId[spaceId] ?? [];
@@ -95,7 +96,10 @@ export function useSpaceMembersLoading(spaceId: string): boolean {
 
 export interface MemberRowView {
   id: string;
+  /** The name shown here: their nickname in a space when they set one. */
   displayName: string;
+  /** Their global name, present only when a nickname replaces it (search matches both). */
+  globalName?: string;
   username: string;
   avatar?: string;
   homeDomain?: string;
@@ -131,11 +135,14 @@ export function memberRowView(source: MemberSource, userId: string): MemberRowVi
   const custom = presence.byUser[p.id]?.custom_status ?? p.presence?.custom_status;
   const roleIds = p.roles?.length ? [...p.roles] : [];
   const nameColor = memberNameColorHex(roleIds.length ? roleIds : undefined, roles);
+  // A group's participants have no space profile; a space member's overlays their global one.
+  const view = 'pmRoomId' in source ? resolveProfile(p) : resolveSpaceUser(source.spaceId, p.id, p);
   return {
     id: p.id,
-    displayName: p.display_name || p.username || t('common.unknown'),
+    displayName: view.name,
+    ...(view.globalName !== view.name ? { globalName: view.globalName } : {}),
     username: p.username,
-    ...(p.avatar ? { avatar: p.avatar } : {}),
+    ...(view.avatar ? { avatar: view.avatar } : {}),
     ...(p.home_domain ? { homeDomain: p.home_domain } : {}),
     ...(nameColor ? { nameColor } : {}),
     bot: p.bot === true,

@@ -34,4 +34,5 @@ export * from './permissions';
 export * from './notifications';
 export * from './voice';
 export * from './settings';
+export * from './spaceProfileCompat';
 export { useSolidScope } from './scope';

@@ -5,7 +5,8 @@
  *
  * Page gating (SpaceSettingsModal.allowed): Overview, System, Discover, Moderation, Invites
  * and Audit log need Manage Space; Roles needs Manage Roles; Emojis needs Manage Emojis (or
- * Manage Space); Members needs any of Manage Space, Manage Roles, Kick or Ban; Bans needs Ban.
+ * Manage Space); Members needs any of Manage Space, Manage Roles, Kick, Ban or Manage Nicknames
+ * (where nicknames are changed and space profiles reset); Bans needs Ban.
  * The owner and Administrator pass every gate. A mirrored (federated) space is not gated here:
  * the server forwards management to its origin.
  */
@@ -75,7 +76,8 @@ export function useSpaceSettings(spaceId: string): SpaceSettingsData {
     canManageEmojis: abilities.canManageEmojis,
     canKick: abilities.canKickMembers,
     canBan: abilities.canBanMembers,
-    canSeeMembers: abilities.canManageSpace || abilities.canManageRoles || abilities.canKickMembers || abilities.canBanMembers,
+    canSeeMembers:
+      abilities.canManageSpace || abilities.canManageRoles || abilities.canKickMembers || abilities.canBanMembers || abilities.canManageNicknames,
     isOwner: abilities.isOwner,
     viewerHighestPosition: abilities.isOwner ? Number.POSITIVE_INFINITY : abilities.viewerHighestRolePosition,
   };

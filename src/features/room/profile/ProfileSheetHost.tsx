@@ -3,6 +3,8 @@
  * sheet with the banner, the avatar (tap: full profile), the identity block, About Me, the
  * birthday, the member's roles in the space (editable with Manage Roles, under the same
  * hierarchy rules as the server), when they joined, and a one-line "Message @name" composer.
+ * Opened in a space it shows the space profile (the nickname, with the global name under it)
+ * and offers "Edit Space Profile" on your own, and "Change Nickname" wherever you may.
  *
  * It renders src/platform/presenters' profileSheet store, which the web's own open functions
  * reach too (overridden), so every surface that shows a person lands here.
@@ -15,13 +17,16 @@ import { authorizeUrl, getPublicApplication } from '@web/api/developers';
 import { openAppWindow } from '@web/lib/openWindow';
 import { sendMessage } from '@web/stores/messages';
 import { addOrUpdateRoom } from '@web/stores/rooms';
-import { openUserProfileFullModal } from '@web/stores/userProfileFullModal';
+import { openUserProfileFullModal, type UserProfileFullSubject } from '@web/stores/userProfileFullModal';
 import type { SpaceMemberRoleEditContext, UserProfilePopoverSubject } from '@web/stores/userProfilePopover';
 import { memberNameColorHex, rolesForMemberProfile } from '@web/lib/userProfilePopoverHelpers';
 import { spaceRoleColorHex } from '@web/lib/spacePermissions';
 import { formatBirthday } from '@web/lib/utils/birthday';
+import { spaces, spaceRoles } from '@web/stores/spaces';
 import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
+import { memberCanEditNickname, mySpaceMember, spaceMemberOf } from '@/data';
+import { openSpaceProfile } from '@/features/settings';
 import { dismissProfileSheet, profileSheet } from '@/platform/presenters';
 import { setProfileSheet } from '@/platform/presenters/profileSheet';
 import { useTheme } from '@/theme';
@@ -42,6 +47,7 @@ import { buildUserMenuItems } from '@web/lib/userContextMenu';
 import { MessageBody } from '@/features/chat';
 import { copyText, errorMessage } from '../util';
 import { openSafetyScreen } from '../navigation';
+import { presentNicknameSheet } from '../nicknameSheet';
 import { IdentityBlock } from './IdentityBlock';
 import { ProfileArt } from './ProfileArt';
 import {
@@ -54,6 +60,9 @@ import {
 } from './roles';
 
 const MAX_ROLE_CHIPS = 3;
+
+/** The full profile's hand-over with the space-profile fields the bumped web adds. */
+export type FullProfileSubject = UserProfileFullSubject & { globalName?: string; spaceId?: string };
 
 export function SectionLabel({ children }: { children: string }) {
   return (
@@ -238,6 +247,25 @@ function RolesSection({
   );
 }
 
+/**
+ * Whether the viewer may change `userId`'s nickname in `spaceId` (their own with Change
+ * Nickname, someone ranked below them with Manage Nicknames, never the owner's unless they are
+ * the owner). Computed here from the stores, and it stays so after the web bump (only
+ * memberCanEditNickname becomes a re-export): the web's spaceRoleContext.canEditNickname is
+ * filled in by the web UI that builds the context, and mobile's builders (chat/people.ts
+ * roleContext, profile/present.ts spaceRoleContextFor) never set it, the voice row and voice
+ * sheet open the sheet with no context, and the context is null while the space's roles load.
+ * Needs the person's member row: someone who has left has no nickname to change.
+ */
+function useCanEditNickname(spaceId: string | undefined, userId: string | undefined): boolean {
+  return useSolid(() => {
+    if (!spaceId || !userId) return false;
+    const target = spaceMemberOf(spaceId, userId);
+    if (!target) return false;
+    return memberCanEditNickname(spaces.spaces.find((s) => s.id === spaceId), spaceRoles(spaceId), mySpaceMember(spaceId), target);
+  }, [spaceId, userId]);
+}
+
 function QuickMessage({ subject, onDone }: { subject: UserProfilePopoverSubject; onDone: () => void }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -298,34 +326,39 @@ export function ProfileSheetHost() {
   if (live.subject) last.current = live;
   const { subject, viewerId, onMessageUser, ctx } = last.current;
   const botInstallable = useBotInstallable(subject?.userId, subject?.bot);
+  const spaceId = subject?.spaceId;
+  const canEditNickname = useCanEditNickname(spaceId, subject?.userId);
 
   if (!subject) return <Sheet open={false} onClose={() => undefined} />;
   const isSelf = subject.userId === viewerId;
   const close = () => dismissProfileSheet();
 
   const openFull = () => {
-    openUserProfileFullModal(
-      {
-        userId: subject.userId,
-        displayName: subject.displayName,
-        username: subject.username,
-        homeDomain: subject.homeDomain,
-        avatar: subject.avatar,
-        banner: subject.banner,
-        bio: subject.bio,
-        aboutMe: subject.aboutMe,
-        spaceRoles: subject.spaceRoles,
-        nameColor: subject.nameColor,
-        pronouns: subject.pronouns,
-        birthday: subject.birthday,
-        birthdayToday: subject.birthdayToday,
-        joinedAtLabel: subject.joinedAtLabel,
-        publicFlags: subject.publicFlags,
-        bot: subject.bot,
-        system: subject.system,
-      },
-      { currentUserId: viewerId, onMessageUser },
-    );
+    // The bumped web's two extra fields ride along (the pinned type has neither yet): the global
+    // name shown under a nickname, and the space, so the full profile shows the same space
+    // profile. Typed as a variable rather than a literal so the pinned type still accepts it.
+    const full: FullProfileSubject = {
+      userId: subject.userId,
+      displayName: subject.displayName,
+      ...(subject.globalName ? { globalName: subject.globalName } : {}),
+      ...(spaceId ? { spaceId } : {}),
+      username: subject.username,
+      homeDomain: subject.homeDomain,
+      avatar: subject.avatar,
+      banner: subject.banner,
+      bio: subject.bio,
+      aboutMe: subject.aboutMe,
+      spaceRoles: subject.spaceRoles,
+      nameColor: subject.nameColor,
+      pronouns: subject.pronouns,
+      birthday: subject.birthday,
+      birthdayToday: subject.birthdayToday,
+      joinedAtLabel: subject.joinedAtLabel,
+      publicFlags: subject.publicFlags,
+      bot: subject.bot,
+      system: subject.system,
+    };
+    openUserProfileFullModal(full, { currentUserId: viewerId, onMessageUser });
     close();
   };
 
@@ -394,6 +427,7 @@ export function ProfileSheetHost() {
         <IdentityBlock
           compact
           displayName={subject.displayName}
+          globalName={subject.globalName}
           username={subject.username}
           homeDomain={subject.homeDomain}
           bot={subject.bot}
@@ -404,6 +438,36 @@ export function ProfileSheetHost() {
           nameColor={subject.nameColor}
           onOpenProfile={openFull}
         />
+        {(isSelf && spaceId) || canEditNickname ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {isSelf && spaceId ? (
+              <Button
+                title={t('mobile.room.nickname.editSpaceProfile')}
+                icon="id-badge"
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  close();
+                  openSpaceProfile(spaceId);
+                }}
+                testID="profile-edit-space-profile"
+              />
+            ) : null}
+            {canEditNickname && spaceId ? (
+              <Button
+                title={t('mobile.room.nickname.change')}
+                icon="pen"
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  close();
+                  presentNicknameSheet({ spaceId, userId: subject.userId });
+                }}
+                testID="profile-change-nickname"
+              />
+            ) : null}
+          </View>
+        ) : null}
         {hasDetails ? <Divider /> : null}
         {botInstallable ? (
           <Button

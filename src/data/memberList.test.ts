@@ -2,7 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import './testing/webMocks';
 import type { SpaceRole, SpaceRoomOverride } from '@web/api/spaces';
 import { PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
-import { buildMemberList, membersWhoCanView, type MemberListItem } from './memberList';
+import { buildMemberList, compareByDisplayName, membersWhoCanView, type MemberListItem } from './memberList';
 
 function role(id: string, position: number, extra: Partial<SpaceRole> = {}): SpaceRole {
   return {
@@ -49,6 +49,18 @@ test('group PM: one flat list, online then offline, each by name, under a Member
   // amy < bob (no display name: username) < Zed; offline Cy < Ève (accent-insensitive).
   expect(short(items)).toEqual(['# MEMBERS 5', 'b', 'c', 'a', 'd (dim)', 'e (dim)']);
   expect(short(buildMemberList({ members: people, roles: undefined, statusOf: () => 'online', labels, showMembersHeader: false }))[0]).toBe('b');
+});
+
+test('people sort by the name they are listed by: a nickname over the display name', () => {
+  const named = [
+    { id: 'a', username: 'zed', display_name: 'Zed', nick: 'Aardvark' },
+    { id: 'b', username: 'amy', display_name: 'Amy' },
+    { id: 'c', username: 'bob', display_name: 'Bob', nick: '  ' },
+    { id: 'd', username: 'cy', display_name: 'Cy', nick: null },
+  ];
+  expect([...named].sort(compareByDisplayName).map((m) => m.id)).toEqual(['a', 'b', 'c', 'd']);
+  const items = buildMemberList({ members: named, roles: undefined, statusOf: () => 'online', labels, showMembersHeader: false });
+  expect(short(items)).toEqual(['a', 'b', 'c', 'd']);
 });
 
 test('unknown status counts as offline', () => {

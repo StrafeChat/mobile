@@ -31,8 +31,16 @@ Object.defineProperty(globalThis, 'localStorage', {
   },
 });
 
+// The gateway client keeps its event handlers (the stores' init*Handlers register there) so a
+// test can deliver an event with emitStargateEvent; nothing arrives unless a test sends it.
+type MockStargateHandler = (event: { t: string; space_id?: string; room_id?: string; user_id?: string; d: unknown }) => void;
+const mockStargateHandlers = new Set<MockStargateHandler>();
+
 jest.mock('@web/services/stargate/client', () => ({
-  onStargateEvent: () => () => undefined,
+  onStargateEvent: (h: MockStargateHandler) => {
+    mockStargateHandlers.add(h);
+    return () => void mockStargateHandlers.delete(h);
+  },
   onStargateReady: () => () => undefined,
   subscribe: () => undefined,
   unsubscribe: () => undefined,
@@ -138,4 +146,12 @@ if (!i18next.isInitialized) {
   });
 }
 
-export {};
+/**
+ * Deliver a gateway event to the registered handlers, in registration order, shaped as the
+ * real client delivers it: the frame `{ t, space_id, d: payload }` as `event.d`.
+ */
+export function emitStargateEvent(t: string, payload: Record<string, unknown>): void {
+  const spaceId = payload.space_id != null ? String(payload.space_id) : undefined;
+  const frame = { t, space_id: spaceId, d: payload };
+  for (const h of [...mockStargateHandlers]) h({ t, space_id: spaceId, room_id: spaceId, user_id: undefined, d: frame });
+}

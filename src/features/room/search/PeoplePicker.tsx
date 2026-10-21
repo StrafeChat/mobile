@@ -1,16 +1,17 @@
 /**
  * A person picker sheet for the search screen's From / Mentions chips: the room's people
  * (a space's members, or a PM's participants plus anyone seen in its messages), filtered by
- * name or username as you type.
+ * nickname, name or username as you type. A space's members show by their space profile, with
+ * the username under a name that is not it.
  */
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { Avatar, BotTag, EmptyState, ListRow, SearchInput, Sheet, SheetFlashList } from '@/ui';
 import type { FlashList } from '@shopify/flash-list';
-import { filterPeople, personLabel, type PickablePerson } from './searchModel';
+import { filterPeople, personAvatar, personLabel, type PickablePerson } from './searchModel';
 
-export { filterPeople, personLabel, type PickablePerson };
+export { filterPeople, personAvatar, personLabel, type PickablePerson };
 
 export interface PeoplePickerProps {
   open: boolean;
@@ -49,8 +50,8 @@ export function PeoplePicker({ open, title, people, selectedId, onPick, onClose 
           renderItem={({ item }) => (
             <ListRow
               title={personLabel(item)}
-              subtitle={item.display_name ? item.username : undefined}
-              leading={<Avatar uri={item.avatar} name={personLabel(item)} size="md" />}
+              subtitle={personLabel(item) !== item.username ? item.username : undefined}
+              leading={<Avatar uri={personAvatar(item)} name={personLabel(item)} size="md" />}
               titleAccessory={<BotTag bot={item.bot} size="xs" style={{ marginStart: 6 }} />}
               selected={item.id === selectedId}
               onPress={() => {

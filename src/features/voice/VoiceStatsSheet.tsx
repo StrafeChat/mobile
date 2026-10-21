@@ -10,12 +10,11 @@ import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { readVoiceStats, voice, voiceStatesForRoom } from '@web/stores/voice';
 import { userIdOfIdentity } from '@web/lib/e2ee/callKeys';
-import { voiceParticipantName } from '@web/lib/voice/perms';
 import type { AudioStreamStats, VideoStreamStats, VoiceStatsSnapshot } from '@web/lib/voice/stats';
 import { useSolid } from '@/bridge/solid';
 import { useTheme } from '@/theme';
 import { Divider, Sheet, Text, useExternalStore } from '@/ui';
-import { useCallSession, useCallSettings } from './hooks';
+import { callParticipantName, useCallSession, useCallSettings } from './hooks';
 import { fmtPct } from './model';
 import { closeVoiceStats, voiceStatsStore } from './sheets';
 
@@ -122,7 +121,10 @@ function ParticipantName({ identity }: { identity: string }) {
   const name = useSolid(() => {
     const uid = userIdOfIdentity(identity);
     const rid = voice.session.roomId ?? '';
-    return voiceParticipantName(uid, voiceStatesForRoom(rid).find((s) => s.user_id === uid), voice.session.spaceId ?? undefined);
+    // The call's own naming rule: a PM's participants, else the space member by their space
+    // profile, else what the voice state carries - as the tiles and the user sheet name them.
+    const st = voiceStatesForRoom(rid).find((s) => s.user_id === uid);
+    return callParticipantName(st ?? { user_id: uid }, rid, voice.session.spaceId);
   }, [identity]);
   return (
     <Text variant="label" numberOfLines={1}>

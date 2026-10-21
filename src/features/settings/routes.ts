@@ -10,6 +10,8 @@
 /** User settings pages, by the web's section id. `desktop` (Tauri-only) has no mobile page. */
 export const USER_SETTINGS_SECTIONS = [
   'account',
+  // Your nickname, avatar and profile in each space (the web's SpaceProfilesSettingsPage).
+  'spaceProfiles',
   'security',
   'devices',
   // Mobile only: blocked people and the privacy switches the web spreads over other pages.
@@ -33,6 +35,15 @@ export function isUserSettingsSection(v: unknown): v is UserSettingsSectionId {
 /** `/settings`, or the page for a section; an unknown id (or `desktop`) opens the list. */
 export function userSettingsPath(section?: string | null): string {
   return section && isUserSettingsSection(section) ? `/settings/${section}` : '/settings';
+}
+
+/**
+ * Space Profiles, opened on one space (`?space=`) or on the screen's own choice: the space on
+ * the rail, else the first. A member's own space profile is a user setting, not a space
+ * settings page: those are gated by moderator permissions, and anyone may edit their own.
+ */
+export function spaceProfilePath(spaceId?: string | null): string {
+  return spaceId ? `/settings/spaceProfiles?space=${encodeURIComponent(spaceId)}` : '/settings/spaceProfiles';
 }
 
 /** Space settings pages. The web calls Overview `general`; both ids are accepted. */

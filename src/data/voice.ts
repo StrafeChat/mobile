@@ -8,11 +8,11 @@
  * never folded into a list's data.
  */
 import { voice, voiceStatesForRoom, isConnectedTo } from '@web/stores/voice';
-import { spaceMembers } from '@web/stores/spaceMembers';
 import { voiceParticipantName, voicePermsFor } from '@web/lib/voice/perms';
 import type { VoicePerms } from '@web/lib/spacePermissions';
 import { auth } from '@web/stores/auth';
 import { deepEqual, sameArray, useDerived } from './derived';
+import { resolveSpaceUser, spaceMemberOf } from './spaceProfileCompat';
 
 export interface VoiceOccupant {
   userId: string;
@@ -28,16 +28,18 @@ export interface VoiceOccupant {
   streaming: boolean;
 }
 
-/** People in a voice room or call, in join order (VoiceChannelUsers). */
+/** People in a voice room or call, in join order (VoiceChannelUsers). A space member is named
+ * and pictured by their space profile; anyone else by what their voice state carries. */
 export function voiceOccupants(roomId: string, spaceId?: string | null): VoiceOccupant[] {
   return [...voiceStatesForRoom(roomId)]
     .sort((a, b) => a.joined_at.localeCompare(b.joined_at))
     .map((st) => {
-      const member = spaceId ? spaceMembers.bySpaceId[spaceId]?.find((m) => m.id === st.user_id) : undefined;
-      const avatar = member?.avatar ?? st.user?.avatar;
+      const member = spaceMemberOf(spaceId, st.user_id);
+      const view = member ? resolveSpaceUser(spaceId, st.user_id, member) : undefined;
+      const avatar = view?.avatar ?? st.user?.avatar;
       return {
         userId: st.user_id,
-        name: voiceParticipantName(st.user_id, st, spaceId ?? undefined),
+        name: view?.name ?? voiceParticipantName(st.user_id, st, spaceId ?? undefined),
         ...(avatar ? { avatar } : {}),
         selfMute: st.self_mute,
         selfDeaf: st.self_deaf,

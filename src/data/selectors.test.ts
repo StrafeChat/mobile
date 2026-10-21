@@ -9,7 +9,7 @@ import './testing/webMocks';
 import { setRooms } from '@web/stores/rooms';
 import { setSpaces } from '@web/stores/spaces';
 import { setReadState } from '@web/stores/readState';
-import { setSpaceMembers } from '@web/stores/spaceMembers';
+import { setSpaceMembers, upsertSpaceMember } from '@web/stores/spaceMembers';
 import { setPresence } from '@web/stores/presence';
 import { setRelationships, RelType } from '@web/stores/relationships';
 import { setMessages } from '@web/stores/messages';
@@ -21,8 +21,10 @@ import { railDmRoomIds, spaceMentionCount, spaceUnreadCount, spaceAbilities } fr
 import { pmRoomIds, pmRowView, roomInfo, latestMessageIdForRoom } from './rooms';
 import { channelRowView, sectionRowView, spaceRoomTree, threadRowView } from './spaceRoomList';
 import { memberListItems, memberRowView } from './members';
-import { friendIds, userDisplay } from './users';
+import { friendIds, profileSubject, userDisplay } from './users';
 import { voiceOccupants } from './voice';
+import { replyReferenceView } from './messages';
+import { PermChangeNickname, PermManageNicknames } from './spaceProfileCompat';
 
 beforeEach(resetStores);
 
@@ -302,6 +304,74 @@ describe('voice occupants', () => {
       { userId: 'a', name: 'Alice', avatar: 'a.png', selfMute: false, selfDeaf: false, serverMute: true, serverDeaf: false, video: false, streaming: false },
       { userId: 'b', name: 'Bob', selfMute: true, selfDeaf: false, serverMute: false, serverDeaf: false, video: false, streaming: false },
     ]);
+  });
+});
+
+describe('space profiles: who a person is inside a space', () => {
+  const PROFILED = { nick: 'Ally', space_avatar: 'space-a.png' };
+
+  beforeEach(() => {
+    setSpaces({ spaces: [space('s1', [EVERYONE])], spaceRoomsBySpaceId: { s1: [sroom('t1', 3)] } });
+    setSpaceMembers('bySpaceId', 's1', [
+      member('a', [], { display_name: 'Alice', avatar: 'a.png', ...PROFILED }),
+      member('b', [], { display_name: 'Bob', avatar: 'b.png' }),
+      member(ME, [], { display_name: 'Me', nick: 'Captain', space_avatar: 'space-me.png' }),
+    ]);
+    setRooms({ rooms: [pm('p1', user('a', { display_name: 'Alice', avatar: 'a.png' }))] });
+  });
+
+  test("another member's nickname and space avatar, in their space's rooms", () => {
+    expect(userDisplay('a', { roomId: 't1' })).toMatchObject({ name: 'Ally', globalName: 'Alice', nick: 'Ally', avatar: 'space-a.png' });
+    expect(userDisplay('b', { roomId: 't1' })).toMatchObject({ name: 'Bob', avatar: 'b.png' });
+    expect(userDisplay('b', { roomId: 't1' }).nick).toBeUndefined();
+  });
+
+  test('yourself: auth.user overlaid with your own member row', () => {
+    expect(userDisplay(ME, { roomId: 't1' })).toMatchObject({ name: 'Captain', globalName: 'Me', avatar: 'space-me.png' });
+  });
+
+  test('a PM, or no space at all, shows the global profile', () => {
+    expect(userDisplay('a', { roomId: 'p1' })).toMatchObject({ name: 'Alice', avatar: 'a.png' });
+    expect(userDisplay('a', { roomId: 'p1' }).nick).toBeUndefined();
+    expect(userDisplay(ME, {}).name).toBe('Me');
+  });
+
+  test('the profile subject: globalName only when a nickname replaces the name; spaceId in a space', () => {
+    expect(profileSubject('a', { spaceId: 's1' })).toMatchObject({ displayName: 'Ally', globalName: 'Alice', avatar: 'space-a.png', spaceId: 's1' });
+    const bob = profileSubject('b', { roomId: 't1' });
+    expect(bob).toMatchObject({ displayName: 'Bob', spaceId: 's1' });
+    expect(bob.globalName).toBeUndefined();
+    expect(profileSubject(ME, { roomId: 't1' })).toMatchObject({ displayName: 'Captain', globalName: 'Me', spaceId: 's1' });
+    const inPm = profileSubject('a', { roomId: 'p1' });
+    expect(inPm).toMatchObject({ displayName: 'Alice', avatar: 'a.png' });
+    expect(inPm.spaceId).toBeUndefined();
+  });
+
+  test('member rows: the effective name and avatar, the global name beside a nickname', () => {
+    expect(memberRowView({ spaceId: 's1' }, 'a')).toMatchObject({ displayName: 'Ally', globalName: 'Alice', username: 'usera', avatar: 'space-a.png' });
+    expect(memberRowView({ spaceId: 's1' }, 'b')?.globalName).toBeUndefined();
+    expect(memberRowView({ spaceId: 's1' }, ME)).toMatchObject({ displayName: 'Captain', avatar: 'space-me.png' });
+    // Members sort by the name they are listed by: Bob as "Aaron" comes first.
+    upsertSpaceMember('s1', member('b', [], { display_name: 'Bob', nick: 'Aaron' }));
+    const listed = memberListItems({ spaceId: 's1' }).flatMap((i) => (i.kind === 'member' ? [i.userId] : []));
+    expect(listed).toEqual(['b', 'a', ME]);
+  });
+
+  test('voice occupants and the reply line use the space profile', () => {
+    setVoice('byRoom', 'v1', [voiceState('v1', 'a', '2026-10-10T10:00:00Z', { user: { id: 'a', username: 'usera', display_name: 'Alice' } })]);
+    expect(voiceOccupants('v1', 's1')[0]).toMatchObject({ name: 'Ally', avatar: 'space-a.png' });
+    expect(voiceOccupants('v1', null)[0]).toMatchObject({ name: 'Alice' });
+    setMessages('byRoom', 't1', [message('t1', '1', 'a'), message('t1', '2', 'b', { reply_to_id: '1' })]);
+    expect(replyReferenceView('t1', '1', undefined)).toMatchObject({ state: 'found', authorName: 'Ally', authorAvatar: 'space-a.png' });
+  });
+
+  test('abilities: Change Nickname from @everyone, Manage Nicknames from a role', () => {
+    const sp = space('s1', [role('ev', 0, PermViewChannel | PermChangeNickname, { name: '@everyone' }), role('mods', 4, PermManageNicknames)]);
+    expect(spaceAbilities(sp, sp.roles, member(ME), ME)).toMatchObject({ canChangeOwnNickname: true, canManageNicknames: false });
+    expect(spaceAbilities(sp, sp.roles, member(ME, ['mods']), ME)).toMatchObject({ canChangeOwnNickname: true, canManageNicknames: true });
+    const locked = space('s1', [EVERYONE]);
+    expect(spaceAbilities(locked, locked.roles, member(ME), ME)).toMatchObject({ canChangeOwnNickname: false, canManageNicknames: false });
+    expect(spaceAbilities({ ...locked, owner_id: ME }, locked.roles, member(ME), ME)).toMatchObject({ canChangeOwnNickname: true, canManageNicknames: true });
   });
 });
 

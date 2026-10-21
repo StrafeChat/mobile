@@ -37,6 +37,7 @@ import {
   useDerived,
   useRoomInfo,
   viewerCanSeeRoom,
+  type SpaceProfileFields,
 } from '@/data';
 import { useTheme } from '@/theme';
 import {
@@ -61,13 +62,20 @@ function usePeople(roomId: string, spaceId: string | null): PickablePerson[] {
   return useDerived(
     `room:searchPeople:${roomId}:${spaceId ?? ''}`,
     () =>
-      (spaceId ? (spaceMembers.bySpaceId[spaceId] ?? []) : roomParticipantPool(roomId)).map((p) => ({
-        id: p.id,
-        username: p.username,
-        ...(p.display_name ? { display_name: p.display_name } : {}),
-        ...(p.avatar ? { avatar: p.avatar } : {}),
-        ...(p.bot ? { bot: true } : {}),
-      })),
+      (spaceId ? (spaceMembers.bySpaceId[spaceId] ?? []) : roomParticipantPool(roomId)).map((p) => {
+        // A space's members carry their space profile: picked (and shown) by nickname and
+        // space avatar too. A PM's people have none.
+        const sp = p as SpaceProfileFields;
+        return {
+          id: p.id,
+          username: p.username,
+          ...(p.display_name ? { display_name: p.display_name } : {}),
+          ...(p.avatar ? { avatar: p.avatar } : {}),
+          ...(p.bot ? { bot: true } : {}),
+          ...(spaceId && sp.nick ? { nick: sp.nick } : {}),
+          ...(spaceId && sp.space_avatar ? { space_avatar: sp.space_avatar } : {}),
+        };
+      }),
     deepEqual,
   );
 }
