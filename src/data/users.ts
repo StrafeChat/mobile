@@ -9,11 +9,13 @@
  * (lib/userProfilePopoverHelpers) so badges, roles and home domain match the web exactly.
  *
  * Inside a space, the person's space profile (nickname, space avatar...) overlays their global
- * one - for yourself too, from your own member row. The pinned web leaves that out, so it is
- * applied here (overlaySenderDisplay / overlayProfileSubject) until the submodule bump; every
- * surface that names a person through userDisplay or profileSubject gets it.
+ * one - for yourself too, from your own member row. The web's builders do that themselves
+ * (getSenderDisplay over the member row, popoverSubjectFromParticipant /
+ * popoverSubjectFromSender given the space), so every surface that names a person through
+ * userDisplay or profileSubject gets it.
  */
 import type { RoomParticipant } from '@web/api/rooms';
+import type { UserProfilePopoverSubject } from '@web/stores/userProfilePopover';
 import type { Relationship } from '@web/api/relationships';
 import { auth } from '@web/stores/auth';
 import { presence, isPresentStatus, isVisibleStatus, type UserPresence } from '@web/stores/presence';
@@ -29,7 +31,7 @@ import { badgesFor, type BadgeDef } from '@web/lib/badges';
 import { snapshot } from '@/bridge/solid';
 import { deepEqual, sameArray, useDerived } from './derived';
 import { spaceIdOfRoom } from './rooms';
-import { overlayProfileSubject, overlaySenderDisplay, spaceMemberOf, type MobileProfileSubject } from './spaceProfileCompat';
+import { spaceMemberOf } from './spaceProfileCompat';
 
 export { badgesFor, type BadgeDef };
 
@@ -143,26 +145,22 @@ export function findParticipant(userId: string, ctx: UserContext): (RoomParticip
   return rel ? (rel.user as RoomParticipant) : undefined;
 }
 
+/** SenderDisplay (whose `name` is the space nickname when one applies, `globalName` their
+ * global name and `nick` the nickname) plus the role colour. */
 export interface UserDisplay extends SenderDisplay {
   /** Highest coloured role in the context's space (hoisted first). */
   nameColor?: string;
-  /** Their global name (display name, else username) - `name` is the nickname when one applies. */
-  globalName?: string;
-  /** Their nickname in the context's space, when they set one. */
-  nick?: string;
 }
 
 /** How a message author / mention / typer is shown: getSenderDisplay over the resolved
- * participant (yourself comes from auth.user) with their space profile on top, plus their
- * role colour in a space. */
+ * participant (yourself comes from auth.user), which in a space is the member row and so
+ * carries their space profile, plus their role colour in a space. */
 export function userDisplay(userId: string, ctx: UserContext): UserDisplay {
   const me = auth.user?.id;
   const spaceId = ctx.spaceId ?? (ctx.roomId ? spaceIdOfRoom(ctx.roomId) : undefined);
-  // The space member is what findParticipant returns first anyway: one lookup serves as the
-  // participant and as the overlay.
-  const member = spaceMemberOf(spaceId, userId);
-  const p = member ?? findParticipant(userId, ctx);
-  const s = overlaySenderDisplay(getSenderDisplay(userId, p ? [p] : [], me), member);
+  // The space member is what findParticipant returns first anyway.
+  const p = spaceMemberOf(spaceId, userId) ?? findParticipant(userId, ctx);
+  const s = getSenderDisplay(userId, p ? [p] : [], me);
   const nameColor = spaceId ? memberNameColorHex(p?.roles, spaceRoles(spaceId)) : undefined;
   return { ...s, ...(nameColor ? { nameColor } : {}) };
 }
@@ -178,29 +176,25 @@ export function useUserDisplay(userId: string | null | undefined, ctx: UserConte
   );
 }
 
-/** The profile sheet's subject, built by the web's canonical builders, with the space profile
- * on top in a space: `spaceId` set, and `globalName` when a nickname replaces the name.
- * overlayProfileSubject is what sets spaceId today. At the web bump, pass `{ spaceId }` as
- * popoverSubjectFromParticipant's third argument and `spaceId` in popoverSubjectFromSender's
- * opts BEFORE deleting the overlay - the bumped builders add it only when given it, and the
- * sheet's Edit Space Profile / Change Nickname need it (selectors.test.ts guards it). */
-export function profileSubject(userId: string, ctx: UserContext): MobileProfileSubject {
+/** The profile sheet's subject, built by the web's canonical builders, which in a space show
+ * the space profile (from the member row) and set `spaceId` - what the sheet's Edit Space
+ * Profile / Change Nickname hang on (selectors.test.ts guards it) - and `globalName` when a
+ * nickname replaces the name. */
+export function profileSubject(userId: string, ctx: UserContext): UserProfilePopoverSubject {
   const spaceId = ctx.spaceId ?? (ctx.roomId ? spaceIdOfRoom(ctx.roomId) : undefined);
   const roles = spaceId ? spaceRoles(spaceId) : undefined;
-  const member = spaceMemberOf(spaceId, userId);
-  const p = member ?? findParticipant(userId, ctx);
-  const subject =
-    p && userId !== auth.user?.id
-      ? popoverSubjectFromParticipant(p, roles)
-      : popoverSubjectFromSender(getSenderDisplay(userId, p ? [p] : [], auth.user?.id), {
-          ...(p ? { participant: p } : {}),
-          ...(roles ? { spaceRoles: roles } : {}),
-        });
-  return overlayProfileSubject(subject, member, spaceId);
+  const p = spaceMemberOf(spaceId, userId) ?? findParticipant(userId, ctx);
+  return p && userId !== auth.user?.id
+    ? popoverSubjectFromParticipant(p, roles, spaceId ? { spaceId } : undefined)
+    : popoverSubjectFromSender(getSenderDisplay(userId, p ? [p] : [], auth.user?.id), {
+        ...(p ? { participant: p } : {}),
+        ...(roles ? { spaceRoles: roles } : {}),
+        ...(spaceId ? { spaceId } : {}),
+      });
 }
 
 /** Re-renders when anything the profile sheet shows changes. */
-export function useProfileSubject(userId: string | null | undefined, ctx: UserContext = {}): MobileProfileSubject | undefined {
+export function useProfileSubject(userId: string | null | undefined, ctx: UserContext = {}): UserProfilePopoverSubject | undefined {
   const roomId = ctx.roomId ?? null;
   const spaceId = ctx.spaceId ?? null;
   return useDerived(

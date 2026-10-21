@@ -15,6 +15,12 @@
  *   code/kbd, a, br); block tags become line breaks, other tags vanish but keep their text,
  *   and script/style-like elements vanish with their content. Markdown inside an HTML block
  *   stays literal, as marked leaves it.
+ * - no attribute survives but a link's target: the web forbids style, class and id so a bio
+ *   cannot borrow the app's own styles (a fake dialog, a full-screen "page"); here nothing a
+ *   bio says can style anything at all.
+ * - every link opens through the "Leaving Strafe" confirmation (stores/externalLink, via the
+ *   renderers' openLink / requestOpenExternalLink), as the web's delegated bio-link handler
+ *   now does - a bio is the one place a stranger's link sits beside a trusted-looking profile.
  *
  * Node shapes:
  *

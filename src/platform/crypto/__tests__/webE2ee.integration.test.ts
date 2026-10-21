@@ -62,7 +62,7 @@ jest.mock('@web/api/devices', () => ({
 
 /* eslint-disable import/first */
 import { processOutgoingRequests, drainPendingToDevice } from '@web/lib/e2ee/transport';
-import { ensureRoomKeyShared, encryptForRoom } from '@web/lib/e2ee/rooms';
+import { ensureRoomKeyShared, encryptForRoom, SenderMismatchError } from '@web/lib/e2ee/rooms';
 import { decryptMessage, ensureServerHasDeviceKeys } from '@web/lib/e2ee/service';
 import { clearDeviceVerification, getOwnFingerprint, getPeerDevices, markDeviceVerified } from '@web/lib/e2ee/safety';
 import { onIncomingMediaKey, sendMediaKey, type IncomingMediaKey } from '@web/lib/e2ee/callKeys';
@@ -122,6 +122,22 @@ test('rooms + service: Alice shares and encrypts, Bob drains to-device and decry
   forged.session_id = 'B'.repeat(43);
   const pending = await decryptMessage('b2', 'r9', `MEGOLM1:${JSON.stringify(forged)}`, { senderId: 'a1', eventId: 'mx', createdAt });
   expect(pending).toMatchObject({ pending: true, plaintext: '' });
+});
+
+test("rooms: a message the server attributes to someone other than its session's owner is refused, not shown as theirs", async () => {
+  as(alice, '1001');
+  const ciphertext = await encryptForRoom(alice, 'r9', 'only alice wrote this', {});
+  as(bob, '2001');
+  // Bob knows Alice's device, so the engine can tell whose session this is.
+  await bob.updateTrackedUsers([new UserId(toMatrixUserId('a1'))]);
+  await processOutgoingRequests(bob);
+  const createdAt = new Date().toISOString();
+  await expect(decryptMessage('b2', 'r9', ciphertext, { senderId: 'a1', eventId: 'mt', createdAt })).resolves.toMatchObject({
+    plaintext: 'only alice wrote this',
+  });
+  // The same ciphertext stored under another member's name: the facade carries the engine's
+  // MismatchedSender shield, and the web's rooms.ts turns it into an error, never the text.
+  await expect(decryptMessage('b2', 'r9', ciphertext, { senderId: 'c3', eventId: 'mu', createdAt })).rejects.toBeInstanceOf(SenderMismatchError);
 });
 
 test('callKeys: a media key travels Olm-encrypted and arrives with its authenticated sender', async () => {

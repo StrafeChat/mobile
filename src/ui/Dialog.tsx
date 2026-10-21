@@ -170,7 +170,10 @@ export function DialogHost() {
         icon={confirm.icon ?? (danger ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-circle-question')}
         tone={danger ? 'danger' : 'default'}
         actions={[
-          { label: confirm.cancelLabel ?? t('common.cancel'), variant: 'outline', onPress: () => settleConfirmDialog(false), testID: 'confirm-dialog-cancel' },
+          // A notice (acknowledgeOnly) has only its confirm button, as on the web.
+          ...(confirm.acknowledgeOnly
+            ? []
+            : [{ label: confirm.cancelLabel ?? t('common.cancel'), variant: 'outline' as const, onPress: () => settleConfirmDialog(false), testID: 'confirm-dialog-cancel' }]),
           {
             label: confirm.confirmLabel ?? t('common.confirm'),
             variant: danger ? 'danger' : 'primary',

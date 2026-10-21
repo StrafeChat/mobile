@@ -112,18 +112,24 @@ backup's private key never exists in the app:
   (bundled into the page, run with the page's WebCrypto), frees the key, and returns
   `{code, publicKey, wrapped, salt}`.
 - `restoreKeyBackup` → `backup.restoreOpen` (unwrap + check against the backup's public
-  key; a wrong code is `RecoveryCodeMismatchError`), then each server page, still encrypted,
-  to `backup.restoreAddPage` (decrypted in the page), then `backup.restoreImport` into the
-  machine. Decrypted sessions never cross the bridge. A session the app abandons is freed
-  after ten minutes.
+  key; a wrong code is `RecoveryCodeMismatchError`, a key that opens but is not the
+  published one `BackupKeyMismatchError` - the app reports both as a mismatch, but only a
+  wrong code goes on to try the retained previous version, as on the web), then each server
+  page, still encrypted, to `backup.restoreAddPage` (decrypted in the page), then
+  `backup.restoreImport` into the machine. Before that import the app clears this device's
+  "backed up" marks (`machine.disableBackup`) if they belong to another version, as the
+  web does, so keys only this device holds still reach a backup made elsewhere. Decrypted
+  sessions never cross the bridge. A session the app abandons is freed after ten minutes.
 
 `keyBackupActivity` (`overrides/e2ee/backupActivity.ts`, re-exported by keyBackup.ts) says
 when a restore, or machine.ts's legacy PIN-backup import, is running and bumps a counter when
 one ends. The web's flow says nothing when a restore succeeds - its dialog closed at submit -
 so this is what lets the phone's recovery sheet keep its spinner exactly as long as the work.
 
-Version tracking, the sync loop, 404 adoption, status and the bootstrap claim are the web's,
-unchanged.
+Version tracking, the backup pin (uploads only to a version this device created or opened
+with the code), the password on creating or deleting a version, the fall-back to the retained
+previous version, the sync loop, 404 adoption, KEY_BACKUP_UPDATE (`noteBackupVersionChanged`),
+status and the bootstrap claim are the web's, unchanged.
 
 ## The machine and its store (`overrides/e2ee/machine.ts`)
 

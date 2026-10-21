@@ -25,7 +25,7 @@ import {
 } from '@web/api/spaces';
 import { applyRoomRoleOverride, applyRoomUserOverride, refreshSpaceRooms, removeRoomRoleOverride, removeRoomUserOverride } from '@web/stores/spaces';
 import { formatHandle } from '@web/stores/instance';
-import { resolveProfile, type MemberWithSpaceProfile } from '@/data';
+import { resolveProfile } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, Button, ListSection, SearchInput, Sheet, SheetFlatList, Text, Touchable, showActionSheet } from '@/ui';
 import { intToHex } from '../color';
@@ -40,7 +40,7 @@ import { ROOM_TYPE_SECTION, type RoomSettingsData } from './useRoomSettings';
 
 /** A member as these screens name them: their space profile (the nickname, the space avatar). */
 function profileOf(m: SpaceMember) {
-  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+  return resolveProfile(m, m, m.username);
 }
 
 /** Members not yet overridden whose nickname, display name or username contains the query (first 100). */
@@ -48,7 +48,7 @@ export function pickableMembers(members: readonly SpaceMember[], exclude: Readon
   const q = query.trim().toLowerCase();
   return members
     .filter((m) => !exclude.has(m.id))
-    .filter((m) => !q || [(m as MemberWithSpaceProfile).nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q)))
+    .filter((m) => !q || [m.nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q)))
     .slice(0, 100);
 }
 

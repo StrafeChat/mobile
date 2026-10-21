@@ -18,10 +18,11 @@ import { confirmDialog } from '@web/stores/confirmDialog';
 import { formatHandle } from '@web/stores/instance';
 import { isVisibleStatus, presence } from '@web/stores/presence';
 import { useSolid } from '@/bridge/solid';
-import { hasResettableSpaceProfile, memberCanEditNickname, memberCanResetSpaceProfile, resolveProfile, useSpaceAbilities, type MemberWithSpaceProfile } from '@/data';
-// The room area's nickname sheet and reset (mounted app-wide); its module directly, not the
-// room index, which pulls the conversation screens.
-import { presentNicknameSheet, resetMemberSpaceProfile } from '@/features/room/nicknameSheet';
+import { confirmResetSpaceProfile } from '@web/lib/userContextMenu';
+import { hasResettableSpaceProfile, memberCanEditNickname, memberCanResetSpaceProfile, resolveProfile, useSpaceAbilities } from '@/data';
+// The room area's nickname sheet (mounted app-wide); its module directly, not the room index,
+// which pulls the conversation screens.
+import { presentNicknameSheet } from '@/features/room/nicknameSheet';
 import { useTheme } from '@/theme';
 import {
   Avatar,
@@ -50,7 +51,7 @@ import type { SpaceSettingsData } from './useSpaceSettings';
 
 /** A member as this page names them: their space profile (the nickname, the space avatar). */
 function profileOf(m: SpaceMember) {
-  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+  return resolveProfile(m, m, m.username);
 }
 
 function RoleChip({ role }: { role: SpaceRole }) {
@@ -269,23 +270,26 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
           onSelect: () => setRolesTarget(m),
         },
       // This page's own entries, not the shared menu builders' (as on the web's
-      // SpaceMembersPage): they stay at the web bump, where only resetMemberSpaceProfile
-      // becomes @web/lib/userContextMenu's confirmResetSpaceProfile.
+      // SpaceMembersPage), with the web's reset flow behind Reset Space Profile.
       (offersNickname(m) || nicknameAllowed(m)) && {
         key: 'nickname',
-        label: t('mobile.room.nickname.change'),
+        label: t('spaceProfile.changeNickname'),
         icon: 'pen',
         disabled: !nicknameAllowed(m),
         onSelect: () => presentNicknameSheet({ spaceId: data.spaceId, userId: m.id }),
       },
       // Someone else's, when you may and they have set something (their nickname stays).
       memberCanResetSpaceProfile(space, data.roles, viewerRow, m) &&
-        hasResettableSpaceProfile(m as MemberWithSpaceProfile, { ignoreNick: true }) && {
+        hasResettableSpaceProfile(m, { ignoreNick: true }) && {
           key: 'reset-profile',
-          label: t('mobile.room.resetSpaceProfile'),
+          label: t('contextMenu.resetSpaceProfile'),
           icon: 'eraser',
           danger: true,
-          onSelect: () => void resetMemberSpaceProfile(data.spaceId, m.id),
+          // A failure lands in this page's error line, as the web's page passes its onError.
+          onSelect: () => {
+            setError('');
+            void confirmResetSpaceProfile(data.spaceId, m.id, setError);
+          },
         },
       canKick && { key: 'kick', label: t('room.members.kick'), icon: 'user-minus', danger: true, disabled: !mod, onSelect: () => void kick(m) },
       canBan && { key: 'ban', label: t('room.members.ban'), icon: 'ban', danger: true, disabled: !mod, onSelect: () => setBanTarget(m) },

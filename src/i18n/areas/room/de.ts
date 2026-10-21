@@ -44,17 +44,4 @@ export default {
   undo: 'Rückgängig',
   pinsLoadFailed: 'Die angehefteten Nachrichten konnten nicht geladen werden.',
   unpinned: 'Nachricht losgelöst',
-  // Space profiles: nicknames, and a moderator's reset of someone's space profile
-  nickname: {
-    editSpaceProfile: 'Space-Profil bearbeiten',
-    change: 'Nickname ändern',
-    titleSelf: 'Nickname ändern',
-    titleOther: 'Nickname von {{name}} ändern',
-    label: 'Nickname',
-    hint: 'Alle in diesem Space sehen Nicknames. Lass das Feld leer, um den Anzeigenamen zu verwenden.',
-    reset: 'Nickname zurücksetzen',
-    failed: 'Nickname konnte nicht geändert werden',
-  },
-  resetSpaceProfile: 'Space-Profil zurücksetzen',
-  resetSpaceProfileBody: 'Das Space-Profil von {{name}} zurücksetzen? Avatar, Banner, Pronomen, Über mich und Bio in diesem Space fallen auf das Hauptprofil zurück. Der Nickname bleibt.',
 };

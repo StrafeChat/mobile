@@ -1,5 +1,8 @@
 /// <reference types="jest" />
 import './setup';
+// The theme reads stores/appearance, which reaches the web store graph (lib/gif/providers ->
+// stores/instance -> auth -> voice, notification prefs); those need their jest stand-ins.
+import '@/data/testing/webMocks';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { UiProvider } from '../UiHosts';
@@ -150,6 +153,18 @@ describe('DialogHost', () => {
     });
     await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
     await expect(answer).resolves.toBe(false);
+  });
+
+  it('shows a notice (acknowledgeOnly) with its one button', async () => {
+    await mountHosts();
+    let answer: Promise<boolean> = Promise.resolve(false);
+    await act(async () => {
+      answer = confirmDialog({ title: 'Reset Space Profile', body: 'Missing permission.', confirmLabel: 'Close', acknowledgeOnly: true });
+    });
+    expect(screen.getByText('Missing permission.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+    await expect(answer).resolves.toBe(true);
   });
 
   it('queues showDialog requests', async () => {

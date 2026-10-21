@@ -6,21 +6,25 @@
  *
  * Your own goes to `@me`, anyone else's to their id. The server applies the rule again (Change
  * Nickname for your own; Manage Nicknames and a higher role for someone else's; the owner's
- * only by the owner) and its refusal is shown in the sheet.
+ * only by the owner) and its refusal is shown in the sheet. A nickname the server would refuse
+ * (lib/spaceProfileLimits: 32 characters as it counts them, on one line, something visible)
+ * says why as it is typed, and Save waits.
+ *
+ * The answer goes into the space's member list only when that list is loaded (the web's
+ * NicknameDialog): a list this started would hold a single member, and an E2EE space room
+ * shares its Megolm key from that list.
  */
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
-import { ensureSpaceMembers, upsertSpaceMember } from '@web/stores/spaceMembers';
+import { ensureSpaceMembers, spaceMembers, upsertSpaceMember } from '@web/stores/spaceMembers';
+import { inputMaxLength, spaceProfileFieldError } from '@web/lib/spaceProfileLimits';
 import { useSolid } from '@/bridge/solid';
 import { patchSpaceMember, resolveSpaceUser, spaceMemberOf } from '@/data';
 import { Button, Input, Sheet, useExternalStore } from '@/ui';
 import { dismissNicknameSheet, nicknameSheetStore, nicknameValue, type NicknameSheetRequest } from '../nicknameSheet';
 import { errorMessage } from '../util';
-
-/** Server limit (equinox spaces/member_profile.go MaxNicknameRunes). */
-export const NICKNAME_MAX_LENGTH = 32;
 
 export function NicknameSheetHost() {
   const request = useExternalStore(nicknameSheetStore);
@@ -71,17 +75,21 @@ export function NicknameSheetHost() {
     setError('');
     try {
       const member = await patchSpaceMember(sid, isSelf ? '@me' : uid, { nick });
-      // The API calls never touch the stores: show it now, ahead of the gateway's update.
-      upsertSpaceMember(sid, member);
+      // The API calls never touch the stores: show it now, ahead of the gateway's update -
+      // into a loaded list only (see the file comment).
+      if (spaceMembers.bySpaceId[sid]?.length) upsertSpaceMember(sid, member);
       dismissNicknameSheet();
     } catch (e) {
-      setError(errorMessage(e, 'mobile.room.nickname.failed'));
+      setError(errorMessage(e, 'spaceProfile.dialog.failed'));
     } finally {
       setBusy(null);
     }
   }
 
   const unchanged = nicknameValue(value) === (target.nick.trim() || null);
+  /** Why the server would refuse what is typed, translated; an unchanged value is not judged. */
+  const problemKey = unchanged ? undefined : spaceProfileFieldError('nick', value);
+  const problem = problemKey ? t(problemKey) : '';
 
   return (
     <Sheet
@@ -89,36 +97,36 @@ export function NicknameSheetHost() {
       onClose={() => {
         if (nicknameSheetStore.get()) dismissNicknameSheet();
       }}
-      title={isSelf ? t('mobile.room.nickname.titleSelf') : t('mobile.room.nickname.titleOther', { name: target.name })}
+      title={isSelf ? t('spaceProfile.dialog.titleSelf') : t('spaceProfile.dialog.titleOther', { name: target.name })}
       dismissible={!busy}
       testID="nickname-sheet"
     >
       <View style={{ gap: 14, paddingTop: 8 }}>
         <Input
-          label={t('mobile.room.nickname.label')}
+          label={t('spaceProfile.dialog.label')}
           placeholder={target.globalName}
-          hint={t('mobile.room.nickname.hint')}
+          hint={t('spaceProfile.dialog.hint')}
           value={value}
           onChangeText={(v) => {
             typed.current = true;
             setError('');
             setValue(v);
           }}
-          maxLength={NICKNAME_MAX_LENGTH}
-          error={error || undefined}
+          maxLength={inputMaxLength('nick')}
+          error={problem || error || undefined}
           disabled={!!busy}
           autoFocus
           selectTextOnFocus
           autoCapitalize="words"
           returnKeyType="done"
           onSubmitEditing={() => {
-            if (!unchanged) void send(nicknameValue(value), 'save');
+            if (!unchanged && !problem) void send(nicknameValue(value), 'save');
           }}
           testID="nickname-input"
         />
         {target.nick ? (
           <Button
-            title={t('mobile.room.nickname.reset')}
+            title={t('spaceProfile.dialog.reset')}
             variant="outline"
             icon="rotate-left"
             loading={busy === 'reset'}
@@ -133,7 +141,7 @@ export function NicknameSheetHost() {
             title={t('common.save')}
             style={{ flex: 1 }}
             loading={busy === 'save'}
-            disabled={!!busy || unchanged}
+            disabled={!!busy || unchanged || !!problem}
             onPress={() => void send(nicknameValue(value), 'save')}
             testID="nickname-save"
           />

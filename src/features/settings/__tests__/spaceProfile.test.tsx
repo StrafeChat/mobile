@@ -3,11 +3,14 @@
  * Settings -> Space Profiles: the pure rules (which space it opens on, the PATCH a draft
  * makes, member pickers finding nicknames) and the screen against the real stores - loading
  * your row, saving only what changed, the locked nickname and the reset that then leaves it
- * out, removing an image, switching spaces with unsaved edits, and having no spaces at all.
+ * out, removing an image, switching spaces with unsaved edits, and having no spaces at all;
+ * the server's limits counted its way, and a space whose member list is not loaded getting no
+ * one-member list from this screen.
  */
 import './settingsTestSetup';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
+import { t } from '@web/i18n/t';
 import { confirmDialogState, settleConfirmDialog } from '@web/stores/confirmDialog';
 import { setSpaces } from '@web/stores/spaces';
 import { setSpaceMembers, spaceMembers } from '@web/stores/spaceMembers';
@@ -80,6 +83,44 @@ describe('space profile rules', () => {
 });
 
 describe('space profile screen', () => {
+  it("leaves a member list that is not loaded alone, and still shows and saves your row", async () => {
+    seed();
+    // The space's list has not been fetched: a list this screen started would hold only you,
+    // and an E2EE space room shares its Megolm key with whoever that list holds.
+    setSpaceMembers({ bySpaceId: {}, loading: {}, loadedAt: {} });
+    compat.getSpaceMember.mockImplementationOnce(async () => answer({ nick: 'Cap' }) as never);
+    compat.patchSpaceMember.mockImplementationOnce(async () => answer({ nick: 'Cap', space_pronouns: 'they/them' }) as never);
+    await render(<SpaceProfileScreen initialSpaceId="S" />);
+    await waitFor(() => expect(screen.getByTestId('space-profile-nick').props.value).toBe('Cap'));
+    expect(spaceMembers.bySpaceId.S).toBeUndefined();
+
+    await fireEvent.changeText(screen.getByTestId('space-profile-pronouns'), 'they/them');
+    await fireEvent.press(screen.getByTestId('space-profile-save'));
+    await waitFor(() => expect(compat.patchSpaceMember).toHaveBeenCalledWith('S', '@me', { pronouns: 'they/them' }));
+    await waitFor(() => expect(screen.queryByTestId('space-profile-save')).toBeNull());
+    expect(screen.getByTestId('space-profile-pronouns').props.value).toBe('they/them');
+    expect(spaceMembers.bySpaceId.S).toBeUndefined();
+    await screen.unmount();
+  });
+
+  it('counts lengths as the server does, and holds Save on a value it would refuse', async () => {
+    seed();
+    await render(<SpaceProfileScreen initialSpaceId="S" />);
+    await waitFor(() => expect(screen.getByTestId('space-profile-nick').props.editable).not.toBe(false));
+    // 32 emoji are 64 UTF-16 units: a nickname of them must fit.
+    expect(screen.getByTestId('space-profile-nick').props.maxLength).toBeGreaterThanOrEqual(64);
+    await fireEvent.changeText(screen.getByTestId('space-profile-nick'), '🐢'.repeat(32));
+    expect(screen.queryByText(t('errors.api.nicknameInvalid'))).toBeNull();
+    expect(screen.getByTestId('space-profile-save').props.accessibilityState?.disabled).toBeFalsy();
+
+    await fireEvent.changeText(screen.getByTestId('space-profile-nick'), '🐢'.repeat(33));
+    expect(screen.getByText(t('errors.api.nicknameInvalid'))).toBeTruthy();
+    expect(screen.getByTestId('space-profile-save').props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.press(screen.getByTestId('space-profile-save'));
+    expect(compat.patchSpaceMember).not.toHaveBeenCalled();
+    await screen.unmount();
+  });
+
   it('loads your row, then saves only the field that changed and shows the answer', async () => {
     seed();
     compat.getSpaceMember.mockImplementationOnce(async () => answer({ nick: 'Cap', space_bio: 'old bio' }) as never);

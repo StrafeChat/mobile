@@ -44,17 +44,4 @@ export default {
   undo: 'Undo',
   pinsLoadFailed: "Couldn't load the pinned messages.",
   unpinned: 'Message unpinned',
-  // Space profiles: nicknames, and a moderator's reset of someone's space profile
-  nickname: {
-    editSpaceProfile: 'Edit Space Profile',
-    change: 'Change Nickname',
-    titleSelf: 'Change Nickname',
-    titleOther: 'Change nickname for {{name}}',
-    label: 'Nickname',
-    hint: 'Everyone in this space sees nicknames. Leave it empty to use the display name.',
-    reset: 'Reset nickname',
-    failed: 'Could not change the nickname',
-  },
-  resetSpaceProfile: 'Reset Space Profile',
-  resetSpaceProfileBody: "Reset {{name}}'s space profile? Their avatar, banner, pronouns, About Me and bio in this space go back to their main profile. Their nickname stays.",
 };

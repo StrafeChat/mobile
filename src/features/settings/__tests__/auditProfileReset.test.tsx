@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { useLocalSearchParams } from 'expo-router';
 import type { AuditLogEntry } from '@web/api/spaces';
 import { PermSendMessages } from '@web/lib/spacePermissions';
+import { t } from '@web/i18n/t';
 import { setSpaces } from '@web/stores/spaces';
 import { setSpaceMembers } from '@web/stores/spaceMembers';
 import { ME, member, resetStores, role, space } from '@/data/testing/fixtures';
@@ -68,13 +69,17 @@ describe('a space-profile reset in the audit log', () => {
 
   it('names the fields it cleared; a nickname change keeps old -> new', async () => {
     await render(<SpaceAuditLogScreen />);
-    // The pinned web has no sentence for either action yet, so each reads as its id.
-    await waitFor(() => expect(screen.getByText('member_profile_reset')).toBeTruthy());
-    fireEvent.press(screen.getByText('member_profile_reset'));
-    await waitFor(() => expect(screen.getByText('avatar, about me')).toBeTruthy());
+    // The web's sentences for both actions (names are global in the audit log).
+    const names = { actor: member(ME).display_name, target: 'Bea' };
+    const reset = t('spaceSettings.audit.actions.member_profile_reset', names);
+    const nick = t('spaceSettings.audit.actions.member_nick_update', names);
+    await waitFor(() => expect(screen.getByText(reset)).toBeTruthy());
+    expect(reset).not.toBe('member_profile_reset');
+    fireEvent.press(screen.getByText(reset));
+    await waitFor(() => expect(screen.getByText('Avatar, About Me')).toBeTruthy());
     expect(screen.queryByText('—')).toBeNull();
 
-    fireEvent.press(screen.getByText('member_nick_update'));
+    fireEvent.press(screen.getByText(nick));
     await waitFor(() => expect(screen.getByText('Bee')).toBeTruthy());
     expect(screen.getByText(/Buzz/)).toBeTruthy();
     await screen.unmount();

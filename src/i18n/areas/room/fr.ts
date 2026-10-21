@@ -44,17 +44,4 @@ export default {
   undo: 'Annuler',
   pinsLoadFailed: 'Impossible de charger les messages épinglés.',
   unpinned: 'Message désépinglé',
-  // Space profiles: nicknames, and a moderator's reset of someone's space profile
-  nickname: {
-    editSpaceProfile: "Modifier le profil d'espace",
-    change: 'Changer le pseudo',
-    titleSelf: 'Changer le pseudo',
-    titleOther: 'Changer le pseudo de {{name}}',
-    label: 'Pseudo',
-    hint: "Tout le monde dans cet espace voit les pseudos. Laissez vide pour utiliser le nom d'affichage.",
-    reset: 'Réinitialiser le pseudo',
-    failed: 'Impossible de changer le pseudo',
-  },
-  resetSpaceProfile: "Réinitialiser le profil d'espace",
-  resetSpaceProfileBody: "Réinitialiser le profil d'espace de {{name}} ? Son avatar, sa bannière, ses pronoms, son « À propos de moi » et sa bio dans cet espace reviennent à son profil principal. Son pseudo est conservé.",
 };

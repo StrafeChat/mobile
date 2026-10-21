@@ -1,11 +1,14 @@
 /**
  * The GIF feed's paging: a later page that repeats a GIF already shown (trending shifts
  * between requests) must not put the same id in the grid twice - the grid keys tiles by id.
+ * And which provider the picker queries, given what the instance offers.
  */
 import '@/ui/__tests__/setup';
+import '@/data/testing/webMocks';
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
-import { useGifFeed } from '../hooks/useGifFeed';
+import { setInstance } from '@web/stores/instance';
+import { effectiveGifProvider, useGifFeed } from '../hooks/useGifFeed';
 
 const gif = (id: string) => ({ id, url: `https://g/${id}.gif`, previewUrl: '', stillUrl: '', previewWidth: 1, previewHeight: 1, title: id });
 
@@ -19,6 +22,8 @@ jest.mock('@web/lib/gif/providers', () => ({
 beforeEach(() => {
   jest.useFakeTimers();
   mockFetchGifs.mockReset();
+  // The instance has answered GET / (the feed waits for that before deciding anything).
+  setInstance({ loaded: true, gifProviders: ['giphy', 'heypster'] });
 });
 
 afterEach(() => {
@@ -44,4 +49,11 @@ test('a repeated GIF on the next page is dropped, not listed twice', async () =>
   expect(ids).toHaveLength(25);
   expect(new Set(ids).size).toBe(ids.length);
   expect(ids[ids.length - 1]).toBe('b1');
+});
+
+test('the saved provider is queried when the instance offers it, else the first one it does', () => {
+  expect(effectiveGifProvider('heypster', ['giphy', 'heypster'])).toBe('heypster');
+  expect(effectiveGifProvider('heypster', ['giphy'])).toBe('giphy');
+  // None offered: the saved one stays, and its "not configured" note shows.
+  expect(effectiveGifProvider('heypster', [])).toBe('heypster');
 });

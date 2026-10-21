@@ -44,69 +44,147 @@ jest.mock('../../storage', () => {
 
 // ---- the mobile keyBackup, against a fake backup API -----------------------------------------------
 
+/**
+ * A miniature of equinox's backup endpoints: one current version, the one it replaced kept
+ * as `previous` (the server retains it for a week), a password on create and delete, and a
+ * 404 for an upload to anything but the current version.
+ */
+interface MockVersion {
+  version: string;
+  public_key: string;
+  wrapped: string;
+  salt: string;
+}
 const mockBackup: {
   machine: OlmMachine | null;
-  version: { version: string; public_key: string; wrapped: string; salt: string } | null;
-  sessions: Record<string, { sessions: Record<string, unknown> }>;
-} = { machine: null, version: null, sessions: {} };
+  version: MockVersion | null;
+  previous: MockVersion | null;
+  /** By version, then room. */
+  sessions: Record<string, Record<string, { sessions: Record<string, unknown> }>>;
+  passwords: string[];
+  nextVersion: number;
+} = { machine: null, version: null, previous: null, sessions: {}, passwords: [], nextVersion: 1 };
+
+/** Sessions the server holds for a version (the current one by default). */
+function mockBackedUpCount(version = mockBackup.version?.version): number {
+  return Object.values(mockBackup.sessions[version ?? ''] ?? {}).reduce((n, r) => n + Object.keys(r.sessions).length, 0);
+}
+
+/** Make `row` the current version, retaining the one it replaces - as the server's create does. */
+function mockReplaceVersion(row: Omit<MockVersion, 'version'>): string {
+  const version = String(mockBackup.nextVersion++);
+  mockBackup.previous = mockBackup.version;
+  mockBackup.version = { version, ...row };
+  mockBackup.sessions[version] = {};
+  return version;
+}
 
 jest.mock('../../overrides/e2ee/machine', () => ({
   getMachine: async () => mockBackup.machine,
 }));
 
 jest.mock('@web/api/devices', () => {
-  const count = () => Object.values(mockBackup.sessions).reduce((n, r) => n + Object.keys(r.sessions).length, 0);
+  const { ApiError } = jest.requireActual('@web/api/ApiError') as typeof import('@web/api/ApiError');
+  const gone = () => new ApiError('backup version not found', 404);
+  const ALG = 'm.megolm_backup.v1.curve25519-aes-sha2';
+  const recovery = (row: MockVersion) => ({
+    exists: true,
+    version: row.version,
+    algorithm: ALG,
+    auth_data: { public_key: row.public_key },
+    wrapped_private_key: row.wrapped,
+    salt: row.salt,
+  });
   return {
-    BACKUP_ALGORITHM: 'm.megolm_backup.v1.curve25519-aes-sha2',
-    createBackupVersion: async (input: { auth_data: { public_key: string }; wrapped_private_key: string; salt: string }) => {
-      mockBackup.version = { version: '1', public_key: input.auth_data.public_key, wrapped: input.wrapped_private_key, salt: input.salt };
-      mockBackup.sessions = {};
-      return { version: '1' };
+    BACKUP_ALGORITHM: ALG,
+    createBackupVersion: async (input: { auth_data: { public_key: string }; wrapped_private_key: string; salt: string; password: string }) => {
+      mockBackup.passwords.push(input.password);
+      return { version: mockReplaceVersion({ public_key: input.auth_data.public_key, wrapped: input.wrapped_private_key, salt: input.salt }) };
     },
     getBackupVersion: async () =>
-      mockBackup.version
-        ? { exists: true, version: mockBackup.version.version, algorithm: 'm.megolm_backup.v1.curve25519-aes-sha2', auth_data: { public_key: mockBackup.version.public_key }, count: count() }
-        : { exists: false },
-    getBackupRecovery: async () =>
       mockBackup.version
         ? {
             exists: true,
             version: mockBackup.version.version,
-            algorithm: 'm.megolm_backup.v1.curve25519-aes-sha2',
+            algorithm: ALG,
             auth_data: { public_key: mockBackup.version.public_key },
-            wrapped_private_key: mockBackup.version.wrapped,
-            salt: mockBackup.version.salt,
+            count: mockBackedUpCount(),
+            ...(mockBackup.previous ? { previous: { version: mockBackup.previous.version, created_at: '2026-10-01T00:00:00Z' } } : {}),
           }
         : { exists: false },
-    putBackupKeys: async (_version: string, body: string) => {
-      const parsed = JSON.parse(body) as { rooms: Record<string, { sessions: Record<string, unknown> }> };
-      for (const [room, r] of Object.entries(parsed.rooms)) {
-        Object.assign(((mockBackup.sessions[room] ??= { sessions: {} }).sessions), r.sessions);
+    getBackupRecovery: async (version?: string) => {
+      if (version) {
+        // The server serves the current version and the retained previous one, no other.
+        const row = [mockBackup.version, mockBackup.previous].find((r) => r?.version === version);
+        if (!row) throw gone();
+        return recovery(row);
       }
-      return { count: count(), etag: String(count()) };
+      return mockBackup.version ? recovery(mockBackup.version) : { exists: false };
+    },
+    putBackupKeys: async (version: string, body: string) => {
+      if (version !== mockBackup.version?.version) throw gone();
+      const parsed = JSON.parse(body) as { rooms: Record<string, { sessions: Record<string, unknown> }> };
+      const target = (mockBackup.sessions[version] ??= {});
+      for (const [room, r] of Object.entries(parsed.rooms)) {
+        Object.assign(((target[room] ??= { sessions: {} }).sessions), r.sessions);
+      }
+      return { count: mockBackedUpCount(version), etag: String(mockBackedUpCount(version)) };
     },
     // One session per page, to make the restore cross page boundaries.
-    getBackupKeys: async (_version: string, after?: string) => {
-      const all = Object.entries(mockBackup.sessions).flatMap(([room, r]) => Object.entries(r.sessions).map(([id, s]) => ({ room, id, s })));
+    getBackupKeys: async (version: string, after?: string) => {
+      if (version !== mockBackup.version?.version && version !== mockBackup.previous?.version) throw gone();
+      const all = Object.entries(mockBackup.sessions[version] ?? {}).flatMap(([room, r]) => Object.entries(r.sessions).map(([id, s]) => ({ room, id, s })));
       const i = after ? Number(after) : 0;
       const item = all[i];
       const rooms = item ? { [item.room]: { sessions: { [item.id]: item.s } } } : {};
       return { rooms, next: i + 1 < all.length ? String(i + 1) : undefined };
     },
-    deleteBackupVersion: async () => {
+    deleteBackupVersion: async (_version: string, password: string) => {
+      mockBackup.passwords.push(password);
       mockBackup.version = null;
     },
   };
 });
 
+/**
+ * The app's localStorage (MMKV in the app; Node has none), where keyBackup keeps the version
+ * this device uploads to and the backup pin. One per simulated device: `switchDeviceStorage`
+ * swaps it, as a second phone would have its own.
+ */
+class MemoryStorage {
+  private m = new Map<string, string>();
+  getItem(k: string): string | null {
+    return this.m.get(k) ?? null;
+  }
+  setItem(k: string, v: string): void {
+    this.m.set(k, String(v));
+  }
+  removeItem(k: string): void {
+    this.m.delete(k);
+  }
+  clear(): void {
+    this.m.clear();
+  }
+}
+const deviceStorage = new Map<string, MemoryStorage>();
+function switchDeviceStorage(device: string): void {
+  let store = deviceStorage.get(device);
+  if (!store) deviceStorage.set(device, (store = new MemoryStorage()));
+  Object.defineProperty(globalThis, 'localStorage', { value: store, configurable: true, writable: true });
+}
+switchDeviceStorage('alice1');
+
 // eslint-disable-next-line import/first
 import {
   commitKeyBackup,
+  getBackupStatus,
   keyBackupActivity,
+  noteBackupVersionChanged,
   prepareKeyBackup,
   RecoveryCodeMismatchError,
   restoreKeyBackup,
   stopBackupSync,
+  syncKeyBackup,
 } from '../../overrides/e2ee/keyBackup';
 
 jest.setTimeout(120_000);
@@ -175,6 +253,8 @@ const untrusted = () => new DecryptionSettings(TrustRequirement.Untrusted);
 let alice: OlmMachine;
 let bob: OlmMachine;
 let firstCiphertext = '';
+/** The recovery code of the backup Alice's first device creates (the backup tests share it). */
+let aliceBackupCode = '';
 
 beforeAll(async () => {
   channel = await bootEngine();
@@ -324,17 +404,25 @@ test('key backup: prepare in the host, upload, wrong code refused, restore on a 
   expect(prepared.publicKey).toMatch(/^[A-Za-z0-9+/]{43}$/);
 
   mockBackup.machine = alice;
-  await commitKeyBackup('100', prepared);
-  const backedUp = Object.values(mockBackup.sessions).reduce((n, r) => n + Object.keys(r.sessions).length, 0);
+  aliceBackupCode = prepared.code;
+  await commitKeyBackup('100', prepared, 'alice-password');
+  // Creating a version carries the account password (the server refuses it otherwise).
+  expect(mockBackup.passwords).toEqual(['alice-password']);
+  const backedUp = mockBackedUpCount();
   expect(backedUp).toBeGreaterThanOrEqual(1);
   expect((await alice.roomKeyCounts()).backedUp).toBe((await alice.roomKeyCounts()).total);
+  // This device made the version, so it trusts it without a code.
+  expect(await getBackupStatus('100')).toMatchObject({ exists: true, untrusted: false });
 
-  // Alice's second device has no room keys until it restores.
+  // Alice's second device has no room keys until it restores, and none of the first's storage.
   const alice2 = await OlmMachine.initialize(new UserId(ALICE), new DeviceId('1002'), 'strafe-e2ee-alice2', 'alice2-pass');
   await expect(alice2.decryptRoomEvent(roomEvent(firstCiphertext, ALICE, 'e0'), new RoomId(ROOM), untrusted())).rejects.toBeInstanceOf(MegolmDecryptionError);
 
   stopBackupSync();
+  switchDeviceStorage('alice2');
   mockBackup.machine = alice2;
+  // A version made elsewhere is not this device's until the code has opened it.
+  expect(await getBackupStatus('100')).toMatchObject({ exists: true, untrusted: true });
   const other = await prepareKeyBackup();
   // Each restore reports its start and its end, so the recovery sheet knows when to close.
   const settled = keyBackupActivity.settled;
@@ -345,12 +433,131 @@ test('key backup: prepare in the host, upload, wrong code refused, restore on a 
   const imported = await restoreKeyBackup('100', prepared.code);
   expect(imported).toBe(backedUp);
   expect(keyBackupActivity).toMatchObject({ running: null, settled: settled + 2, lastOutcome: 'succeeded', lastImported: backedUp });
+  expect(await getBackupStatus('100')).toMatchObject({ untrusted: false });
 
   const restored = await alice2.decryptRoomEvent(roomEvent(firstCiphertext, ALICE, 'e0'), new RoomId(ROOM), untrusted());
   expect(JSON.parse(restored.event).content.body).toBe('hello 0');
   // Imported keys count as already in this backup version: nothing to re-upload.
   expect(await alice2.backupRoomKeys()).toBeUndefined();
   alice2.close();
+  stopBackupSync();
+  switchDeviceStorage('alice1');
+});
+
+test('key backup: a version this device neither created nor unlocked gets no uploads', async () => {
+  // Alice's first device is uploading to the version it created (the test above).
+  mockBackup.machine = alice;
+  const ours = mockBackup.version!.version;
+  // Someone holding her session - or the server - replaces the backup with a key of theirs.
+  const theirs = await prepareKeyBackup();
+  const replaced = mockReplaceVersion({ public_key: theirs.publicKey, wrapped: theirs.wrapped, salt: theirs.salt });
+  noteBackupVersionChanged(); // KEY_BACKUP_UPDATE
+
+  // New room keys on this device...
+  await alice.shareRoomKey(new RoomId('!301:a.test'), [new UserId(ALICE), new UserId(BOB)], settings());
+  expect((await alice.roomKeyCounts()).total).toBeGreaterThan((await alice.roomKeyCounts()).backedUp);
+  // ...go nowhere: the current version has no proof behind it.
+  expect(await syncKeyBackup('100')).toBe(0);
+  expect(mockBackedUpCount(replaced)).toBe(0);
+  expect(await getBackupStatus('100')).toMatchObject({ version: replaced, untrusted: true });
+  expect(mockBackup.previous?.version).toBe(ours);
+  stopBackupSync();
+});
+
+test('key backup: a code that opens only the retained previous version restores from it, uploads nothing', async () => {
+  // State from the test above: current = someone else's version, previous = Alice's own.
+  const ownVersion = mockBackup.previous!.version;
+  const stranger = await prepareKeyBackup();
+  const alice3 = await OlmMachine.initialize(new UserId(ALICE), new DeviceId('1003'), 'strafe-e2ee-alice3', 'alice3-pass');
+  switchDeviceStorage('alice3');
+  mockBackup.machine = alice3;
+
+  // A code that opens neither version is wrong.
+  await expect(restoreKeyBackup('100', stranger.code)).rejects.toBeInstanceOf(RecoveryCodeMismatchError);
+
+  // Her real code opens the previous version: its keys come back...
+  const imported = await restoreKeyBackup('100', aliceBackupCode);
+  expect(imported).toBe(mockBackedUpCount(ownVersion));
+  const restored = await alice3.decryptRoomEvent(roomEvent(firstCiphertext, ALICE, 'e0'), new RoomId(ROOM), untrusted());
+  expect(JSON.parse(restored.event).content.body).toBe('hello 0');
+  // ...but the unconfirmed current version still gets nothing from this device.
+  const current = mockBackup.version!.version;
+  await alice3.shareRoomKey(new RoomId('!302:a.test'), [new UserId(ALICE)], settings());
+  expect(await syncKeyBackup('100')).toBe(0);
+  expect(mockBackedUpCount(current)).toBe(0);
+  expect(await getBackupStatus('100')).toMatchObject({ version: current, untrusted: true });
+  alice3.close();
+  stopBackupSync();
+  switchDeviceStorage('alice1');
+});
+
+test('key backup: a key that opens but is not the published one is a mismatch, not a reason to try the previous version', async () => {
+  // The server pairs Alice's own wrapped key with a public key of someone else's.
+  const theirs = await prepareKeyBackup();
+  const own = mockBackup.previous!;
+  mockReplaceVersion({ public_key: theirs.publicKey, wrapped: own.wrapped, salt: own.salt });
+  // The previous version is now the forged one's predecessor (someone else's), which her
+  // code does not open either - but it must not even be tried: refuse at the first version.
+  const alice4 = await OlmMachine.initialize(new UserId(ALICE), new DeviceId('1004'), 'strafe-e2ee-alice4', 'alice4-pass');
+  switchDeviceStorage('alice4');
+  mockBackup.machine = alice4;
+  const reads: string[] = [];
+  const devices = jest.requireMock('@web/api/devices') as { getBackupVersion: () => Promise<unknown> };
+  const realGetVersion = devices.getBackupVersion;
+  devices.getBackupVersion = async () => {
+    reads.push('version');
+    return realGetVersion();
+  };
+  try {
+    await expect(restoreKeyBackup('100', aliceBackupCode)).rejects.toBeInstanceOf(RecoveryCodeMismatchError);
+  } finally {
+    devices.getBackupVersion = realGetVersion;
+  }
+  // The previous version was never looked up, and nothing was pinned.
+  expect(reads).toEqual([]);
+  expect(await getBackupStatus('100')).toMatchObject({ untrusted: true });
+  alice4.close();
+  stopBackupSync();
+  switchDeviceStorage('alice1');
+});
+
+test('key backup: restoring a version made on another device clears this device\'s old marks, so its own keys reach it', async () => {
+  // Erin's first device backs up a room key of its own to the version it creates.
+  const ERIN = '@600:e.test';
+  const erin1 = await OlmMachine.initialize(new UserId(ERIN), new DeviceId('6001'), 'strafe-e2ee-erin1', 'erin1-pass');
+  switchDeviceStorage('erin1');
+  mockBackup.machine = erin1;
+  await erin1.shareRoomKey(new RoomId('!601:e.test'), [new UserId(ERIN)], settings());
+  await commitKeyBackup('600', await prepareKeyBackup(), 'erin-password');
+  const v1 = mockBackup.version!.version;
+  expect(mockBackedUpCount(v1)).toBe(1);
+  expect(await erin1.roomKeyCounts()).toMatchObject({ total: 1, backedUp: 1 });
+  stopBackupSync();
+
+  // Her second device, with a room key of its own, replaces the backup with a new version.
+  const erin2 = await OlmMachine.initialize(new UserId(ERIN), new DeviceId('6002'), 'strafe-e2ee-erin2', 'erin2-pass');
+  switchDeviceStorage('erin2');
+  mockBackup.machine = erin2;
+  await erin2.shareRoomKey(new RoomId('!602:e.test'), [new UserId(ERIN)], settings());
+  const second = await prepareKeyBackup();
+  await commitKeyBackup('600', second, 'erin-password');
+  const v2 = mockBackup.version!.version;
+  expect(mockBackedUpCount(v2)).toBe(1);
+  erin2.close();
+  stopBackupSync();
+
+  // Back on the first device: KEY_BACKUP_UPDATE, then the new code confirms the new version.
+  switchDeviceStorage('erin1');
+  mockBackup.machine = erin1;
+  noteBackupVersionChanged();
+  expect(await restoreKeyBackup('600', second.code)).toBe(1);
+  // Its own key was marked as backed up to v1, which v2 never received: it is sent now.
+  expect(await syncKeyBackup('600')).toBe(1);
+  expect(mockBackedUpCount(v2)).toBe(2);
+  expect(await erin1.roomKeyCounts()).toMatchObject({ total: 2, backedUp: 2 });
+  erin1.close();
+  stopBackupSync();
+  switchDeviceStorage('alice1');
 });
 
 test('engine errors cross with name and message verbatim (the mismatch machine.ts parses)', async () => {

@@ -1,5 +1,8 @@
 /// <reference types="jest" />
 import './setup';
+// The theme reads stores/appearance, which reaches the web store graph (lib/gif/providers ->
+// stores/instance -> auth -> voice, notification prefs); those need their jest stand-ins.
+import '@/data/testing/webMocks';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Avatar } from '../Avatar';
 import { Badge } from '../Badge';

@@ -25,6 +25,17 @@ function recoveryCodeMismatch(): NamedError {
 }
 
 /**
+ * The code opened the wrapped key, but it is not the key the version publishes - a corrupt
+ * row, or a server pairing the user's own wrapped key with someone else's public key. Named
+ * apart from a wrong code because the app may try the retained previous version only after
+ * a wrong code, as the web does (its importFromBackup throws for this, its unwrapWithCode
+ * returns null for that); the app reports both as RecoveryCodeMismatchError.
+ */
+function backupKeyMismatch(): NamedError {
+  return new NamedError('BackupKeyMismatchError', "the backup's public key does not belong to its wrapped private key");
+}
+
+/**
  * A restore the app abandoned (it crashed or lost the page mid-way) must not leave the
  * private key in wasm memory for the rest of the page's life.
  */
@@ -68,7 +79,7 @@ export class BackupFlows {
     }
     if (publicKeyOf(key) !== p.publicKey) {
       key.free();
-      throw recoveryCodeMismatch();
+      throw backupKeyMismatch();
     }
     const session = this.nextSession++;
     this.sessions.set(session, {

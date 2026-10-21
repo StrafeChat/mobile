@@ -2,7 +2,8 @@
  * The expression pickers: the emoji grid (sections, pick, recent list, skin tone), its panel
  * layout (the conversation's space first, the category bar, backspace), the composer's
  * expression panel (tabs, GIF tab mounted on demand), the reaction sheet, and the GIF tab's
- * "not configured" state when the instance has no GIF API key.
+ * providers: only what the instance offers (GET / features.gifs), the saved one when offered
+ * and the first offered one otherwise, and "not configured" only when there is none.
  */
 import '@/ui/__tests__/setup';
 import '@/data/testing/webMocks';
@@ -11,6 +12,8 @@ import i18next from 'i18next';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { setCustomEmojis } from '@web/stores/customEmojis';
 import { setSpaces } from '@web/stores/spaces';
+import { setInstance } from '@web/stores/instance';
+import { setGifProvider } from '@web/stores/appearance';
 import { resetStores, space } from '@/data/testing/fixtures';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { GifPicker } from '../components/GifPicker';
@@ -36,6 +39,20 @@ jest.mock('@/shell/SwipeShell', () => ({
 i18next.addResourceBundle('en', 'translation', { mobile: { composer: composerEn } }, true, true);
 
 jest.mock('@web/stores/externalLink', () => ({ requestOpenExternalLink: () => undefined }));
+
+// GET / is not asked here: a picker opened before the instance answered waits for it.
+const mockLoadInstanceInfo = jest.fn(() => new Promise<void>(() => undefined));
+jest.mock('@web/stores/instance', () => ({
+  ...jest.requireActual<object>('@web/stores/instance'),
+  loadInstanceInfo: () => mockLoadInstanceInfo(),
+}));
+
+// The instance proxies every GIF request (GET /gifs/*); what it answers is not under test.
+const mockFetchGifs = jest.fn(async (..._args: unknown[]) => ({ results: [], nextOffset: 0, totalCount: 0 }));
+jest.mock('@web/lib/gif/providers', () => ({
+  ...jest.requireActual<object>('@web/lib/gif/providers'),
+  fetchGifs: (...a: unknown[]) => mockFetchGifs(...a),
+}));
 
 // The setup's bottom-sheet stand-in has no scrollable creator; the plain list is enough here.
 Object.assign(jest.requireMock<object>('@gorhom/bottom-sheet'), { useBottomSheetScrollableCreator: () => undefined });
@@ -82,12 +99,56 @@ describe('EmojiPicker', () => {
 });
 
 describe('GifPicker', () => {
+  beforeEach(() => {
+    mockFetchGifs.mockClear();
+    setGifProvider('giphy');
+  });
+
   test('says the provider is not set up when the instance has no key', async () => {
+    setInstance({ loaded: true, gifProviders: [] });
     await render(<GifPicker onPick={() => undefined} />);
     await act(async () => {
       jest.advanceTimersByTime(400);
     });
     expect(screen.getByText('GIPHY isn’t set up')).toBeTruthy();
+    expect(mockFetchGifs).not.toHaveBeenCalled();
+    // Nothing to switch between.
+    expect(screen.queryByTestId('gif-provider-switch-giphy')).toBeNull();
+  });
+
+  test('a saved provider the instance does not offer falls back to one it does, with no switch', async () => {
+    setGifProvider('heypster');
+    setInstance({ loaded: true, gifProviders: ['giphy'] });
+    await render(<GifPicker onPick={() => undefined} />);
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+    });
+    expect(screen.queryByText('Heypster isn’t set up')).toBeNull();
+    expect(mockFetchGifs).toHaveBeenCalledWith('giphy', expect.anything());
+    expect(screen.queryByTestId('gif-provider-switch-giphy')).toBeNull();
+  });
+
+  test('the switch offers the instance’s providers when it has more than one', async () => {
+    setGifProvider('heypster');
+    setInstance({ loaded: true, gifProviders: ['giphy', 'heypster'] });
+    await render(<GifPicker onPick={() => undefined} />);
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+    });
+    expect(mockFetchGifs).toHaveBeenCalledWith('heypster', expect.anything());
+    expect(screen.getByTestId('gif-provider-switch-giphy')).toBeTruthy();
+    expect(screen.getByTestId('gif-provider-switch-heypster')).toBeTruthy();
+  });
+
+  test('before the instance has answered there is no "not configured" guess', async () => {
+    setInstance({ loaded: false, gifProviders: [] });
+    await render(<GifPicker onPick={() => undefined} />);
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+    });
+    expect(screen.queryByText('GIPHY isn’t set up')).toBeNull();
+    expect(mockFetchGifs).not.toHaveBeenCalled();
+    expect(mockLoadInstanceInfo).toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,7 @@
 /**
- * Bottom-sheet forms the settings pages share: a password confirmation (2FA changes), a
- * single text field (names, notes, reasons, email), and the recovery-codes display.
+ * Bottom-sheet forms the settings pages share: a password confirmation (2FA changes, and the
+ * key backup through PasswordPromptHost), a single text field (names, notes, reasons, email),
+ * and the recovery-codes display.
  *
  * Each keeps itself open while its request runs (not dismissible, button busy) and shows the
  * server's error inside the sheet, as the web dialogs do.
@@ -25,31 +26,40 @@ export interface PasswordPromptSheetProps {
   description?: string;
   confirmLabel: string;
   tone?: 'default' | 'danger';
+  /**
+   * An error the caller already knows about, shown until the user edits the field - a wrong
+   * password reported by a previous attempt when the prompt is raised again (the web's
+   * PasswordPromptDialog `error`).
+   */
+  error?: string;
   onConfirm: (password: string) => Promise<void>;
   onClose: () => void;
 }
 
-export function PasswordPromptSheet({ open, title, description, confirmLabel, tone = 'default', onConfirm, onClose }: PasswordPromptSheetProps) {
+export function PasswordPromptSheet({ open, title, description, confirmLabel, tone = 'default', error: callerError, onConfirm, onClose }: PasswordPromptSheetProps) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  // null until this sheet has something of its own to say (or the user starts typing), so
+  // that the caller's error shows first and typing clears it like any other.
+  const [ownError, setOwnError] = useState<string | null>(null);
+  const error = ownError ?? callerError ?? '';
 
   useEffect(() => {
     if (open) {
       setPassword('');
-      setError('');
+      setOwnError(null);
       setBusy(false);
     }
   }, [open]);
 
   async function submit() {
     if (!password || busy) return;
-    setError('');
+    setOwnError('');
     setBusy(true);
     try {
       await onConfirm(password);
     } catch (err) {
-      setError(errorText(err));
+      setOwnError(errorText(err));
       setBusy(false);
     }
   }
@@ -61,7 +71,7 @@ export function PasswordPromptSheet({ open, title, description, confirmLabel, to
           label={t('settings.security.passwordPromptLabel')}
           value={password}
           onChangeText={(v) => {
-            setError('');
+            setOwnError('');
             setPassword(v);
           }}
           secureTextEntry

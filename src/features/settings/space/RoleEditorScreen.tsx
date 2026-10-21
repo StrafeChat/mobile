@@ -23,7 +23,7 @@ import { removeSpaceRole, upsertSpaceRole } from '@web/stores/spaces';
 import { loadSpaceMembers } from '@web/stores/spaceMembers';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { formatHandle } from '@web/stores/instance';
-import { resolveProfile, type MemberWithSpaceProfile } from '@/data';
+import { resolveProfile } from '@/data';
 import { Avatar, BotTag, Button, EmptyState, Icon, IconButton, Input, ListSection, SearchInput, SegmentedControl, Text, Toggle, toast } from '@/ui';
 import { ROLE_COLOR_SWATCHES, hexToInt, intToHex } from '../color';
 import { ColorField } from '../components/ColorField';
@@ -78,7 +78,7 @@ export function rolePatch(r: SpaceRole, d: RoleDraft): { permissions?: number; c
 
 /** A member as these lists name them: their space profile (the nickname, the space avatar). */
 function profileOf(m: SpaceMember) {
-  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+  return resolveProfile(m, m, m.username);
 }
 
 function MemberAvatar({ member }: { member: SpaceMember }) {

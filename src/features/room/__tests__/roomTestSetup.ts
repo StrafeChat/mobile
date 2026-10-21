@@ -95,7 +95,18 @@ jest.mock('@/platform/crypto', () => ({ cryptoHost: { state: 'ready', onStateCha
 jest.mock('@web/lib/e2ee/keyBackup', () => ({ getBackupStatus: jest.fn(async () => ({ exists: false })), stopBackupSync: () => undefined }));
 jest.mock('@web/api/reports', () => ({ createReport: jest.fn(async () => undefined) }));
 jest.mock('@web/api/developers', () => ({ getPublicApplication: jest.fn(async () => null), authorizeUrl: () => 'https://x/oauth2/authorize' }));
-jest.mock('@web/api/spaces', () => ({ setMemberSpaceRoles: jest.fn(async () => undefined), kickSpaceMember: jest.fn(), banSpaceMember: jest.fn() }));
+// The real module (the profile keys, the types' runtime companions) with the calls these
+// screens make stubbed - the space-profile ones included, which src/data re-exports.
+jest.mock('@web/api/spaces', () => ({
+  ...jest.requireActual<object>('@web/api/spaces'),
+  setMemberSpaceRoles: jest.fn(async () => undefined),
+  kickSpaceMember: jest.fn(),
+  banSpaceMember: jest.fn(),
+  getSpaceMember: jest.fn(),
+  patchSpaceMember: jest.fn(),
+  uploadSpaceMemberAvatar: jest.fn(),
+  uploadSpaceMemberBanner: jest.fn(),
+}));
 jest.mock('@web/lib/openWindow', () => ({ openAppWindow: jest.fn() }));
 jest.mock('@web/stores/pinnedMessages', () => {
   const { createStore } = require('solid-js/store');

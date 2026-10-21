@@ -5,6 +5,9 @@
  * in a right-to-left layout too.
  */
 import './setup';
+// The theme reads stores/appearance, which reaches the web store graph (lib/gif/providers ->
+// stores/instance -> auth -> voice, notification prefs); those need their jest stand-ins.
+import '@/data/testing/webMocks';
 import { act, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';

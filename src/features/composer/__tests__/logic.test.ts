@@ -4,6 +4,9 @@
  * grid model.
  */
 import '@/ui/__tests__/setup';
+// The theme reads stores/appearance, which reaches the web store graph (lib/gif/providers ->
+// stores/instance -> auth -> voice, notification prefs); those need their jest stand-ins.
+import '@/data/testing/webMocks';
 import { describe, expect, test } from '@jest/globals';
 import { buildMentionCatalog, serializeDraft } from '@web/lib/utils/mentions';
 import { ApiError } from '@web/api/ApiError';

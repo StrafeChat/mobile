@@ -44,17 +44,4 @@ export default {
   undo: 'Desfazer',
   pinsLoadFailed: 'Não foi possível carregar as mensagens fixadas.',
   unpinned: 'Mensagem desafixada',
-  // Space profiles: nicknames, and a moderator's reset of someone's space profile
-  nickname: {
-    editSpaceProfile: 'Editar perfil do espaço',
-    change: 'Alterar apelido',
-    titleSelf: 'Alterar apelido',
-    titleOther: 'Alterar o apelido de {{name}}',
-    label: 'Apelido',
-    hint: 'Todos neste espaço veem os apelidos. Deixe em branco para usar o nome de exibição.',
-    reset: 'Redefinir apelido',
-    failed: 'Não foi possível alterar o apelido',
-  },
-  resetSpaceProfile: 'Redefinir perfil do espaço',
-  resetSpaceProfileBody: 'Redefinir o perfil do espaço de {{name}}? O avatar, o banner, os pronomes, o "Sobre mim" e a bio dessa pessoa neste espaço voltam ao perfil principal. O apelido é mantido.',
 };

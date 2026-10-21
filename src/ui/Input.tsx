@@ -198,6 +198,14 @@ export interface TextAreaProps extends InputProps {
   maxRows?: number;
   /** Show the remaining-characters counter when `maxLength` is set (default true). */
   showCount?: boolean;
+  /**
+   * The limit the counter shows, when it is not `maxLength`: a field whose server counts
+   * characters differently from the input's UTF-16 units caps the input generously and counts
+   * against the real limit (with `countLength`).
+   */
+  countLimit?: number;
+  /** How the counter measures the value (default: its length in UTF-16 units). */
+  countLength?: (value: string) => number;
 }
 
 export function TextArea({
@@ -212,6 +220,8 @@ export function TextArea({
   maxRows = 8,
   showCount = true,
   maxLength,
+  countLimit,
+  countLength,
   value,
   onChangeText,
   ref,
@@ -220,10 +230,12 @@ export function TextArea({
   const theme = useTheme();
   const Field = useFieldComponent();
   const focus = useFocus(rest);
-  const [uncontrolledLength, setUncontrolledLength] = useState((rest.defaultValue ?? '').length);
-  const length = value !== undefined ? value.length : uncontrolledLength;
+  const measure = countLength ?? ((v: string) => v.length);
+  const [uncontrolledLength, setUncontrolledLength] = useState(measure(rest.defaultValue ?? ''));
+  const length = value !== undefined ? measure(value) : uncontrolledLength;
   const line = theme.font(20);
-  const counter = showCount && maxLength ? maxLength - length : null;
+  const limit = countLimit ?? maxLength;
+  const counter = showCount && limit ? limit - length : null;
 
   return (
     <View style={[{ gap: 6, alignSelf: 'stretch' }, containerStyle]}>
@@ -236,7 +248,7 @@ export function TextArea({
           maxLength={maxLength}
           value={value}
           onChangeText={(v) => {
-            if (value === undefined) setUncontrolledLength(v.length);
+            if (value === undefined) setUncontrolledLength(measure(v));
             onChangeText?.(v);
           }}
           textAlignVertical="top"
@@ -271,7 +283,7 @@ export function TextArea({
             style={{ fontVariant: ['tabular-nums'] }}
             accessibilityLabel={t('mobile.ui.charactersLeft', { count: Math.max(0, counter) })}
           >
-            {length}/{maxLength}
+            {length}/{limit}
           </Text>
         ) : null}
       </View>

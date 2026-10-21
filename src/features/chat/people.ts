@@ -2,7 +2,8 @@
  * People in a conversation: the profile sheet for an author or a mention, and the long-press
  * user menu - the web list's openProfileForUser / openAuthorMenu, with the same builders
  * (lib/userProfilePopoverHelpers through src/data's profileSubject, lib/userContextMenu). In a
- * space the menu also carries the nickname and space-profile entries the member drawer has.
+ * space the menu also carries the nickname and space-profile entries the member drawer has
+ * (the builder's, given room/nicknameSheet's spaceProfileMenuFields).
  */
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
@@ -13,10 +14,10 @@ import { banSpaceMember, kickSpaceMember } from '@web/api/spaces';
 import { viewerRoleCeiling } from '@web/lib/spacePermissions';
 import { buildSpaceModerationItems, buildUserMenuItems } from '@web/lib/userContextMenu';
 import type { SpaceMemberRoleEditContext } from '@web/stores/userProfilePopover';
-import { findParticipant, profileSubject, roomGates, userDisplay, type UserContext } from '@/data';
+import { findParticipant, mySpaceMember, profileSubject, roomGates, spaceAbilities, userDisplay, type UserContext } from '@/data';
 import { presentProfileSheet } from '@/platform/presenters';
 // Its module directly, not '@/features/room': that index pulls RoomView, which pulls the chat.
-import { spaceProfileMenuItems } from '@/features/room/nicknameSheet';
+import { spaceProfileMenuFields } from '@/features/room/nicknameSheet';
 import { showActionSheet, toast } from '@/ui';
 import { errorText, messageUser } from './navigation';
 
@@ -95,6 +96,11 @@ export function authorMenuItems(userId: string, ctx: UserContext) {
   const space = spaceId ? spaces.spaces.find((s) => s.id === spaceId) : undefined;
   const gates = ctx.roomId ? roomGates(ctx.roomId, spaceId) : undefined;
   const p = findParticipant(userId, ctx);
+  // The viewer's rank: the room's gates carry it; without a room (the space's own surfaces)
+  // the space's abilities do, so the nickname entries do not depend on a room being open.
+  const viewerHighestRolePosition =
+    gates?.viewerHighestRolePosition ??
+    (spaceId ? spaceAbilities(space, spaceRoles(spaceId), mySpaceMember(spaceId), me).viewerHighestRolePosition : undefined);
   return buildUserMenuItems({
     userId,
     bot: d.bot,
@@ -105,26 +111,22 @@ export function authorMenuItems(userId: string, ctx: UserContext) {
     onMessage: messageUser,
     spaceId: spaceId ?? undefined,
     roomId: ctx.roomId ?? undefined,
-    extraItems: [
-      // At the web bump these fields move into the buildSpaceModerationItems call below, with
-      // onEditNickname only when spaceMemberOf(spaceId, userId) has a row: the web builder
-      // offers Change Nickname without checking, and an old message's author who has left has
-      // no nickname to change (the PATCH answers 404).
-      ...spaceProfileMenuItems(spaceId, userId, p?.roles),
-      ...buildSpaceModerationItems({
-        spaceId: spaceId ?? undefined,
-        targetUserId: userId,
-        targetRoleIds: p?.roles,
-        currentUserId: me,
-        spaceOwnerId: space?.owner_id,
-        spaceRoles: spaceId ? spaceRoles(spaceId) : undefined,
-        viewerHighestRolePosition: gates?.viewerHighestRolePosition,
-        canKickMembers: gates?.canKickMembers,
-        canBanMembers: gates?.canBanMembers,
-        onKick: spaceId ? (uid) => void kick(spaceId, uid) : undefined,
-        onBan: spaceId ? (uid) => void ban(spaceId, uid) : undefined,
-      }),
-    ],
+    extraItems: buildSpaceModerationItems({
+      spaceId: spaceId ?? undefined,
+      targetUserId: userId,
+      targetRoleIds: p?.roles,
+      currentUserId: me,
+      spaceOwnerId: space?.owner_id,
+      spaceRoles: spaceId ? spaceRoles(spaceId) : undefined,
+      viewerHighestRolePosition,
+      canKickMembers: gates?.canKickMembers,
+      canBanMembers: gates?.canBanMembers,
+      onKick: spaceId ? (uid) => void kick(spaceId, uid) : undefined,
+      onBan: spaceId ? (uid) => void ban(spaceId, uid) : undefined,
+      // Change Nickname only for someone with a member row here (an old message's author who
+      // has left has none - the web builder would offer it anyway, and the PATCH answers 404).
+      ...spaceProfileMenuFields(spaceId, userId),
+    }),
   });
 }
 

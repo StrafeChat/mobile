@@ -61,9 +61,6 @@ import {
 
 const MAX_ROLE_CHIPS = 3;
 
-/** The full profile's hand-over with the space-profile fields the bumped web adds. */
-export type FullProfileSubject = UserProfileFullSubject & { globalName?: string; spaceId?: string };
-
 export function SectionLabel({ children }: { children: string }) {
   return (
     <Text variant="overline" style={{ marginBottom: 6 }}>
@@ -250,12 +247,12 @@ function RolesSection({
 /**
  * Whether the viewer may change `userId`'s nickname in `spaceId` (their own with Change
  * Nickname, someone ranked below them with Manage Nicknames, never the owner's unless they are
- * the owner). Computed here from the stores, and it stays so after the web bump (only
- * memberCanEditNickname becomes a re-export): the web's spaceRoleContext.canEditNickname is
- * filled in by the web UI that builds the context, and mobile's builders (chat/people.ts
- * roleContext, profile/present.ts spaceRoleContextFor) never set it, the voice row and voice
- * sheet open the sheet with no context, and the context is null while the space's roles load.
- * Needs the person's member row: someone who has left has no nickname to change.
+ * the owner) - the web's memberCanEditNickname, computed here from the stores rather than read
+ * from spaceRoleContext.canEditNickname: on the web the UI that builds the context fills that
+ * in, and mobile's builders (chat/people.ts roleContext, profile/present.ts
+ * spaceRoleContextFor) do not, the voice row and voice sheet open the sheet with no context,
+ * and the context is null while the space's roles load. Needs the person's member row:
+ * someone who has left has no nickname to change.
  */
 function useCanEditNickname(spaceId: string | undefined, userId: string | undefined): boolean {
   return useSolid(() => {
@@ -334,10 +331,9 @@ export function ProfileSheetHost() {
   const close = () => dismissProfileSheet();
 
   const openFull = () => {
-    // The bumped web's two extra fields ride along (the pinned type has neither yet): the global
-    // name shown under a nickname, and the space, so the full profile shows the same space
-    // profile. Typed as a variable rather than a literal so the pinned type still accepts it.
-    const full: FullProfileSubject = {
+    // The global name shown under a nickname, and the space, so the full profile shows the same
+    // space profile.
+    const full: UserProfileFullSubject = {
       userId: subject.userId,
       displayName: subject.displayName,
       ...(subject.globalName ? { globalName: subject.globalName } : {}),
@@ -442,7 +438,7 @@ export function ProfileSheetHost() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {isSelf && spaceId ? (
               <Button
-                title={t('mobile.room.nickname.editSpaceProfile')}
+                title={t('spaceProfile.edit')}
                 icon="id-badge"
                 variant="secondary"
                 size="sm"
@@ -455,7 +451,7 @@ export function ProfileSheetHost() {
             ) : null}
             {canEditNickname && spaceId ? (
               <Button
-                title={t('mobile.room.nickname.change')}
+                title={t('spaceProfile.changeNickname')}
                 icon="pen"
                 variant="secondary"
                 size="sm"

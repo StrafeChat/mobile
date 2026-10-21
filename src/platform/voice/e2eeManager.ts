@@ -20,6 +20,11 @@
  *    track gets an enabled decrypting cryptor: a plaintext frame fails to decrypt and is
  *    dropped instead of played.
  *
+ * Like livekit-client's own manager (and unlike RNE2EEManager), it reports each remote
+ * participant's encryption status from their publications - on TrackPublished, and for
+ * every existing one on connecting - so the voice store's ParticipantEncryptionStatusChanged
+ * handler can refuse a participant publishing in the clear before their media is subscribed.
+ *
  * And it never turns a sender's cryptor off (an off cryptor passes frames through): it is
  * disposed only once its track is unpublished, i.e. once the sender has stopped.
  *
@@ -145,6 +150,13 @@ export class CallE2EEManager implements BaseE2EEManager {
         if (pub.track) forgetTrackSender(pub.track.mediaStreamTrack);
       });
     room
+      .on(RoomEvent.TrackPublished, (pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+        this.reportPublication(pub, participant.identity);
+      })
+      .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+        if (state !== ConnectionState.Connected) return;
+        room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => this.reportPublication(pub, p.identity)));
+      })
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
         this.attachReceiver(track, pub.trackSid, participant.identity);
       })
@@ -249,6 +261,18 @@ export class CallE2EEManager implements BaseE2EEManager {
       // Released only if nothing muted the track meanwhile (mute also works by disabling it).
       if (held && media && !track.isMuted) media.enabled = true;
     });
+  }
+
+  /**
+   * livekit-client's setParticipantCryptorEnabledForPublication: a remote publication's own
+   * encryption flag decides the participant's status, reported as soon as the publication is
+   * known - before anything of it is subscribed - so voice.ts can refuse one sent in the clear
+   * (and clear the mark when they publish encrypted again). A publication without its track
+   * info yet says nothing either way.
+   */
+  private reportPublication(pub: RemoteTrackPublication, identity: string): void {
+    if (!pub.trackInfo) return;
+    this.setParticipantCryptorEnabled(pub.isEncrypted, identity);
   }
 
   private attachReceiver(track: RemoteTrack, trackSid: string, identity: string): void {

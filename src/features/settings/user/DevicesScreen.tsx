@@ -1,14 +1,18 @@
 /**
  * Devices & Encryption (DevicesSettingsPage): this device's safety number, the encrypted key
  * backup (set up / replace / restore, through the shared e2eeBackup flows whose prompts the
- * app's recovery host shows), the pre-upgrade PIN backup import, and the account's E2EE
- * devices with revoke. These are encryption devices, not login sessions.
+ * app's recovery and password hosts show), the pre-upgrade PIN backup import, and the
+ * account's E2EE devices with revoke. These are encryption devices, not login sessions.
+ *
+ * A backup set up on another device is "untrusted" here until the recovery code opens it
+ * (this device uploads nothing to it meanwhile), and the row says so - or, after a Restore
+ * whose code opened only the retained previous version, says that instead.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import * as Device from 'expo-device';
 import { formatDate, t } from '@web/i18n/t';
-import { listOwnDevices, revokeDevice, type DeviceInfo } from '@web/api/devices';
+import { getBackupVersion, listOwnDevices, revokeDevice, type DeviceInfo } from '@web/api/devices';
 import { E2eeStoreUnusableError, getCurrentDeviceId, getMachine } from '@web/lib/e2ee/machine';
 import { getBackupStatus, getOwnFingerprint, hasLegacyPinBackup, type BackupStatus } from '@web/lib/e2ee';
 import { createBackupWithPrompt, importLegacyWithPrompt, regenerateBackupWithPrompt, restoreWithPrompt } from '@web/stores/e2eeBackup';
@@ -41,6 +45,12 @@ export function DevicesScreen() {
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupError, setBackupError] = useState('');
   const [storeError, setStoreError] = useState<E2eeStoreUnusableError | null>(null);
+  // A Restore whose code did not open the current backup may have opened the retained
+  // previous one instead (lib/e2ee restoreKeyBackup). The current version then still counts
+  // as untrusted, and the row should say what happened rather than ask for the code again.
+  // Holds when the current version was created, which is when the one just opened was
+  // replaced; cleared by every backup action so it can never describe a stale state.
+  const [restoredPreviousAt, setRestoredPreviousAt] = useState<string | null>(null);
   const thisDeviceId = getCurrentDeviceId();
 
   const refresh = useCallback(async (asPull = false) => {
@@ -48,6 +58,7 @@ export function DevicesScreen() {
     if (asPull) setRefreshing(true);
     else setLoading(true);
     setError('');
+    setRestoredPreviousAt(null);
     try {
       const [list, hasLegacy] = await Promise.all([listOwnDevices(), hasLegacyPinBackup().catch(() => false)]);
       setDevices(list);
@@ -77,6 +88,7 @@ export function DevicesScreen() {
     if (!userId) return;
     setBackupError('');
     setBackupBusy(true);
+    setRestoredPreviousAt(null);
     try {
       await action(userId);
       setBackup(await getBackupStatus(userId).catch(() => null));
@@ -87,6 +99,12 @@ export function DevicesScreen() {
     } finally {
       setBackupBusy(false);
     }
+  }
+
+  async function restore(userId: string) {
+    if ((await restoreWithPrompt(userId)) === null) return;
+    const info = await getBackupVersion().catch(() => null);
+    setRestoredPreviousAt(info?.created_at ?? null);
   }
 
   async function revoke(device: DeviceInfo) {
@@ -122,6 +140,14 @@ export function DevicesScreen() {
     backup?.exists
       ? `${t('settings.devices.backupSaved', { n: backup.backedUp })}${backup.pending > 0 ? ` · ${t('settings.devices.backupPending', { n: backup.pending })}` : ''}`
       : '';
+  // The server's backup was set up elsewhere and this device has no proof of whose key it is;
+  // it uploads nothing until the recovery code confirms it.
+  const untrustedNote = backup?.untrusted
+    ? restoredPreviousAt
+      ? t('settings.devices.backupPreviousRestored', { date: formatDate(restoredPreviousAt, { dateStyle: 'medium' }) || restoredPreviousAt })
+      : t('settings.devices.backupUntrusted')
+    : '';
+  const backupNotes = [backup?.outOfSync ? t('settings.devices.backupOutOfSync') : '', untrustedNote].filter(Boolean).join('\n');
   const model = [Device.manufacturer, Device.modelName].filter(Boolean).join(' ');
 
   // This device first, then the rest by registration, newest first.
@@ -175,7 +201,7 @@ export function DevicesScreen() {
           icon="key"
           title={t('settings.devices.backupName')}
           description={[backupSummary, backupCounts].filter(Boolean).join('\n')}
-          error={backupError || (backup?.outOfSync ? t('settings.devices.backupOutOfSync') : undefined)}
+          error={backupError || backupNotes || undefined}
           busy={backupBusy}
         />
         {backup?.exists ? (
@@ -183,7 +209,7 @@ export function DevicesScreen() {
             icon="cloud-arrow-down"
             title={t('settings.devices.backupRestore')}
             disabled={backupBusy}
-            onPress={() => void runBackupAction((id) => restoreWithPrompt(id))}
+            onPress={() => void runBackupAction(restore)}
             testID="devices-backup-restore"
           />
         ) : null}

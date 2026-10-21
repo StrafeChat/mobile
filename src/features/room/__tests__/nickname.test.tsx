@@ -1,8 +1,9 @@
 /**
  * Nicknames and space profiles in the room area: the menu entries (who may change whose
- * nickname, when the moderator reset shows), their place in the member drawer's and the
- * message author's menus, the "Change Nickname" sheet, the reset flow, and the profile
- * sheet's own actions and global-name line.
+ * nickname, when the moderator reset shows - the web's buildSpaceModerationItems, given
+ * nicknameSheet's fields), their place in the member drawer's and the message author's menus,
+ * the "Change Nickname" sheet (with the server's limits checked as you type), the web's reset
+ * flow, and the profile sheet's own actions and global-name line.
  */
 import './roomTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
@@ -10,6 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { ApiError } from '@web/api/ApiError';
 import { t } from '@web/i18n/t';
 import { PermKickMembers, PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
+import { confirmResetSpaceProfile } from '@web/lib/userContextMenu';
 import { confirmDialogState, settleConfirmDialog } from '@web/stores/confirmDialog';
 import { setSpaces } from '@web/stores/spaces';
 import { setSpaceMembers, spaceMembers } from '@web/stores/spaceMembers';
@@ -19,16 +21,11 @@ import { profileSubject } from '@/data';
 import { dismissProfileSheet, presentProfileSheet, presentProfileSheetForParticipant, profileSheet } from '@/platform/presenters';
 import { runActionItem, type ActionItem } from '@/ui';
 
-jest.mock('@/data/spaceProfileCompat', () => {
-  const actual = jest.requireActual<Record<string, unknown>>('@/data/spaceProfileCompat');
-  return { ...actual, patchSpaceMember: jest.fn(), getSpaceMember: jest.fn() };
-});
-
-const compat = require('@/data/spaceProfileCompat') as { patchSpaceMember: jest.Mock };
+// roomTestSetup stubs the space-profile API calls (src/data re-exports them from api/spaces).
+const compat = jest.requireMock('@web/api/spaces') as { patchSpaceMember: jest.Mock };
 // roomTestSetup stands in for the settings area (its openers).
 const settings = jest.requireMock('@/features/settings') as { openSpaceProfile: jest.Mock };
-const { spaceProfileMenuItems, nicknameSheetStore, presentNicknameSheet, dismissNicknameSheet, resetMemberSpaceProfile } =
-  require('../nicknameSheet') as typeof import('../nicknameSheet');
+const { nicknameSheetStore, presentNicknameSheet, dismissNicknameSheet } = require('../nicknameSheet') as typeof import('../nicknameSheet');
 const { NicknameSheetHost } = require('../members/NicknameSheet') as typeof import('../members/NicknameSheet');
 const { memberMenuItems } = require('../members/memberActions') as typeof import('../members/memberActions');
 const { ProfileSheetHost } = require('../profile/ProfileSheetHost') as typeof import('../profile/ProfileSheetHost');
@@ -66,6 +63,12 @@ function labels(items: readonly { label: string }[]): string[] {
 const CHANGE = 'Change Nickname';
 const EDIT = 'Edit Space Profile';
 const RESET = 'Reset Space Profile';
+
+/** The nickname and space-profile entries of `userId`'s menu in a space (as a message author,
+ * outside any loaded room - the space's own rules decide). */
+function spaceProfileMenuItems(spaceId: string | null, userId: string): ActionItem[] {
+  return (authorMenuItems(userId, { roomId: 'c1', spaceId }) as ActionItem[]).filter((i) => [EDIT, CHANGE, RESET].includes(i.label));
+}
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -128,9 +131,8 @@ describe('nickname menu entries', () => {
 
   test('an old message author who has left gets no nickname entries, even from a moderator', () => {
     seed();
-    // Through the author menu, not spaceProfileMenuItems, so it outlives the web bump: the
-    // bumped buildSpaceModerationItems offers Change Nickname without a member row, and the
-    // PATCH would answer 404 - chat/people.ts has to keep gating onEditNickname on one.
+    // buildSpaceModerationItems offers Change Nickname without a member row, and the PATCH
+    // would answer 404 - nicknameSheet's spaceProfileMenuFields gates onEditNickname on one.
     const gone = labels(authorMenuItems('gone', { roomId: 'c1', spaceId: 'S' }));
     expect(gone).not.toContain(CHANGE);
     expect(gone).not.toContain(RESET);
@@ -147,11 +149,11 @@ describe('nickname menu entries', () => {
   });
 });
 
-describe('a moderator reset', () => {
+describe('a moderator reset (the web\'s confirmResetSpaceProfile)', () => {
   test('confirms, clears the five fields (never the nickname) and shows the answer', async () => {
     seed();
     compat.patchSpaceMember.mockImplementationOnce(async () => member('b', ['low'], { display_name: 'Bea', nick: 'Bee', space_bio: null }));
-    const done = resetMemberSpaceProfile('S', 'b');
+    const done = confirmResetSpaceProfile('S', 'b');
     await act(async () => {
       await Promise.resolve();
     });
@@ -170,7 +172,7 @@ describe('a moderator reset', () => {
 
   test('a cancelled confirm sends nothing', async () => {
     seed();
-    const done = resetMemberSpaceProfile('S', 'b');
+    const done = confirmResetSpaceProfile('S', 'b');
     await act(async () => {
       await Promise.resolve();
     });
@@ -231,8 +233,35 @@ describe('the nickname sheet', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('nickname-save'));
     });
-    expect(screen.getByText('nickname must be at most 32 characters, on one line')).toBeTruthy();
+    // The server's sentence, in the reader's language (lib/formatApiError).
+    expect(screen.getByText(t('errors.api.nicknameInvalid'))).toBeTruthy();
     expect(nicknameSheetStore.get()).not.toBeNull();
+  });
+
+  test('lengths count as the server does: 32 emoji fit, a 33rd or a line break is refused before sending', async () => {
+    seed();
+    await render(<NicknameSheetHost />);
+    await act(async () => {
+      presentNicknameSheet({ spaceId: 'S', userId: 'c' });
+    });
+    // Each of these is two UTF-16 units: the field must not stop at 16.
+    expect(screen.getByTestId('nickname-input').props.maxLength).toBeGreaterThanOrEqual(64);
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('nickname-input'), '🐢'.repeat(32));
+    });
+    expect(screen.queryByText(t('errors.api.nicknameInvalid'))).toBeNull();
+    expect(screen.getByTestId('nickname-save').props.accessibilityState?.disabled).toBeFalsy();
+
+    for (const refused of ['🐢'.repeat(33), 'two\nlines']) {
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId('nickname-input'), refused);
+      });
+      expect(screen.getByText(t('errors.api.nicknameInvalid'))).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('nickname-save'));
+      });
+      expect(compat.patchSpaceMember).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -273,9 +302,9 @@ describe('the profile sheet in a space', () => {
     seed();
     await render(<ProfileSheetHost />);
     const row = spaceMembers.bySpaceId.S!.find((m) => m.id === 'b')!;
-    // Guards the web bump: subject.spaceId comes from overlayProfileSubject until the builders
-    // are handed it, and the gate is computed from the stores - mobile's role contexts never
-    // carry canEditNickname, and the voice row and voice sheet pass none.
+    // subject.spaceId comes from the web builders, which set it only when handed the space, and
+    // the gate is computed from the stores - mobile's role contexts never carry
+    // canEditNickname, and the voice row and voice sheet pass none.
     const opens: [string, () => void][] = [
       ['message author', () => openUserProfile('b', { roomId: 'c1', spaceId: 'S' })],
       ['room surface', () => showUserProfile('b', { spaceId: 'S' })],

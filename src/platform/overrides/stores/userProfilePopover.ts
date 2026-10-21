@@ -51,6 +51,8 @@ export function openUserProfileFromParticipant(opts: {
   onMessageUser?: (userId: string) => void;
   spaceRoles?: SpaceRole[];
   spaceRoleContext?: SpaceMemberRoleEditContext | null;
+  /** The space the participant is shown in, so the card carries their space profile. */
+  spaceId?: string;
 }): void {
   presentProfileSheetForParticipant(opts);
 }

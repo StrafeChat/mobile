@@ -4,6 +4,11 @@
  * GIF's shape, paging as you scroll, and the provider's required attribution. Picking calls
  * onPick; the composer sends the GIF's URL as a message (the web's behaviour).
  *
+ * As on the web, the picker offers only the providers this instance has a key for (it proxies
+ * every request; GET / lists them): the saved provider when the instance offers it, else the
+ * first one it does, the switch only when there is more than one, and the "not configured"
+ * note only when there is none.
+ *
  * With reduced motion on, the grid shows still frames.
  */
 import { memo, useCallback, useState, type ReactElement } from 'react';
@@ -18,7 +23,7 @@ import { t } from '@web/i18n/t';
 import { useTheme } from '@/theme';
 import { Button, EmptyState, SearchInput, SegmentedControl, Spinner, Text, Touchable, useReduceMotion, withAlpha } from '@/ui';
 import { useEmojiPrefs } from '@/data/settings';
-import { useGifFeed } from '../hooks/useGifFeed';
+import { useGifFeed, useGifProviderChoice } from '../hooks/useGifFeed';
 
 export interface GifPickerProps {
   onPick: (gif: GifResult) => void;
@@ -49,7 +54,7 @@ function GifPickerBody({
 }: GifPickerProps & { renderScrollComponent?: (props: never) => ReactElement }) {
   const theme = useTheme();
   const { gifProvider } = useEmojiPrefs();
-  const provider = gifProvider as GifProviderId;
+  const { provider, offered } = useGifProviderChoice(gifProvider as GifProviderId);
   const info = gifProviderInfo(provider);
   const [query, setQuery] = useState('');
   const feed = useGifFeed(provider, query);
@@ -110,14 +115,18 @@ function GifPickerBody({
           onBlur={onSearchBlur}
           testID="gif-search"
         />
-        <SegmentedControl<GifProviderId>
-          size="sm"
-          value={provider}
-          onChange={(id) => setGifProvider(id)}
-          items={GIF_PROVIDERS.map((p) => ({ id: p.id, label: p.name }))}
-          accessibilityLabel={t('gif.provider')}
-          style={{ width: 172 }}
-        />
+        {/* The switch offers only what the instance can serve; with one provider there is no choice. */}
+        {offered.length > 1 ? (
+          <SegmentedControl<GifProviderId>
+            size="sm"
+            value={provider}
+            onChange={(id) => setGifProvider(id)}
+            items={GIF_PROVIDERS.filter((p) => offered.includes(p.id)).map((p) => ({ id: p.id, label: p.name }))}
+            accessibilityLabel={t('gif.provider')}
+            style={{ width: 172 }}
+            testID="gif-provider-switch"
+          />
+        ) : null}
       </View>
       <View style={{ flex: 1, borderTopWidth: 1, borderTopColor: theme.colors.border }}>{body}</View>
       <Touchable

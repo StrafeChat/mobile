@@ -29,6 +29,8 @@ jest.mock('@web/components/ReportDialog', () => jest.requireActual('../component
 jest.mock('@web/stores/auth', () => ({ auth: { user: null } }));
 jest.mock('@web/stores/rooms', () => ({ rooms: { rooms: [] }, roomDisplayName: () => '' }));
 jest.mock('@web/stores/spaces', () => ({ spaces: { spaceRoomsBySpaceId: {} } }));
+// Space profiles (the reset, the member lookups): no space is involved here.
+jest.mock('@web/stores/spaceMembers', () => ({ spaceMembers: { bySpaceId: {} }, upsertSpaceMember: jest.fn() }));
 jest.mock('@web/api/reports', () => ({ createReport: jest.fn() }));
 jest.mock('@web/api/instance', () => ({ REPORT_REASONS: [] }));
 

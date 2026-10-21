@@ -4,7 +4,8 @@
  * The web opens its settings as modals driven by stores (`openUserSettings(section)` from the
  * user dock, the admin dashboard, keybinds...). Here every settings surface is a screen, so
  * the store is watched and turned into a navigation: whoever calls the web's
- * `openUserSettings('instance')` lands on the Instance page.
+ * `openUserSettings('instance')` lands on the Instance page, and
+ * `openUserSettings('spaceProfiles', { spaceId })` on Space Profiles for that space.
  *
  * Accessibility's "follow the system" motion setting is applied here too: the web mirrors
  * `prefers-reduced-motion` from a DOM media query in initAccessibility(), which cannot run in
@@ -13,7 +14,7 @@
 import { AccessibilityInfo } from 'react-native';
 import { router, type Href } from 'expo-router';
 import { createEffect, createRoot, onCleanup, untrack } from 'solid-js';
-import { closeUserSettings, takePendingSettingsSection, userSettingsOpen } from '@web/stores/userSettingsModal';
+import { closeUserSettings, takePendingSettingsSection, takePendingSpaceProfileSpaceId, userSettingsOpen } from '@web/stores/userSettingsModal';
 import { accessibility } from '@web/stores/accessibility';
 import { appearance, setReduceMotion } from '@web/stores/appearance';
 import {
@@ -99,9 +100,11 @@ export function installSettingsWiring(): () => void {
       if (!userSettingsOpen()) return;
       untrack(() => {
         const section = takePendingSettingsSection();
+        // Taken every time, so a space handed over once never sticks to a later opening.
+        const spaceProfileSpaceId = takePendingSpaceProfileSpaceId();
         closeUserSettings();
         // After the store write settles: closing re-runs this effect, which must find it shut.
-        queueMicrotask(() => openSettings(section ?? undefined));
+        queueMicrotask(() => (section === 'spaceProfiles' ? openSpaceProfile(spaceProfileSpaceId) : openSettings(section ?? undefined)));
       });
     });
 

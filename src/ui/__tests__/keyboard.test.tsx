@@ -6,6 +6,9 @@
  * confirm prompt as it appears.
  */
 import './setup';
+// The theme reads stores/appearance, which reaches the web store graph (lib/gif/providers ->
+// stores/instance -> auth -> voice, notification prefs); those need their jest stand-ins.
+import '@/data/testing/webMocks';
 import { Keyboard, Text } from 'react-native';
 import { act, render } from '@testing-library/react-native';
 import { confirmDialog, settleConfirmDialog } from '@web/stores/confirmDialog';

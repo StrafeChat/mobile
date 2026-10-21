@@ -20,7 +20,7 @@ import { authorizeUrl, getPublicApplication } from '@web/api/developers';
 import { openAppWindow } from '@web/lib/openWindow';
 import { addOrUpdateRoom } from '@web/stores/rooms';
 import { RelType, removeRelationshipLocally } from '@web/stores/relationships';
-import { closeUserProfileFullModal, userProfileFullModal } from '@web/stores/userProfileFullModal';
+import { closeUserProfileFullModal, userProfileFullModal, type UserProfileFullSubject } from '@web/stores/userProfileFullModal';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { buildUserMenuItems } from '@web/lib/userContextMenu';
 import { t } from '@web/i18n/t';
@@ -48,7 +48,7 @@ import { copyText, errorMessage } from '../util';
 import { BioView } from './BioView';
 import { IdentityBlock } from './IdentityBlock';
 import { ProfileArt } from './ProfileArt';
-import { BirthdayFact, SectionLabel, type FullProfileSubject } from './ProfileSheetHost';
+import { BirthdayFact, SectionLabel } from './ProfileSheetHost';
 import { useMutualSpaceIds } from './mutual';
 import { ReadableWidth } from '../shared/ReadableWidth';
 
@@ -100,7 +100,7 @@ export function FullProfileScreen() {
   );
   const storedOnMessage = useSolid(() => (userProfileFullModal.subject?.userId === userId ? userProfileFullModal.onMessageUser : undefined), [userId]);
   const built = useProfileSubject(userId, { roomId, spaceId });
-  const subject: (FullProfileSubject | NonNullable<typeof built>) | undefined = (stored as FullProfileSubject | null) ?? built;
+  const subject: (UserProfileFullSubject | NonNullable<typeof built>) | undefined = stored ?? built;
   const rel = useRelationshipType(userId);
   const mutual = useMutualSpaceIds(userId, me);
   const botInstallable = useBotApp(userId, subject?.bot);

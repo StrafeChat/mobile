@@ -73,6 +73,17 @@ describe('opening settings', () => {
       await Promise.resolve();
     });
     expect(router.push).toHaveBeenLastCalledWith('/settings');
+    // "Edit Space Profile" from the web's menus hands the space over.
+    openUserSettings('spaceProfiles', { spaceId: '42' });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(router.push).toHaveBeenLastCalledWith('/settings/spaceProfiles?space=42');
+    openUserSettings('spaceProfiles');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(router.push).toHaveBeenLastCalledWith('/settings/spaceProfiles');
     dispose();
   });
 });

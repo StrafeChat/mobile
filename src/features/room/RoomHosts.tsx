@@ -6,7 +6,9 @@
  * - the full profile and safety numbers: the web's userProfileFullModal and
  *   safetyNumberModal stores become pushed screens;
  * - the report sheet (presenters reportSheet - the web's openReportDialog);
- * - the key-backup prompts (stores/recoveryPrompt) and the encryption-store reset dialog;
+ * - the key-backup prompts (stores/recoveryPrompt), the account-password prompt the backup
+ *   flow raises before it creates or deletes a backup (stores/passwordPrompt), and the
+ *   encryption-store reset dialog;
  * - "Leaving Strafe" for external links (stores/externalLink);
  * - the room area's own sheets: create thread, members over a pushed screen, the one-line
  *   text prompt (notification settings are the settings area's page) and "Change Nickname"
@@ -20,6 +22,7 @@ import { userProfileFullModal } from '@web/stores/userProfileFullModal';
 import { useSolid } from '@/bridge/solid';
 import { TextPromptHost } from './TextPromptHost';
 import { E2eeEnvironmentHost } from './e2ee/E2eeEnvironmentHost';
+import { PasswordPromptHost } from './e2ee/PasswordPromptHost';
 import { RecoveryHost } from './e2ee/RecoveryHost';
 import { ExternalLinkHost } from './links/ExternalLinkHost';
 import { MembersSheetHost } from './members/MembersPanel';
@@ -69,6 +72,7 @@ export function RoomHosts() {
       <TextPromptHost />
       <NicknameSheetHost />
       <RecoveryHost />
+      <PasswordPromptHost />
       <ExternalLinkHost />
       <E2eeEnvironmentHost />
       <FullProfileBridge />

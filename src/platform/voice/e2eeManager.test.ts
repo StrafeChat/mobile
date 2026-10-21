@@ -4,7 +4,7 @@
  * outlive their sender; every subscribed track is decrypted, marked encrypted or not.
  */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { ConnectionState, ParticipantEvent, RoomEvent, type Room } from 'livekit-client';
+import { ConnectionState, EncryptionEvent, ParticipantEvent, RoomEvent, type Room } from 'livekit-client';
 
 interface FakeCryptor {
   id: string;
@@ -197,6 +197,42 @@ describe('CallE2EEManager', () => {
     await flush();
     expect(mockCryptors[0]!.calls).toContain('dispose');
     expect(m.cryptorCount('receive')).toBe(0);
+  });
+
+  it("reports a remote participant's encryption status from each publication, as livekit-client's manager does", () => {
+    const m = new CallE2EEManager(fakeKeyProvider() as never);
+    const { room } = fakeRoom();
+    const peer = { identity: 'peer.s9', trackPublications: new Map<string, unknown>() };
+    room.getParticipantByIdentity = ((id: string) => (id === peer.identity ? peer : undefined)) as never;
+    const statuses: [boolean, unknown][] = [];
+    m.on(EncryptionEvent.ParticipantEncryptionStatusChanged, (on, p) => statuses.push([on, p]));
+    m.setup(room as unknown as Room);
+
+    // Published in the clear: reported before anything is subscribed, so voice.ts refuses it.
+    room.emit(RoomEvent.TrackPublished, { trackSid: 'TR_p', trackInfo: {}, isEncrypted: false }, peer);
+    expect(statuses).toEqual([[false, peer]]);
+    // Encrypted again: reported too, which clears voice.unencrypted for them.
+    room.emit(RoomEvent.TrackPublished, { trackSid: 'TR_q', trackInfo: {}, isEncrypted: true }, peer);
+    expect(statuses).toEqual([[false, peer], [true, peer]]);
+    // A publication without its track info yet says nothing either way.
+    room.emit(RoomEvent.TrackPublished, { trackSid: 'TR_r', isEncrypted: false }, peer);
+    expect(statuses).toHaveLength(2);
+  });
+
+  it('reports every existing remote publication once the room is connected', () => {
+    const m = new CallE2EEManager(fakeKeyProvider() as never);
+    const { room } = fakeRoom();
+    const peer = { identity: 'peer.s9', trackPublications: new Map([['TR_p', { trackSid: 'TR_p', trackInfo: {}, isEncrypted: false }]]) };
+    room.getParticipantByIdentity = ((id: string) => (id === peer.identity ? peer : undefined)) as never;
+    Object.assign(room, { remoteParticipants: new Map([[peer.identity, peer]]) });
+    const statuses: [boolean, unknown][] = [];
+    m.on(EncryptionEvent.ParticipantEncryptionStatusChanged, (on, p) => statuses.push([on, p]));
+    m.setup(room as unknown as Room);
+
+    room.emit(RoomEvent.ConnectionStateChanged, ConnectionState.Reconnecting);
+    expect(statuses).toEqual([]);
+    room.emit(RoomEvent.ConnectionStateChanged, ConnectionState.Connected);
+    expect(statuses).toEqual([[false, peer]]);
   });
 
   it('disposes a sender cryptor only once its track is unpublished', async () => {

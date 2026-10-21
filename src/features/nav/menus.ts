@@ -161,7 +161,7 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
   // Every member has a space profile of their own (SpaceRoomsBar's "Edit Space Profile").
   const spaceProfile: ActionItem = {
     key: 'space-profile',
-    label: t('mobile.room.nickname.editSpaceProfile'),
+    label: t('spaceProfile.edit'),
     icon: 'fa-id-badge',
     onSelect: () => openSpaceProfile(spaceId),
   };

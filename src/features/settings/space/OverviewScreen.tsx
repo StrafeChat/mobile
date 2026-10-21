@@ -14,7 +14,7 @@ import { deleteSpace, patchSpace, transferSpaceOwnership, uploadSpaceBanner, upl
 import { addOrUpdateSpace, removeSpace } from '@web/stores/spaces';
 import { formatHandle } from '@web/stores/instance';
 import { setSelectedSpaceId, shell } from '@/shell/state';
-import { resolveProfile, type MemberWithSpaceProfile } from '@/data';
+import { resolveProfile } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, Button, Input, ListSection, SearchInput, Select, Sheet, SheetFlatList, Text, TextArea, Toggle, Touchable, withAlpha } from '@/ui';
 import { FormCard, Note, SectionTitle, SettingItem } from '../components/rows';
@@ -30,12 +30,12 @@ export function transferCandidates(members: readonly SpaceMember[], ownerId: str
   const q = query.trim().toLowerCase();
   return members
     .filter((m) => m.id !== ownerId)
-    .filter((m) => !q || [(m as MemberWithSpaceProfile).nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q)) || m.id === q);
+    .filter((m) => !q || [m.nick, m.display_name, m.username].some((n) => !!n && n.toLowerCase().includes(q)) || m.id === q);
 }
 
 /** A member as the picker names them: their space profile (the nickname, the space avatar). */
 function profileOf(m: SpaceMember) {
-  return resolveProfile(m, m as MemberWithSpaceProfile, m.username);
+  return resolveProfile(m, m, m.username);
 }
 
 function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open: boolean; onClose: () => void }) {

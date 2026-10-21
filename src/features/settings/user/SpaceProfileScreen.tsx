@@ -5,9 +5,12 @@
  *
  * - A space row at the top picks the space (an action sheet of your spaces, rail order). It
  *   opens on `?space=`, else the space on the rail, else the first one.
- * - Your row is fetched (GET .../members/@me) on every space change and written into the
- *   member store, so the rest of the app shows the result too; while you are not editing, the
- *   form follows that row (an edit from another device, a moderator's change).
+ * - Your row is fetched (GET .../members/@me) on every space change and, when the space's
+ *   member list is loaded, written into it, so the rest of the app shows the result too; while
+ *   you are not editing, the form follows that row (an edit from another device, a moderator's
+ *   change). A list that is not loaded is left alone and the screen keeps its own copy: a list
+ *   this screen started would hold only you, and an E2EE space room shares its Megolm key from
+ *   that list (the web's storeOwnRow).
  * - Images upload the moment they are picked, outside the draft, as on My Account; each has a
  *   remove row once set.
  * - The text fields are a draft saved from the header, sending only the fields that changed;
@@ -15,20 +18,27 @@
  *   and so does switching to another space.
  * - The nickname is locked when the space does not give you Change Nickname. The reset then
  *   leaves it out too: with it, the server would refuse the whole reset.
+ * - Lengths count characters the way the server does (lib/spaceProfileLimits: code points of
+ *   the trimmed text, and the nickname's character rules): an edited field the server would
+ *   refuse says why, and Save waits until it is fixed.
  *
- * The data comes through the compat API (src/data/spaceProfileCompat) until the web submodule
- * bump; none of those calls touch the stores, so each answer is upserted here.
+ * The data comes through the web's API calls (api/spaces, re-exported by src/data); none of
+ * them touch the stores, so each answer is upserted here.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { spaces, ensureSpaceRoles } from '@web/stores/spaces';
-import { upsertSpaceMember } from '@web/stores/spaceMembers';
+import { spaceMembers, upsertSpaceMember } from '@web/stores/spaceMembers';
+import { auth } from '@web/stores/auth';
+import type { SpaceMember } from '@web/api/spaces';
+import { inputMaxLength, profileTextLength, SPACE_PROFILE_LIMITS, spaceProfileFieldError, type SpaceProfileTextField } from '@web/lib/spaceProfileLimits';
 import { useSolid } from '@/bridge/solid';
 import {
   getSpaceMember,
   hasResettableSpaceProfile,
+  memberCanChangeNickname,
   mySpaceMember,
   patchSpaceMember,
   resolveProfile,
@@ -37,10 +47,8 @@ import {
   uploadSpaceMemberBanner,
   useMe,
   useSpace,
-  useSpaceAbilities,
   useSpaceIds,
   useSpacesHydrated,
-  type MemberWithSpaceProfile,
   type SpaceProfileFields,
   type SpaceProfilePatch,
 } from '@/data';
@@ -56,10 +64,17 @@ import { useLocale } from '../hooks/useLocale';
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard';
 import { PROFILE_IMAGE_MAX_BYTES, asUploadFile, pickImage } from '../hooks/pickImage';
 import { openSettings } from '../navigation';
-import { PROFILE_LIMITS } from './AccountScreen';
 
-/** Server limits (equinox spaces/member_profile.go): the global profile's, and 32 for a nickname. */
-export const SPACE_PROFILE_LIMITS = { nick: 32, pronouns: PROFILE_LIMITS.pronouns, aboutMe: PROFILE_LIMITS.aboutMe, bio: PROFILE_LIMITS.bio } as const;
+/**
+ * Your row into the member store only when the space's list is already there (the web's
+ * storeOwnRow): a list this screen started would hold just you, and the members store is what
+ * an E2EE space room shares its Megolm key from - a send whose member fetch then failed would
+ * fall back to it and share the key with nobody but you. The screen keeps its own copy for a
+ * space whose list has not been fetched.
+ */
+function storeOwnRow(sid: string, m: SpaceMember): void {
+  if (spaceMembers.bySpaceId[sid]?.length) upsertSpaceMember(sid, m);
+}
 
 export interface SpaceProfileDraft {
   nick: string;
@@ -110,9 +125,17 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
   const [picked, setPicked] = useState<string | null>(null);
   const spaceId = picked && ids.includes(picked) ? picked : initialSpaceProfileSpace(ids, initialSpaceId, active);
   const space = useSpace(spaceId);
-  const abilities = useSpaceAbilities(spaceId);
-  const canChangeNick = abilities.canChangeOwnNickname;
-  const member = useSolid(() => (spaceId ? mySpaceMember(spaceId) : undefined), [spaceId]);
+  const stored = useSolid(() => (spaceId ? mySpaceMember(spaceId) : undefined), [spaceId]);
+  /** The row GET /members/@me returned, until the member store has one to prefer. */
+  const [loaded, setLoaded] = useState<{ spaceId: string; member: SpaceMember } | null>(null);
+  // Your row in this space: the store's copy (which gateway events keep current), else the one
+  // just fetched.
+  const member: (SpaceProfileFields & { id: string; roles?: string[] }) | undefined =
+    stored ?? (loaded && loaded.spaceId === spaceId && loaded.member.id === me?.id ? loaded.member : undefined);
+  const canChangeNick = useSolid(() => {
+    const sp = spaceId ? spaces.spaces.find((s) => s.id === spaceId) : undefined;
+    return memberCanChangeNickname(sp, sp?.roles, member, auth.user?.id);
+  }, [spaceId, member]);
 
   const [loadError, setLoadError] = useState<{ spaceId: string; message: string } | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -133,7 +156,8 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
     getSpaceMember(spaceId, '@me')
       .then((m) => {
         if (!live) return;
-        upsertSpaceMember(spaceId, m);
+        storeOwnRow(spaceId, m);
+        setLoaded({ spaceId, member: m });
         setLoadError(null);
       })
       .catch((err: unknown) => {
@@ -174,14 +198,23 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
     setEdit(Object.keys(spaceProfileDraftPatch(d, saved, { canChangeNick })).length ? { spaceId: sid, draft: d } : null);
   };
 
-  /** Your row as the server answered goes into the member store, so the whole app (and this
-   * form, through `member`) shows it before the gateway's update arrives. */
-  const applied = (m: MemberWithSpaceProfile) => {
-    upsertSpaceMember(sid, m);
+  /** Your row as the server answered: the member store's copy where the list is loaded, so
+   * the whole app shows it before the gateway's update arrives, and this screen's own. */
+  const applied = (m: SpaceMember) => {
+    storeOwnRow(sid, m);
+    setLoaded({ spaceId: sid, member: m });
   };
 
+  /** Why the server would refuse an edited field, translated; only edits are judged. */
+  const fieldError = (k: SpaceProfileTextField): string | undefined => {
+    if (draft[k].trim() === saved[k].trim()) return undefined;
+    const key = spaceProfileFieldError(k, draft[k]);
+    return key ? t(key) : undefined;
+  };
+  const invalid = (['nick', 'pronouns', 'aboutMe', 'bio'] as const).some((k) => (k !== 'nick' || canChangeNick) && fieldError(k) !== undefined);
+
   async function save() {
-    if (!dirty || saving) return;
+    if (!dirty || saving || invalid) return;
     setSaving(true);
     setSaveError('');
     try {
@@ -311,6 +344,7 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
             size="sm"
             icon="check"
             loading={saving}
+            disabled={invalid}
             onPress={() => void save()}
             accessibilityHint={t('mobile.settings.unsavedHint')}
             testID="space-profile-save"
@@ -421,7 +455,8 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
           label={t('mobile.settings.spaceProfiles.nickname')}
           value={draft.nick}
           onChangeText={(v) => change({ nick: v })}
-          maxLength={SPACE_PROFILE_LIMITS.nick}
+          maxLength={inputMaxLength('nick')}
+          error={canChangeNick ? fieldError('nick') : undefined}
           placeholder={view.globalName}
           hint={canChangeNick ? t('mobile.settings.spaceProfiles.nicknameHint') : t('mobile.settings.spaceProfiles.nicknameLocked')}
           disabled={fieldsDisabled || !canChangeNick}
@@ -432,7 +467,8 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
           label={t('settings.profile.pronouns')}
           value={draft.pronouns}
           onChangeText={(v) => change({ pronouns: v })}
-          maxLength={SPACE_PROFILE_LIMITS.pronouns}
+          maxLength={inputMaxLength('pronouns')}
+          error={fieldError('pronouns')}
           placeholder={t('settings.profile.pronounsPlaceholder')}
           hint={t('mobile.settings.spaceProfiles.usesMain')}
           autoCapitalize="none"
@@ -443,7 +479,10 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
           label={t('settings.profile.aboutMe')}
           value={draft.aboutMe}
           onChangeText={(v) => change({ aboutMe: v })}
-          maxLength={SPACE_PROFILE_LIMITS.aboutMe}
+          maxLength={inputMaxLength('aboutMe')}
+          countLimit={SPACE_PROFILE_LIMITS.aboutMe}
+          countLength={profileTextLength}
+          error={fieldError('aboutMe')}
           minRows={2}
           maxRows={5}
           placeholder={t('settings.profile.aboutMePlaceholder')}
@@ -469,7 +508,10 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
             <TextArea
               value={draft.bio}
               onChangeText={(v) => change({ bio: v })}
-              maxLength={SPACE_PROFILE_LIMITS.bio}
+              maxLength={inputMaxLength('bio')}
+              countLimit={SPACE_PROFILE_LIMITS.bio}
+              countLength={profileTextLength}
+              error={fieldError('bio')}
               minRows={5}
               maxRows={12}
               placeholder={t('settings.profile.bioPlaceholder')}

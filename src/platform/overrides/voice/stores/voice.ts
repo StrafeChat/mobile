@@ -75,7 +75,7 @@ import {
   type Participant,
   type RemoteParticipant,
   type RemoteTrack,
-  type RemoteTrackPublication,
+  RemoteTrackPublication,
 } from 'livekit-client';
 // MOBILE (M1): web-relative imports as @web/..., mobile leaves from src/platform/voice.
 import { AppState, Platform } from 'react-native';
@@ -181,6 +181,12 @@ interface VoiceStoreState {
   micLevel: number;
   /** True while a VoiceStage is on screen (the dock hides its duplicate controls). */
   stageVisible: boolean;
+  /**
+   * Participants whose media the SFU reports as published in the clear (user id -> true).
+   * Nothing of theirs is attached: a track outside our key exchange was published by
+   * whoever holds the LiveKit credentials, not by someone with a room key.
+   */
+  unencrypted: Record<string, boolean>;
 }
 
 const VOLUMES_KEY = 'strafe_voice_volumes';
@@ -238,6 +244,7 @@ const idleSession: VoiceSession = {
 };
 
 export const [voice, setVoice] = createStore<VoiceStoreState>({
+  unencrypted: {},
   byRoom: {},
   calls: {},
   incoming: null,
@@ -520,12 +527,32 @@ async function publishMicrophone(room: Room, gen: number) {
   }
 }
 
+function markUnencrypted(userId: string, flag: boolean) {
+  setVoice(
+    produce((s) => {
+      if (flag) s.unencrypted[userId] = true;
+      else delete s.unencrypted[userId];
+    })
+  );
+}
+
 function wireRoom(room: Room, gen: number) {
   const mine = () => gen === live.gen && live.room === room;
+  setVoice('unencrypted', reconcile({}));
 
   room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
     if (!mine()) return;
     const uid = userIdOf(participant);
+    if (!pub.isEncrypted) {
+      // Calls are end-to-end encrypted per sender. A track the SFU reports as sent in the
+      // clear did not come through our key exchange, and the decoding worker would pass it
+      // straight through - played under this participant's name, inside a call shown as
+      // encrypted. Refuse it, the way a join without a key is refused.
+      console.warn('[voice] refusing unencrypted track from', participant.identity, pub.source);
+      void pub.setSubscribed(false);
+      markUnencrypted(uid, true);
+      return;
+    }
     if (track.kind === Track.Kind.Audio) {
       // MOBILE (M3): no attach() - a subscribed track plays natively; set its volume.
       applyVolume(participant);
@@ -619,6 +646,17 @@ function wireRoom(room: Room, gen: number) {
     // The server's state change usually gets here first and has already rotated; this
     // covers the case where LiveKit sees them before the gateway event lands.
     syncCallKeys();
+  });
+
+  room.on(RoomEvent.ParticipantEncryptionStatusChanged, (encrypted: boolean, participant?: Participant) => {
+    if (!mine() || !participant || participant === room.localParticipant) return;
+    const uid = userIdOf(participant);
+    markUnencrypted(uid, !encrypted);
+    if (encrypted) return;
+    // Drop whatever of theirs is already attached and stop receiving the rest.
+    for (const pub of participant.trackPublications.values()) {
+      if (pub instanceof RemoteTrackPublication) void pub.setSubscribed(false);
+    }
   });
 
   room.on(RoomEvent.EncryptionError, (error: Error) => {

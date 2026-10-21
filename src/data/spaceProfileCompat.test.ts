@@ -1,16 +1,22 @@
 /**
- * Space profiles until the web bump: the display rule, the overlays (idempotent, so they stay
- * right after the bump), the nickname gates against the server's table, the menu entries, the
- * reset helpers, the gateway stand-in and the API calls' wire shapes.
+ * Space profiles as the app gets them from the web (src/data/spaceProfileCompat re-exports
+ * lib/spaceProfile, lib/spacePermissions and api/spaces): the display rule, the web builders
+ * showing the space profile (sender display, profile subject with its space), the nickname
+ * gates against the server's table, the menu entries of buildSpaceModerationItems, the reset
+ * helpers, the web member handlers carrying the profile keys, and the API calls' wire shapes.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { emitStargateEvent } from './testing/webMocks';
 import { ApiError } from '@web/api/ApiError';
+import type { SpaceMember, SpaceProfileFields } from '@web/api/spaces';
 import { getSenderDisplay } from '@web/components/messageList/utils';
 import { popoverSubjectFromParticipant } from '@web/lib/userProfilePopoverHelpers';
+import { buildSpaceModerationItems } from '@web/lib/userContextMenu';
+import { confirmDialogState, settleConfirmDialog } from '@web/stores/confirmDialog';
 import { PermAdministrator, PermBanMembers, PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
 import { initSpaceMembersHandlers, setSpaceMembers, spaceMembers } from '@web/stores/spaceMembers';
 import { ME, member, resetStores, role, space, user } from './testing/fixtures';
+
 import {
   PermChangeNickname,
   PermManageNicknames,
@@ -18,14 +24,10 @@ import {
   canEditNicknameOf,
   getSpaceMember,
   hasResettableSpaceProfile,
-  initSpaceProfileCompatHandlers,
   memberCanChangeNickname,
   memberCanEditNickname,
   memberCanManageNicknames,
   memberCanResetSpaceProfile,
-  nicknameMenuEntries,
-  overlayProfileSubject,
-  overlaySenderDisplay,
   patchSpaceMember,
   resolveProfile,
   resolveSpaceUser,
@@ -34,6 +36,10 @@ import {
   uploadSpaceMemberAvatar,
   uploadSpaceMemberBanner,
 } from './spaceProfileCompat';
+
+// lib/userContextMenu's "Add to space" opens a window through the desktop shell's native
+// hooks (expo-router, notifications); not under test here.
+jest.mock('@web/lib/openWindow', () => ({ openAppWindow: jest.fn() }));
 
 beforeEach(resetStores);
 
@@ -108,43 +114,62 @@ describe('resolveProfile', () => {
   });
 });
 
-describe('overlaySenderDisplay', () => {
-  test('applies the space profile over the global display, and is idempotent', () => {
-    const s = getSenderDisplay('u', [GLOBAL], ME);
-    const once = overlaySenderDisplay(s, SPACE);
-    expect(once).toMatchObject({ name: 'Shell', globalName: 'Tom', nick: 'Shell', avatar: 's-avatar.png', banner: 's-banner.png', aboutMe: 'space about', bio: 'space bio', pronouns: 'they/them' });
-    expect(overlaySenderDisplay(once, SPACE)).toEqual(once);
+/** GLOBAL as a space's member row, with these space fields. */
+const row = (fields: SpaceProfileFields): SpaceMember => ({ ...GLOBAL, ...fields });
+
+describe('the sender display (getSenderDisplay over the member row)', () => {
+  test('a member row shows its space profile over the global one', () => {
+    expect(getSenderDisplay('u', [row(SPACE)], ME)).toMatchObject({
+      name: 'Shell',
+      globalName: 'Tom',
+      nick: 'Shell',
+      avatar: 's-avatar.png',
+      banner: 's-banner.png',
+      aboutMe: 'space about',
+      bio: 'space bio',
+      pronouns: 'they/them',
+    });
   });
 
   test('a member with no space profile keeps the global display', () => {
-    const s = getSenderDisplay('u', [GLOBAL], ME);
-    const r = overlaySenderDisplay(s, { nick: null, space_avatar: '' });
+    const r = getSenderDisplay('u', [row({ nick: null, space_avatar: '' })], ME);
     expect(r).toMatchObject({ name: 'Tom', globalName: 'Tom', avatar: 'g-avatar.png' });
     expect(r.nick).toBeUndefined();
   });
 
-  test('no member (outside a space): unchanged', () => {
-    const s = getSenderDisplay('u', [GLOBAL], ME);
-    expect(overlaySenderDisplay(s, undefined)).toBe(s);
+  test('outside a space (no space fields): the global profile', () => {
+    const r = getSenderDisplay('u', [GLOBAL], ME);
+    expect(r).toMatchObject({ name: 'Tom', avatar: 'g-avatar.png', bio: 'global bio' });
+    expect(r.nick).toBeUndefined();
+  });
+
+  test('yourself: your global profile from auth.user, your nickname from your member row', () => {
+    expect(getSenderDisplay(ME, [member(ME, [], { display_name: 'Stale me', nick: 'Captain' })], ME)).toMatchObject({ name: 'Captain', globalName: 'Me', nick: 'Captain' });
   });
 });
 
-describe('overlayProfileSubject', () => {
+describe('the profile subject (popoverSubjectFromParticipant given the space)', () => {
   test('in a space: nickname over the name, globalName only when it differs, spaceId set', () => {
-    const subject = popoverSubjectFromParticipant(GLOBAL);
-    const once = overlayProfileSubject(subject, SPACE, 's1');
-    expect(once).toMatchObject({ displayName: 'Shell', globalName: 'Tom', avatar: 's-avatar.png', aboutMe: 'space about', bio: 'space bio', pronouns: 'they/them', spaceId: 's1' });
-    expect(overlayProfileSubject(once, SPACE, 's1')).toEqual(once);
-    const plain = overlayProfileSubject(subject, { nick: null }, 's1');
+    expect(popoverSubjectFromParticipant(row(SPACE), undefined, { spaceId: 's1' })).toMatchObject({
+      displayName: 'Shell',
+      globalName: 'Tom',
+      avatar: 's-avatar.png',
+      aboutMe: 'space about',
+      bio: 'space bio',
+      pronouns: 'they/them',
+      spaceId: 's1',
+    });
+    const plain = popoverSubjectFromParticipant(row({ nick: null }), undefined, { spaceId: 's1' });
     expect(plain).toMatchObject({ displayName: 'Tom', spaceId: 's1' });
     expect(plain.globalName).toBeUndefined();
     // A nickname equal to the global name shows no second line.
-    expect(overlayProfileSubject(subject, { nick: 'Tom' }, 's1').globalName).toBeUndefined();
+    expect(popoverSubjectFromParticipant(row({ nick: 'Tom' }), undefined, { spaceId: 's1' }).globalName).toBeUndefined();
   });
 
-  test('outside a space: the subject as built', () => {
+  test('outside a space: no space on the subject', () => {
     const subject = popoverSubjectFromParticipant(GLOBAL);
-    expect(overlayProfileSubject(subject, SPACE, null)).toBe(subject);
+    expect(subject.spaceId).toBeUndefined();
+    expect(subject).toMatchObject({ displayName: 'Tom', avatar: 'g-avatar.png' });
   });
 });
 
@@ -225,10 +250,14 @@ describe('the nickname bits on members', () => {
   });
 });
 
-describe('nicknameMenuEntries', () => {
+describe('the nickname entries of buildSpaceModerationItems', () => {
   const roles = [role('ev', 0, 0, { name: '@everyone' }), role('mods', 5, PermManageNicknames), role('low', 1, 0)];
-  const call = (over: Partial<Parameters<typeof nicknameMenuEntries>[0]>) =>
-    nicknameMenuEntries({
+  /** `a` is in the space's list, with a space avatar set (something a reset would clear). */
+  function seedTarget(extra: object = { space_avatar: 'x.png' }) {
+    setSpaceMembers('bySpaceId', 's1', [member('me', ['mods']), member('a', ['low'], extra)]);
+  }
+  const call = (over: Partial<Parameters<typeof buildSpaceModerationItems>[0]>) =>
+    buildSpaceModerationItems({
       spaceId: 's1',
       targetUserId: 'a',
       currentUserId: 'me',
@@ -239,19 +268,21 @@ describe('nicknameMenuEntries', () => {
       canManageNicknames: true,
       onEditNickname: jest.fn(),
       onEditSpaceProfile: jest.fn(),
-      onResetSpaceProfile: jest.fn(),
-      targetProfile: { space_avatar: 'x.png' },
       ...over,
     }).map((i) => i.label);
 
+  beforeEach(() => seedTarget());
+  afterEach(() => settleConfirmDialog(false));
+
   test('yourself: Edit Space Profile, and Change Nickname when allowed', () => {
-    expect(call({ targetUserId: 'me' })).toEqual(['mobile.room.nickname.editSpaceProfile', 'mobile.room.nickname.change']);
-    expect(call({ targetUserId: 'me', canChangeOwnNickname: false })).toEqual(['mobile.room.nickname.editSpaceProfile']);
+    expect(call({ targetUserId: 'me' })).toEqual(['spaceProfile.edit', 'spaceProfile.changeNickname']);
+    expect(call({ targetUserId: 'me', canChangeOwnNickname: false })).toEqual(['spaceProfile.edit']);
   });
 
   test('someone below you: Change Nickname, and Reset Space Profile when they have one', () => {
-    expect(call({ targetRoleIds: ['low'] })).toEqual(['mobile.room.nickname.change', 'mobile.room.resetSpaceProfile']);
-    expect(call({ targetRoleIds: ['low'], targetProfile: { nick: 'only a nick' } })).toEqual(['mobile.room.nickname.change']);
+    expect(call({ targetRoleIds: ['low'] })).toEqual(['spaceProfile.changeNickname', 'contextMenu.resetSpaceProfile']);
+    seedTarget({ nick: 'only a nick' });
+    expect(call({ targetRoleIds: ['low'] })).toEqual(['spaceProfile.changeNickname']);
   });
 
   test('someone at or above you, the owner, or without the bit: nothing', () => {
@@ -263,30 +294,31 @@ describe('nicknameMenuEntries', () => {
 
   test('the owner reaches everyone', () => {
     expect(call({ currentUserId: 'owner', targetRoleIds: ['mods'], viewerHighestRolePosition: Number.MAX_SAFE_INTEGER })).toEqual([
-      'mobile.room.nickname.change',
-      'mobile.room.resetSpaceProfile',
+      'spaceProfile.changeNickname',
+      'contextMenu.resetSpaceProfile',
     ]);
   });
 
-  test('the actions get the target', () => {
+  test('the actions get the target; the reset confirms first', async () => {
+    seedTarget({ space_bio: 'x' });
     const onEditNickname = jest.fn();
-    const onResetSpaceProfile = jest.fn();
-    const items = nicknameMenuEntries({
+    const items = buildSpaceModerationItems({
       spaceId: 's1',
       targetUserId: 'a',
+      targetRoleIds: ['low'],
       currentUserId: 'me',
       spaceOwnerId: 'owner',
       spaceRoles: roles,
       viewerHighestRolePosition: 5,
       canManageNicknames: true,
       onEditNickname,
-      onResetSpaceProfile,
-      targetProfile: { space_bio: 'x' },
     });
-    items.forEach((i) => i.onClick());
+    items[0]!.onClick();
     expect(onEditNickname).toHaveBeenCalledWith('a');
-    expect(onResetSpaceProfile).toHaveBeenCalledWith('a');
-    expect(items[1]).toMatchObject({ danger: true });
+    expect(items[1]).toMatchObject({ label: 'contextMenu.resetSpaceProfile', danger: true });
+    items[1]!.onClick();
+    await Promise.resolve();
+    expect(confirmDialogState.pending?.options).toMatchObject({ title: 'contextMenu.resetSpaceProfile', tone: 'danger' });
   });
 });
 
@@ -327,14 +359,14 @@ describe('member lookups', () => {
   });
 });
 
-describe('initSpaceProfileCompatHandlers (after the web member handlers)', () => {
+describe('the web member handlers carry the profile keys', () => {
   let stop: (() => void)[] = [];
   beforeAll(() => {
-    stop = [initSpaceMembersHandlers(), initSpaceProfileCompatHandlers()];
+    stop = [initSpaceMembersHandlers()];
   });
   afterAll(() => stop.forEach((f) => f()));
 
-  test('SPACE_MEMBER_UPDATE: the nickname lands, the roles are the web handler’s', () => {
+  test('SPACE_MEMBER_UPDATE: the nickname lands with the roles', () => {
     setSpaceMembers('bySpaceId', 's1', [member('a', ['r1'], { display_name: 'Alice' })]);
     emitStargateEvent('SPACE_MEMBER_UPDATE', {
       space_id: 's1',

@@ -4,6 +4,9 @@
  * looping, and Retry starts over.
  */
 import './setup';
+// The theme reads stores/appearance, which reaches the web store graph (lib/gif/providers ->
+// stores/instance -> auth -> voice, notification prefs); those need their jest stand-ins.
+import '@/data/testing/webMocks';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { useEffect } from 'react';
 import { Text } from 'react-native';
