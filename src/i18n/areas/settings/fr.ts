@@ -179,7 +179,6 @@ export default {
     hostedOn: "Cet espace est hébergé sur {{domain}}, votre profil d'espace y est donc enregistré.",
     nickname: 'Pseudo',
     nicknameHint: "Affiché à la place de votre nom d'affichage dans cet espace. 32 caractères maximum.",
-    nicknameLocked: 'Cet espace ne vous permet pas de changer votre pseudo.',
     avatar: "Avatar d'espace",
     banner: "Bannière d'espace",
     changeAvatar: "Changer l'avatar d'espace",

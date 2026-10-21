@@ -2,7 +2,7 @@
 /**
  * Settings -> Space Profiles: the pure rules (which space it opens on, the PATCH a draft
  * makes, member pickers finding nicknames) and the screen against the real stores - loading
- * your row, saving only what changed, the locked nickname and the reset that then leaves it
+ * your row, saving only what changed, the hidden nickname and the reset that then leaves it
  * out, removing an image, switching spaces with unsaved edits, and having no spaces at all;
  * the server's limits counted its way, and a space whose member list is not loaded getting no
  * one-member list from this screen.
@@ -150,13 +150,14 @@ describe('space profile screen', () => {
     await screen.unmount();
   });
 
-  it('without Change Nickname the nickname is locked, and a reset leaves it out', async () => {
+  it('without Change Nickname the nickname field is hidden, and a reset leaves it out', async () => {
     seed({ everyone: PermViewChannel | PermSendMessages, mine: { nick: 'Set by a mod', space_bio: 'mine' } });
     compat.patchSpaceMember.mockImplementationOnce(async () => answer({ nick: 'Set by a mod' }) as never);
     await render(<SpaceProfileScreen initialSpaceId="S" />);
-    await waitFor(() => expect(screen.getByTestId('space-profile-nick').props.value).toBe('Set by a mod'));
-    expect(screen.getByTestId('space-profile-nick').props.editable).toBe(false);
-    expect(screen.getByText("This space doesn't let you change your nickname.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('space-profile-pronouns').props.editable).not.toBe(false));
+    expect(screen.queryByTestId('space-profile-nick')).toBeNull();
+    // The nickname a moderator set still shows in the preview; only editing it is gone.
+    expect(screen.getAllByText('Set by a mod').length).toBeGreaterThan(0);
 
     await fireEvent.press(screen.getByTestId('space-profile-reset'));
     await waitFor(() => expect(confirmDialogState.pending).not.toBeNull());
@@ -171,7 +172,8 @@ describe('space profile screen', () => {
   it('a reset with only a locked nickname set is not offered', async () => {
     seed({ everyone: PermViewChannel | PermSendMessages, mine: { nick: 'Set by a mod' } });
     await render(<SpaceProfileScreen initialSpaceId="S" />);
-    await waitFor(() => expect(screen.getByTestId('space-profile-nick').props.value).toBe('Set by a mod'));
+    await waitFor(() => expect(screen.getByTestId('space-profile-pronouns').props.editable).not.toBe(false));
+    expect(screen.getAllByText('Set by a mod').length).toBeGreaterThan(0);
     expect(screen.getByTestId('space-profile-reset')).toBeDisabled();
     await screen.unmount();
   });

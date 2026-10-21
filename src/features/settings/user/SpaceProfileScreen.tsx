@@ -16,8 +16,9 @@
  * - The text fields are a draft saved from the header, sending only the fields that changed;
  *   an emptied one is sent as null, which clears it. Leaving with unsaved edits asks first,
  *   and so does switching to another space.
- * - The nickname is locked when the space does not give you Change Nickname. The reset then
- *   leaves it out too: with it, the server would refuse the whole reset.
+ * - The nickname field is hidden, as Discord hides it, once the space's roles say you lack
+ *   Change Nickname (until they arrive it shows, disabled). The reset then leaves it out too:
+ *   with it, the server would refuse the whole reset.
  * - Lengths count characters the way the server does (lib/spaceProfileLimits: code points of
  *   the trimmed text, and the nickname's character rules): an edited field the server would
  *   refuse says why, and Save waits until it is fixed.
@@ -136,6 +137,9 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
     const sp = spaceId ? spaces.spaces.find((s) => s.id === spaceId) : undefined;
     return memberCanChangeNickname(sp, sp?.roles, member, auth.user?.id);
   }, [spaceId, member]);
+  // Hidden only once the roles are known to refuse it: roles that have not arrived say nothing.
+  const rolesKnown = useSolid(() => !!(spaceId && spaces.spaces.find((s) => s.id === spaceId)?.roles?.length), [spaceId]);
+  const nickHidden = rolesKnown && !canChangeNick;
 
   const [loadError, setLoadError] = useState<{ spaceId: string; message: string } | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -451,18 +455,20 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
 
       <SectionTitle title={t('settings.profile.detailsTitle')} />
       <FormCard style={{ marginBottom: 16 }}>
-        <Input
-          label={t('mobile.settings.spaceProfiles.nickname')}
-          value={draft.nick}
-          onChangeText={(v) => change({ nick: v })}
-          maxLength={inputMaxLength('nick')}
-          error={canChangeNick ? fieldError('nick') : undefined}
-          placeholder={view.globalName}
-          hint={canChangeNick ? t('mobile.settings.spaceProfiles.nicknameHint') : t('mobile.settings.spaceProfiles.nicknameLocked')}
-          disabled={fieldsDisabled || !canChangeNick}
-          autoCapitalize="words"
-          testID="space-profile-nick"
-        />
+        {nickHidden ? null : (
+          <Input
+            label={t('mobile.settings.spaceProfiles.nickname')}
+            value={draft.nick}
+            onChangeText={(v) => change({ nick: v })}
+            maxLength={inputMaxLength('nick')}
+            error={canChangeNick ? fieldError('nick') : undefined}
+            placeholder={view.globalName}
+            hint={t('mobile.settings.spaceProfiles.nicknameHint')}
+            disabled={fieldsDisabled || !canChangeNick}
+            autoCapitalize="words"
+            testID="space-profile-nick"
+          />
+        )}
         <Input
           label={t('settings.profile.pronouns')}
           value={draft.pronouns}
