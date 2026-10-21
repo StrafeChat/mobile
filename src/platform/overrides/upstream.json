@@ -1,0 +1,50 @@
+{
+  "comment": [
+    "sha256 of every web file a mobile override copies or wraps with changed behaviour, as it was when the override was last brought in step with it, grouped by area. check-drift.cjs (npm run check:drift, also run by the areas' *-drift.test.ts) fails when one of them changes.",
+    "When it fails: git -C web diff <web below> HEAD -- src/<file>, port every hunk into the file's `port` list, update its sha256, and set `web` to the new submodule commit.",
+    "An area's `covers` are web/src path prefixes: an override of a module under one of them (manifest entry or @web-original/ import outside tests) must be pinned here. A wrapper that only re-exports needs no pin; list it under the area's `unpinned` with the reason."
+  ],
+  "web": "9d945046e017e2de2ff4756d35e9b4c87a9c4771",
+  "areas": {
+    "voice": {
+      "note": "stores/voice.ts is a copy that keeps its M1-M9 list of mobile changes; the lib/voice leaves are native implementations behind the same exports.",
+      "covers": ["stores/voice", "lib/voice/"],
+      "files": {
+        "stores/voice.ts": {
+          "sha256": "4939146af410f7059a0ef6120eb7a87b118f1cda1da19a8372c32663020a62d3",
+          "port": ["src/platform/overrides/voice/stores/voice.ts"]
+        },
+        "lib/voice/e2ee.ts": {
+          "sha256": "8dfaec7812cc4f1b0946dc4dc4e1c37ce4864e50345a76b0187fa28258c38560",
+          "port": ["src/platform/overrides/voice/lib/voice/e2ee.ts", "src/platform/voice/e2ee.ts"]
+        },
+        "lib/voice/micPipeline.ts": {
+          "sha256": "b79e13fc8c1bc9fa4e21b6084ccc4b8ed8f6f7c99f48002820346d406758e7f6",
+          "port": ["src/platform/overrides/voice/lib/voice/micPipeline.ts", "src/platform/voice/micPipeline.ts"]
+        },
+        "lib/voice/ringtone.ts": {
+          "sha256": "8ded105745d811da705c6fd38dcd4154c98c6a9d4eed1e6ad417f491d2b30424",
+          "port": ["src/platform/overrides/voice/lib/voice/ringtone.ts", "src/platform/voice/ringtone.ts"]
+        },
+        "lib/voice/rnnoise.ts": {
+          "sha256": "7e5eb662fc3891e8a2facfe941197fcaaa039bb759aefe6fad47aee8ccc70ce9",
+          "port": ["src/platform/overrides/voice/lib/voice/rnnoise.ts"]
+        }
+      }
+    },
+    "e2ee": {
+      "note": "machine.ts and keyBackup.ts are copies of the web modules with the engine in the crypto host WebView (src/platform/crypto/README.md); keyBackup's unwrap and import flows run in the host page, so a change to them is ported into crypto-host/src/backup.ts too. Every other lib/e2ee module and the stores/e2ee* stores run unchanged.",
+      "covers": ["lib/e2ee/", "stores/e2ee"],
+      "files": {
+        "lib/e2ee/machine.ts": {
+          "sha256": "5470e3b1e4af45701ee9b16bb48f021b02d7f6ae472403fde69c7e1f23939351",
+          "port": ["src/platform/overrides/e2ee/machine.ts"]
+        },
+        "lib/e2ee/keyBackup.ts": {
+          "sha256": "6f6cc8e2a68618427ea6c50dc80095c4937f84fbcf4a4de3c875a28915c3bf36",
+          "port": ["src/platform/overrides/e2ee/keyBackup.ts", "crypto-host/src/backup.ts"]
+        }
+      }
+    }
+  }
+}

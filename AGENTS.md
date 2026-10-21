@@ -116,5 +116,18 @@ without Google, use the gateway's debug transport (PUSH.md, *Development*).
 ## Bumping the web submodule
 
 `cd web && git fetch && git checkout <commit>`, then `npm run check:overrides` (every
-override still exports what the original does) and run the app. Overrides are the contract
-surface between the two repos; a renamed export in web shows up there first.
+override still exports what the original does), `npm run check:drift`, and run the app.
+Overrides are the contract surface between the two repos; a renamed export in web shows up
+there first.
+
+Some overrides are copies of the web module, not wrappers: the voice store and lib/voice
+leaves, and the E2EE `machine.ts` and `keyBackup.ts` (whose restore flows also live in
+`crypto-host/src/backup.ts`). A web fix to one of those originals, security fixes included,
+reaches the app only once someone ports it. So `src/platform/overrides/upstream.json` pins
+the sha256 of each such web file, grouped by area, and `npm run check:drift` fails when a
+bump changes one (`check:voice-drift` and `check:e2ee-drift` check one area each; `npm test`
+runs the same checks). **When a bump changes a pinned file, port the change into every file
+under that entry's `port` first (`git -C web diff <recorded web commit> HEAD -- src/<file>`),
+then update its hash and the recorded commit.** Never update the hash on its own. A new
+override that copies a web module, or wraps one through `@web-original/` and changes what it
+does, is pinned in the same change; the check rejects an unpinned override of a covered path.

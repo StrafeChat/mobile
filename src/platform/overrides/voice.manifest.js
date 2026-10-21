@@ -2,7 +2,7 @@
  * Voice/video overrides (see ./manifest.js for the format).
  *
  * stores/voice is a faithful copy of the web store with a short, listed set of mobile
- * changes (its header; drift is caught by voice/check-drift.mjs). The lib/voice leaves are
+ * changes (its header; drift is caught by ./check-drift.cjs). The lib/voice leaves are
  * replaced so anything else reaching them - the settings page's mic test, say - gets the
  * native implementations rather than Web Audio, WASM and Vite worker imports.
  */

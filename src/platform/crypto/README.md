@@ -204,3 +204,7 @@ the foreground; catch-up on resume is the web's (`resyncDevice`, `pollToDevice`)
   facade: two devices exchanging Olm and Megolm, the web's transport/rooms/service/safety/
   callKeys unmodified, call keys, the backup round trip, the machine lifecycle and crashes.
 - `npx tsc --noEmit -p crypto-host` type-checks the page.
+- `npm run check:e2ee-drift` - `overrides/e2ee/machine.ts` and `keyBackup.ts` (and the
+  restore flows in `crypto-host/src/backup.ts`) are copies of the web modules, pinned by
+  sha256 in `../overrides/upstream.json`. A web submodule bump that changes either one fails
+  here, and in `e2ee-drift.test.ts`, until the change is ported and the hash updated.

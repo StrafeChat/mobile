@@ -98,7 +98,9 @@
     "check:overrides": "node scripts/check-overrides.mjs",
     "build:crypto-host": "node crypto-host/build.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "check:voice-drift": "node src/platform/overrides/voice/check-drift.mjs",
+    "check:drift": "node src/platform/overrides/check-drift.cjs",
+    "check:voice-drift": "node src/platform/overrides/check-drift.cjs voice",
+    "check:e2ee-drift": "node src/platform/overrides/check-drift.cjs e2ee",
     "postinstall": "node crypto-host/build.mjs && node src/features/auth/captcha/vendor/build.mjs",
     "build:captcha": "node src/features/auth/captcha/vendor/build.mjs"
   },

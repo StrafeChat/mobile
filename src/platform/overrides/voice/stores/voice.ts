@@ -12,8 +12,8 @@
 /*
  * ==== MOBILE OVERRIDE of web/src/stores/voice.ts ============================================
  *
- * A faithful copy of the web store (upstream sha256 recorded in ../upstream.json; the
- * drift check - src/platform/overrides/voice/check-drift.mjs and voice-drift.test.ts -
+ * A faithful copy of the web store (upstream sha256 recorded in ../../upstream.json; the
+ * drift check - src/platform/overrides/check-drift.cjs and voice/voice-drift.test.ts -
  * fails when the web file changes, so a submodule bump forces a merge). Voice states, PM
  * calls and ringing, rejoin/move handling, the generation counter, mute/deafen semantics,
  * volume and ducking maths, key rotation ordering and permissions are the web's, line for

@@ -6,6 +6,9 @@
  * app's JS context; BackupDecryptionKey's synchronous wasm methods). Every other lib/e2ee
  * module - service, transport, rooms, safety, callKeys, recoveryCode, legacyBackup, subtle -
  * runs unchanged against the facade. See src/platform/crypto/README.md.
+ *
+ * Both are copies of the web modules, pinned by hash in ./upstream.json: a web change to
+ * either fails ./check-drift.cjs (npm run check:e2ee-drift) until it is ported.
  */
 module.exports = {
   WEB_MODULE_OVERRIDES: {
