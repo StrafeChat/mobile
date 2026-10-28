@@ -5,9 +5,11 @@
  *   separately (hoist), mentionable.
  * - Permissions: the permission matrix grouped like the web's, searchable, each group with an
  *   all-on/off switch, plus Clear all.
- * - Members: who holds the role (remove), and adding members by search. Not for @everyone
- *   (everyone has it), a bot's managed role, or a role at or above the viewer's own. Members
- *   are named by their space profile (nickname, space avatar) with the handle under it.
+ * - Members: who holds the role (remove), and adding members by search - anyone, the owner and
+ *   members ranked above the viewer included, since giving a role depends on the role alone (as
+ *   on Discord). Not for @everyone (everyone has it), a bot's managed role, or a role at or above
+ *   the viewer's own. Members are named by their space profile (nickname, space avatar) with the
+ *   handle under it. A bot's managed role says how to let the bot hand out roles: move it up.
  *
  * Display and Permissions edits are a draft with an unsaved-changes bar (Reset / Save) and a
  * prompt when leaving with it; membership changes save at once, as on the web. Per-room
@@ -31,7 +33,7 @@ import { FormCard, Note, SectionTitle, SettingItem, SettingToggle } from '../com
 import { SettingsScreen } from '../components/SettingsScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard';
-import { addableMembers, canAssignRoleTo, isEveryone, memberRolesWith, roleLocked } from './roleLogic';
+import { addableMembers, isEveryone, memberRolesWith, roleAssignable, roleErrorText, roleLocked } from './roleLogic';
 import { useSpaceIdParam } from './SpacePage';
 import { pageAllowed, useSpaceSettings } from './useSpaceSettings';
 
@@ -96,6 +98,9 @@ export function RoleEditorScreen() {
   // (@everyone excepted), so it is shown read-only rather than as a form that cannot save.
   const locked = !!role && !isEveryone(role) && roleLocked(role, data.gates.viewerHighestPosition);
   const canManage = data.gates.canManageRoles && !locked;
+  // Who holds it is a separate question with the same answer for every member (Discord): the
+  // role must be one the viewer may hand out - below their own, not @everyone, not a bot's.
+  const assignable = !!role && roleAssignable(role, data.gates.viewerHighestPosition, data.gates.canManageRoles);
   const [tab, setTab] = useState<Tab>('display');
   const [draft, setDraft] = useState<RoleDraft | null>(role ? draftOf(role) : null);
   const [busy, setBusy] = useState(false);
@@ -127,10 +132,8 @@ export function RoleEditorScreen() {
     // Labels are translated getters; recompute when the language changes too.
   }, [permQuery]);
 
-  const ownerId = data.space?.owner_id;
-  const ctx = useMemo(() => ({ ownerId, viewerId: data.viewerId }), [ownerId, data.viewerId]);
   const holders = useMemo(() => (role ? data.members.filter((m) => m.roles?.includes(role.id)) : []), [data.members, role]);
-  const addable = useMemo(() => (role ? addableMembers(data.members, role.id, memberQuery, ctx) : []), [data.members, role, memberQuery, ctx]);
+  const addable = useMemo(() => (role ? addableMembers(data.members, role.id, memberQuery) : []), [data.members, role, memberQuery]);
 
   if (!data.space || !role || !draft) {
     return (
@@ -158,7 +161,7 @@ export function RoleEditorScreen() {
       upsertSpaceRole(spaceId, await patchSpaceRole(spaceId, role.id, rolePatch(role, draft)));
       toast.success(t('mobile.settings.roleSaved'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.saveFailed'));
+      setError(roleErrorText(e, 'common.saveFailed'));
     } finally {
       setBusy(false);
     }
@@ -181,13 +184,13 @@ export function RoleEditorScreen() {
       removeSpaceRole(spaceId, role.id);
       setLeaving(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('common.deleteFailed'));
+      setError(roleErrorText(e, 'common.deleteFailed'));
       setBusy(false);
     }
   }
 
   async function toggleMember(userId: string, add: boolean) {
-    if (!role || everyone || !canManage || !canAssignRoleTo(userId, ctx) || locked) return;
+    if (!role || !assignable) return;
     const member = data.members.find((m) => m.id === userId);
     if (!member) return;
     setBusy(true);
@@ -196,7 +199,7 @@ export function RoleEditorScreen() {
       await setMemberSpaceRoles(spaceId, userId, memberRolesWith(member, data.roles, role.id, add));
       await loadSpaceMembers(spaceId).catch(() => undefined);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('spaceSettings.memberUpdateFailed'));
+      setError(roleErrorText(e, 'spaceSettings.memberUpdateFailed'));
     } finally {
       setBusy(false);
     }
@@ -236,6 +239,7 @@ export function RoleEditorScreen() {
         />
       </View>
       {role.bot_id ? <Note>{t('spaceSettings.botRoleHint')}</Note> : null}
+      {role.bot_id ? <Note>{t('mobile.settings.botRoleOrderHint')}</Note> : null}
       {locked && !everyone ? <Note tone="warning">{t('spaceSettings.members.roleLocked')}</Note> : null}
 
       {tab === 'display' ? (
@@ -337,7 +341,7 @@ export function RoleEditorScreen() {
                     titleAccessory={m.bot ? <BotTag bot /> : null}
                     description={formatHandle(m)}
                     trailing={
-                      canManage && canAssignRoleTo(m.id, ctx) && !locked && !role.bot_id ? (
+                      assignable ? (
                         <IconButton icon="xmark" label={t('spaceSettings.removeFromRole')} tone="danger" disabled={busy} onPress={() => void toggleMember(m.id, false)} />
                       ) : null
                     }
@@ -345,7 +349,7 @@ export function RoleEditorScreen() {
                 ))
               )}
             </ListSection>
-            {canManage && !locked && !role.bot_id ? (
+            {assignable ? (
               <>
                 <SectionTitle title={t('spaceSettings.addMembers')} />
                 <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>

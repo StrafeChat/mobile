@@ -122,6 +122,7 @@ export default {
   editOrderHint: 'Cargos mais altos ficam acima dos mais baixos. Suba ou desça um cargo e salve.',
   saveOrder: 'Salvar ordem',
   roleOrderSaved: 'Ordem dos cargos salva.',
+  botRoleOrderHint: 'Um bot só pode dar cargos abaixo do dele. Use Editar ordem para colocar este cargo acima dos cargos que ele deve distribuir.',
   roleMemberCount_one: '{{count}} membro',
   roleMemberCount_other: '{{count}} membros',
   moveUp: 'Subir {{name}}',

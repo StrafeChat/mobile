@@ -18,17 +18,17 @@ import {
 } from '../routes';
 import { hexToHsv, hexToInt, hsvToHex, intToHex, saturateHex } from '../color';
 import { entryMatches, settingsGroups, ACCOUNT_ENTRIES } from '../sections';
+import { customRolesHighestFirst } from '@web/lib/roleOrder';
 import {
   addableMembers,
-  canAssignRoleTo,
-  canEditMemberRoles,
   canModerateMember,
-  customRolesDesc,
   filterMembers,
+  memberRoleChoices,
   memberRolesWith,
   moveRole,
+  roleAssignable,
   roleLocked,
-  rolePositionPatches,
+  roleReorder,
   type HierarchyContext,
 } from '../space/roleLogic';
 import { isChannelInSection, isPrivateSection, isSyncLocked, overrideCounts, overrideRowsFor, privateSectionChange } from '../room/overrideLogic';
@@ -159,20 +159,60 @@ describe('role hierarchy', () => {
   const roles = [role('everyone', 0, { name: '@everyone' }), role('mod', 2), role('helper', 1), role('admin', 3)];
   const ctx = (viewerId: string, viewerHighest: number): HierarchyContext => ({ ownerId: 'owner', viewerId, roles, everyoneId: 'everyone', viewerHighest });
 
-  it('orders custom roles highest first', () => {
-    expect(customRolesDesc(roles).map((r) => r.id)).toEqual(['admin', 'mod', 'helper']);
+  it('orders custom roles highest first, ties by id as the server breaks them', () => {
+    expect(customRolesHighestFirst(roles).map((r) => r.id)).toEqual(['admin', 'mod', 'helper']);
+    // Equal positions (an instance from before positions were unique): the older id ranks higher.
+    const tied = [role('20', 1), role('3', 1), role('100', 1), role('e', 0, { name: '@everyone' })];
+    expect(customRolesHighestFirst(tied).map((r) => r.id)).toEqual(['3', '20', '100']);
   });
 
-  it('moves a role and patches only what changed', () => {
-    const order = customRolesDesc(roles);
+  it('moves a role and saves only what changed, as one batch with a sequential fallback', () => {
+    const order = customRolesHighestFirst(roles);
     const moved = moveRole(order, 'helper', 'up');
     expect(moved.map((r) => r.id)).toEqual(['admin', 'helper', 'mod']);
-    expect(rolePositionPatches(moved)).toEqual([
+    const owner = roleReorder(roles, moved, Number.POSITIVE_INFINITY);
+    expect(owner.plan.positions).toEqual([
       { id: 'mod', position: 1 },
       { id: 'helper', position: 2 },
     ]);
+    // For an instance without PATCH /spaces/:id/roles: one write per role from the bottom up.
+    expect(owner.plan.sequential).toEqual([
+      { id: 'mod', position: 1 },
+      { id: 'helper', position: 2 },
+      { id: 'admin', position: 3 },
+    ]);
+    expect(owner.outOfReach).toBe(false);
     expect(moveRole(order, 'admin', 'up').map((r) => r.id)).toEqual(['admin', 'mod', 'helper']);
-    expect(rolePositionPatches(order)).toEqual([]);
+    expect(roleReorder(roles, order, Number.POSITIVE_INFINITY).plan).toEqual({ positions: [], sequential: [] });
+  });
+
+  it('never writes a role at or above the viewer', () => {
+    // The viewer holds "admin" (3): only mod and helper move, between the positions they hold.
+    const moved = customRolesHighestFirst([role('admin', 3), role('helper', 2), role('mod', 1)]);
+    const { plan } = roleReorder(roles, moved, 3);
+    expect(plan.positions).toEqual([
+      { id: 'mod', position: 1 },
+      { id: 'helper', position: 2 },
+    ]);
+    expect([...plan.positions, ...plan.sequential].some((p) => p.id === 'admin')).toBe(false);
+  });
+
+  it('plans from the roles as they are now, not from the copy the list was edited on', () => {
+    // The list was put in order while mod sat at 2; another device has since moved it to 5 and
+    // deleted helper. The edit keeps its order, the positions are the current ones.
+    const now = [role('everyone', 0, { name: '@everyone' }), role('mod', 5), role('admin', 3)];
+    const edited = [role('helper', 1), role('admin', 3), role('mod', 2)];
+    expect(roleReorder(now, edited, Number.POSITIVE_INFINITY).plan.positions).toEqual([
+      { id: 'mod', position: 3 },
+      { id: 'admin', position: 5 },
+    ]);
+  });
+
+  it('refuses before sending when legacy ties leave no room below the viewer', () => {
+    const tied = [role('everyone', 0, { name: '@everyone' }), role('admin', 3), role('x', 1), role('y', 1), role('z', 1)];
+    const { plan, outOfReach } = roleReorder(tied, customRolesHighestFirst(tied), 3);
+    expect(plan.positions.some((p) => p.position >= 3)).toBe(true);
+    expect(outOfReach).toBe(true);
   });
 
   it('locks roles at or above the viewer', () => {
@@ -190,13 +230,20 @@ describe('role hierarchy', () => {
     expect(canModerateMember(member('b', ['admin']), ctx('owner', Number.POSITIVE_INFINITY))).toBe(true);
   });
 
-  it('lets anyone with Manage Roles edit their own roles, the owner included', () => {
-    expect(canEditMemberRoles(member('me', ['mod']), ctx('me', 2), true)).toBe(true);
-    expect(canEditMemberRoles(member('owner'), ctx('owner', Number.POSITIVE_INFINITY), true)).toBe(true);
-    expect(canEditMemberRoles(member('owner'), ctx('me', 3), true)).toBe(false);
-    expect(canEditMemberRoles(member('a', ['helper']), ctx('me', 2), false)).toBe(false);
-    expect(canAssignRoleTo('owner', { ownerId: 'owner', viewerId: 'me' })).toBe(false);
-    expect(canAssignRoleTo('owner', { ownerId: 'owner', viewerId: 'owner' })).toBe(true);
+  it('gives and takes roles by the role alone: Manage Roles and a role below the viewer', () => {
+    expect(roleAssignable(role('helper', 1), 2, true)).toBe(true);
+    expect(roleAssignable(role('helper', 1), 2, false)).toBe(false);
+    expect(roleAssignable(role('mod', 2), 2, true)).toBe(false); // at the viewer's own
+    expect(roleAssignable(role('admin', 3), Number.POSITIVE_INFINITY, true)).toBe(true); // the owner
+    expect(roleAssignable(role('everyone', 0, { name: '@everyone' }), Number.POSITIVE_INFINITY, true)).toBe(false);
+    expect(roleAssignable(role('robo', 1, { bot_id: 'b1' }), Number.POSITIVE_INFINITY, true)).toBe(false);
+  });
+
+  it("lists another bot's managed role nowhere, and a bot's own as held", () => {
+    const withBots = [...roles, role('robo', 1, { bot_id: 'b1' }), role('other', 1, { bot_id: 'b2' })];
+    expect(memberRoleChoices(withBots, 'u1').map((r) => r.id)).toEqual(['admin', 'mod', 'helper']);
+    expect(memberRoleChoices(withBots, 'b1').map((r) => r.id)).toContain('robo');
+    expect(memberRoleChoices(withBots, 'b1').map((r) => r.id)).not.toContain('other');
   });
 
   it("keeps a member's other custom roles when one changes", () => {
@@ -214,8 +261,9 @@ describe('role hierarchy', () => {
     expect(filterMembers(list, { query: '', roleId: '', sort: 'joined_asc' }).map((m) => m.id)).toEqual(['3', '1', '2']);
     expect(filterMembers(list, { query: '', roleId: 'mod', sort: 'name' }).map((m) => m.id)).toEqual(['3', '1']);
     expect(filterMembers(list, { query: '2', roleId: '', sort: 'name' }).map((m) => m.id)).toEqual(['2']);
-    expect(addableMembers(list, 'mod', '', { ownerId: '2', viewerId: '1' }).map((m) => m.id)).toEqual([]);
-    expect(addableMembers(list, 'mod', '', { ownerId: 'x', viewerId: '1' }).map((m) => m.id)).toEqual(['2']);
+    // Anyone who lacks the role, the owner and members ranked above the viewer included.
+    expect(addableMembers(list, 'mod', '').map((m) => m.id)).toEqual(['2']);
+    expect(addableMembers(list, 'nope', 'zed').map((m) => m.id)).toEqual(['1']);
   });
 });
 

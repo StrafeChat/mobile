@@ -122,6 +122,7 @@ export default {
   editOrderHint: 'Höhere Rollen stehen über niedrigeren. Verschiebe eine Rolle nach oben oder unten und speichere.',
   saveOrder: 'Reihenfolge speichern',
   roleOrderSaved: 'Rollenreihenfolge gespeichert.',
+  botRoleOrderHint: 'Ein Bot kann nur Rollen vergeben, die unter seiner eigenen liegen. Verschiebe diese Rolle mit „Reihenfolge bearbeiten“ über die Rollen, die er vergeben soll.',
   roleMemberCount_one: '{{count}} Mitglied',
   roleMemberCount_other: '{{count}} Mitglieder',
   moveUp: '{{name}} nach oben',

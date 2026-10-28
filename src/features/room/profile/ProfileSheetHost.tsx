@@ -44,6 +44,7 @@ import {
   type ActionSheetEntry,
 } from '@/ui';
 import { buildUserMenuItems } from '@web/lib/userContextMenu';
+import { translateRoleApiError } from '@web/lib/formatApiError';
 import { MessageBody } from '@/features/chat';
 import { copyText, errorMessage } from '../util';
 import { openSafetyScreen } from '../navigation';
@@ -100,17 +101,9 @@ function useBotInstallable(userId: string | undefined, bot: boolean | undefined)
   return ok;
 }
 
-function RolesSection({
-  subject,
-  ctx,
-  viewerId,
-}: {
-  subject: UserProfilePopoverSubject;
-  ctx: SpaceMemberRoleEditContext | null;
-  viewerId: string | undefined;
-}) {
+function RolesSection({ subject, ctx }: { subject: UserProfilePopoverSubject; ctx: SpaceMemberRoleEditContext | null }) {
   const theme = useTheme();
-  const editable = canEditMemberRoles(ctx, subject.userId, viewerId);
+  const editable = canEditMemberRoles(ctx, subject.userId);
   const [picked, setPicked] = useState<Set<string>>(() => pickedFromContext(ctx));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -158,7 +151,7 @@ function RolesSection({
       }
       ctx.onMemberRolesUpdated?.();
     } catch (e) {
-      setError(errorMessage(e, 'profile.rolesUpdateFailed'));
+      setError(translateRoleApiError(e, t).join(' ') || t('profile.rolesUpdateFailed'));
       setPicked(pickedFromContext(ctx));
     } finally {
       setBusy(false);
@@ -483,7 +476,7 @@ export function ProfileSheetHost() {
           </View>
         ) : null}
         <BirthdayFact birthday={subject.birthday} />
-        <RolesSection subject={subject} ctx={ctx} viewerId={viewerId} />
+        <RolesSection subject={subject} ctx={ctx} />
         {subject.joinedAtLabel ? (
           <Text variant="caption">
             <Text variant="caption" weight="medium" tone="default">

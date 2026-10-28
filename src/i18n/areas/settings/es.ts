@@ -122,6 +122,7 @@ export default {
   editOrderHint: 'Los roles más altos están por encima de los más bajos. Sube o baja un rol y guarda.',
   saveOrder: 'Guardar orden',
   roleOrderSaved: 'Orden de roles guardado.',
+  botRoleOrderHint: 'Un bot solo puede dar roles que estén por debajo del suyo. Usa Editar orden para subirlo por encima de los roles que deba repartir.',
   roleMemberCount_one: '{{count}} miembro',
   roleMemberCount_other: '{{count}} miembros',
   moveUp: 'Subir {{name}}',

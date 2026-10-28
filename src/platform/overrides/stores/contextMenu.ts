@@ -8,6 +8,10 @@
  * Mobile UI should call presentActionSheet() from the presenter directly (it is typed for
  * phones: no event, an optional header). TypeScript resolves `@web/stores/contextMenu` to the
  * web original, whose showContextMenu() demands a MouseEvent.
+ *
+ * ContextMenuItem is the web's own type: an item's `color` (its icon's colour) and `submenu`
+ * (items opened from it) are drawn by the sheet as the web's menu draws them (presenter's
+ * actionSheetEntries).
  */
 import { actionSheet, dismissActionSheet, presentActionSheet } from '../../presenters/actionSheet';
 import type { ContextMenuItem } from '@web-original/stores/contextMenu';

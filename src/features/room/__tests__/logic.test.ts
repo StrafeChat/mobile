@@ -79,12 +79,32 @@ describe('role editor rules', () => {
     viewerHighestPosition: 5,
   };
 
-  test('needs Manage Roles; the owner is off limits except to themselves', () => {
-    expect(canEditMemberRoles(ctx, 'u', 'me')).toBe(true);
-    expect(canEditMemberRoles({ ...ctx, canManageMemberRoles: false }, 'u', 'me')).toBe(false);
-    expect(canEditMemberRoles(ctx, 'owner', 'me')).toBe(false);
-    expect(canEditMemberRoles(ctx, 'owner', 'owner')).toBe(true);
-    expect(canEditMemberRoles({ ...ctx, spaceRoles: [roles[0]!] }, 'u', 'me')).toBe(false);
+  test('needs Manage Roles and nothing about the member: the owner and higher-ranked members too', () => {
+    expect(canEditMemberRoles(ctx, 'u')).toBe(true);
+    expect(canEditMemberRoles({ ...ctx, canManageMemberRoles: false }, 'u')).toBe(false);
+    // Discord's rule (and the server's since member roles stopped checking the member's rank):
+    // the owner's roles are open to anyone with Manage Roles, within the role ceiling.
+    expect(canEditMemberRoles(ctx, 'owner')).toBe(true);
+    // A member who outranks the viewer (holds "admin" at 9, above the viewer's 5) is editable too.
+    expect(canEditMemberRoles({ ...ctx, subjectRoleIds: ['everyone', 'admin'] }, 'u')).toBe(true);
+    expect(canEditMemberRoles({ ...ctx, spaceRoles: [roles[0]!] }, 'u')).toBe(false);
+    expect(canEditMemberRoles(ctx, undefined)).toBe(false);
+  });
+
+  test("on the owner, the chips and the add list are the viewer's ceiling's, not the owner's rank", () => {
+    const ownerCtx = { ...ctx, spaceOwnerId: 'owner', subjectRoleIds: ['everyone', 'admin', 'helper'] };
+    const picked = pickedFromContext(ownerCtx);
+    const editable = canEditMemberRoles(ownerCtx, 'owner');
+    expect(roleRemovable(roles[3]!, ownerCtx, editable)).toBe(true); // helper (2) is below the viewer (5)
+    expect(roleRemovable(roles[2]!, ownerCtx, editable)).toBe(false); // admin (9) is not
+    expect(rolesAvailableToAdd({ ...ownerCtx, viewerHighestPosition: 6 }, picked, editable).map((r) => r.id)).toEqual(['mod']);
+  });
+
+  test('ties in position read as the server breaks them: the older (smaller) id ranks higher', () => {
+    const tied = [role('everyone', 0, { name: '@everyone' }), role('20', 4), role('3', 4), role('100', 4)];
+    const tiedCtx = { ...ctx, spaceRoles: tied, subjectRoleIds: ['everyone', '20', '3', '100'] };
+    expect(displayedRoles(tiedCtx, pickedFromContext(tiedCtx), true).map((r) => r.id)).toEqual(['3', '20', '100']);
+    expect(rolesAvailableToAdd(tiedCtx, new Set(), true).map((r) => r.id)).toEqual(['3', '20', '100']);
   });
 
   test('chips are the held roles without @everyone, highest first; locks follow the ceiling', () => {

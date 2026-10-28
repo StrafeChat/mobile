@@ -132,6 +132,39 @@ describe('profile sheet', () => {
     expect(userProfileFullModal.open).toBe(true);
     expect(userProfileFullModal.subject?.userId).toBe('200');
   });
+
+  test("edits the owner's roles too, by each role's position, and words a refusal for the role", async () => {
+    const { ApiError } = require('@web/api/ApiError') as typeof import('@web/api/ApiError');
+    const roles = [role('everyone', 0, { name: '@everyone' }), role('helper', 2), role('admin', 9)];
+    spacesApi.setMemberSpaceRoles.mockImplementationOnce(async () => {
+      throw new ApiError('cannot manage a role or member at or above your own highest role', 403);
+    });
+    await render(<ProfileSheetHost />);
+    await act(async () => {
+      presentProfileSheet({
+        subject: { userId: 'owner', displayName: 'Olga', username: 'olga' },
+        currentUserId: ME,
+        spaceRoleContext: {
+          spaceId: 's',
+          spaceOwnerId: 'owner',
+          subjectRoleIds: ['everyone', 'helper', 'admin'],
+          spaceRoles: roles,
+          canManageMemberRoles: true,
+          viewerHighestPosition: 5,
+        },
+      });
+    });
+    // The owner (who outranks everyone) is editable all the same; only "admin" (above the viewer) is locked.
+    expect(screen.queryByLabelText('Remove role admin')).toBeNull();
+    expect(screen.getByLabelText('Add role')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Remove role helper'));
+    });
+    expect(spacesApi.setMemberSpaceRoles).toHaveBeenCalledWith('s', 'owner', ['admin']);
+    expect(screen.getByText(/^That role is at or above your highest role/)).toBeTruthy();
+    // Put back as it was.
+    expect(screen.getByLabelText('Remove role helper')).toBeTruthy();
+  });
 });
 
 describe('report sheet', () => {

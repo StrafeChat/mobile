@@ -139,7 +139,8 @@ export interface SpaceAbilities {
   /** The owner never leaves - they transfer or delete. */
   canLeave: boolean;
   /** Moderation ceiling: the viewer's highest role position, MAX_SAFE_INTEGER for the owner.
-   * Kick/ban/role edits apply only to members strictly below it. */
+   * Kick, ban and nickname apply only to members strictly below it; roles can be given and taken
+   * only when the ROLE is strictly below it - on any member, as on Discord. */
   viewerHighestRolePosition: number;
 }
 

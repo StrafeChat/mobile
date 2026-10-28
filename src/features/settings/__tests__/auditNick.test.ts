@@ -73,7 +73,7 @@ describe('members page search and sort', () => {
   test('search matches the nickname, the name and the username', () => {
     expect(filterMembers(list, { query: 'aard', roleId: '', sort: 'name' }).map((m) => m.id)).toEqual(['1']);
     expect(filterMembers(list, { query: 'zed', roleId: '', sort: 'name' }).map((m) => m.id)).toEqual(['1']);
-    expect(addableMembers(list, 'r', 'AARD', { ownerId: 'x', viewerId: 'v' }).map((m) => m.id)).toEqual(['1']);
+    expect(addableMembers(list, 'r', 'AARD').map((m) => m.id)).toEqual(['1']);
   });
 
   test('sort by name goes by the nickname, case-insensitively', () => {

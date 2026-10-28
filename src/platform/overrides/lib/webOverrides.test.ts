@@ -106,6 +106,25 @@ describe('stores/mobileShellLayout', () => {
   });
 });
 
+describe('lib/formatApiError', () => {
+  // The key itself, which is what the assertions compare.
+  const tk = (key: string) => key;
+  const HIERARCHY = 'cannot manage a role or member at or above your own highest role';
+
+  it("adds the web's role wording and keeps React Native's dropped connection a network error", () => {
+    const fe = require('./formatApiError') as typeof import('./formatApiError');
+    const network = fe.translateApiErrorMessage('Failed to fetch', tk);
+    expect(fe.translateRoleApiError(new Error(HIERARCHY), tk)).toEqual(['errors.api.roleHierarchyRole']);
+    expect(fe.translateCaughtApiError(new Error(HIERARCHY), tk)).toEqual(['errors.api.roleHierarchy']);
+    expect(fe.translateRoleApiError(new Error('this role belongs to a bot and cannot be deleted or assigned'), tk)).toEqual(['errors.api.managedRole']);
+    for (const raw of ['Network request failed', 'Network request timed out', 'Aborted']) {
+      expect(fe.translateRoleApiError(new Error(raw), tk)).toEqual(network);
+      expect(fe.translateCaughtApiError(new Error(raw), tk)).toEqual(network);
+    }
+    expect(network).not.toEqual(['Failed to fetch']);
+  });
+});
+
 describe('inert modules', () => {
   it('composerFocus, desktop/boot and desktop/updater do nothing, safely', async () => {
     const composer = require('./composerFocus') as typeof import('./composerFocus');

@@ -5,13 +5,14 @@
  * page, edits surviving a slow load or a save elsewhere on the page, a slow first load never
  * undoing a save, "log out everywhere" saying when it did not happen, a muted channel reading
  * as muted, and the role hierarchy (locked roles read-only, reorders that never touch a role
- * out of reach).
+ * out of reach, one batched save merged into the roles, roles given by the role alone - to the
+ * owner and to members ranked above the viewer too).
  */
 import './settingsTestSetup';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { setSpaces } from '@web/stores/spaces';
+import { setSpaces, spaces } from '@web/stores/spaces';
 import { setRooms } from '@web/stores/rooms';
 import { auth } from '@web/stores/auth';
 import { confirmDialogState, settleConfirmDialog } from '@web/stores/confirmDialog';
@@ -20,6 +21,7 @@ import { PermManageRoles, PermSendMessages } from '@web/lib/spacePermissions';
 import type { SpaceRole } from '@web/api/spaces';
 import { setPushStatus } from '@/platform/push/status';
 import { toastStore } from '@/ui/toast';
+import { actionSheetStore, isActionItem, runActionItem } from '@/ui';
 import { ME, member, resetStores, role, space, sroom } from '../../../data/testing/fixtures';
 import { NotificationsScreen } from '../user/NotificationsScreen';
 import { OAuthAuthorizeScreen } from '../OAuthAuthorizeScreen';
@@ -27,8 +29,10 @@ import { VoiceScreen } from '../user/VoiceScreen';
 import { AccountScreen } from '../user/AccountScreen';
 import { DeveloperAppScreen } from '../user/developers/DeveloperAppScreen';
 import { RoleEditorScreen } from '../space/RoleEditorScreen';
+import { SpaceRolesScreen, liveOrder } from '../space/RolesScreen';
+import { SpaceMembersScreen } from '../space/MembersScreen';
 import { RoomNotificationsScreen } from '../room/RoomPagesScreens';
-import { canMoveRole, rolePositionPatches } from '../space/roleLogic';
+import { canMoveRole, roleReorder } from '../space/roleLogic';
 
 jest.mock('expo-notifications', () => ({
   ...jest.requireActual('expo-notifications'),
@@ -64,6 +68,37 @@ function deferred<T>() {
     resolve = r;
   });
   return { promise, resolve };
+}
+
+type FetchCall = { method: string; path: string; body: unknown };
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
+/** Answer the API's requests (the real api/spaces calls) and record them by path under /spaces;
+ * `writes()` leaves out the reads a screen makes for itself on mount (its rooms, its members). */
+function answerFetch(reply: (call: FetchCall) => { status: number; body?: unknown }) {
+  const calls: FetchCall[] = [];
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    const call: FetchCall = {
+      method: init?.method ?? 'GET',
+      path: url.slice(url.indexOf('/spaces/')),
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+    };
+    calls.push(call);
+    const { status, body } = reply(call);
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => {
+        if (body === undefined) throw new SyntaxError('no JSON body');
+        return body;
+      },
+    } as Response;
+  }) as typeof fetch;
+  return { calls, writes: () => calls.filter((c) => c.method !== 'GET') };
 }
 
 beforeEach(() => {
@@ -251,16 +286,189 @@ describe('role hierarchy', () => {
   it('reorders into the positions the roles already hold, never past a locked one', () => {
     // A deleted role left a gap at 2: renumbering 1..N would move "top" (out of reach) to 3.
     const desc = [role('top', 5, 0), role('b', 3, 0), role('a', 1, 0)];
-    expect(rolePositionPatches([desc[0]!, desc[2]!, desc[1]!])).toEqual([
+    expect(roleReorder(desc, [desc[0]!, desc[2]!, desc[1]!], 4).plan.positions).toEqual([
       { id: 'b', position: 1 },
       { id: 'a', position: 3 },
     ]);
-    // Duplicates fall back to the web's 1..N.
-    expect(rolePositionPatches([role('x', 1, 0), role('y', 1, 0)])).toEqual([{ id: 'x', position: 2 }]);
+    // Ties (an instance from before positions were unique) take consecutive positions instead.
+    const tied = [role('x', 1, 0), role('y', 1, 0)];
+    expect(roleReorder(tied, tied, Number.POSITIVE_INFINITY).plan.positions).toEqual([{ id: 'x', position: 2 }]);
     expect(canMoveRole(desc, 1, 'up', 4)).toBe(false);
     expect(canMoveRole(desc, 1, 'down', 4)).toBe(true);
     expect(canMoveRole(desc, 0, 'down', 4)).toBe(false);
     expect(canMoveRole(desc, 2, 'down', 4)).toBe(false);
     expect(canMoveRole(desc, 1, 'up', Number.POSITIVE_INFINITY)).toBe(true);
+  });
+
+  it("gives a role to the owner and to a member who outranks the viewer (Discord's rule)", async () => {
+    setSpaceMembers({ bySpaceId: { S: [member(ME, ['mod']), member('u9'), member('u8', ['admin'])] }, loading: {}, loadedAt: { S: Date.now() } });
+    const net = answerFetch(({ method }) => (method === 'PUT' ? { status: 204 } : { status: 500 }));
+    params.mockReturnValue({ spaceId: 'S', roleId: 'helper' });
+    await render(<RoleEditorScreen />);
+    await fireEvent.press(await screen.findByText('Members'));
+    await fireEvent.press(await screen.findByText('User u9'));
+    await waitFor(() => expect(net.writes()).toHaveLength(1));
+    await fireEvent.press(screen.getByText('User u8'));
+    await waitFor(() => expect(net.writes()).toHaveLength(2));
+    expect(net.writes()).toEqual([
+      { method: 'PUT', path: '/spaces/S/members/u9/roles', body: { role_ids: ['helper'] } },
+      // Their "admin" (above the viewer) is sent as held; the server keeps it whatever the list says.
+      { method: 'PUT', path: '/spaces/S/members/u8/roles', body: { role_ids: ['admin', 'helper'] } },
+    ]);
+    await screen.unmount();
+  });
+
+  it("offers Edit roles on the owner, and locks only the roles at or above the viewer's own", async () => {
+    const net = answerFetch(({ method }) => (method === 'PUT' ? { status: 204 } : { status: 500 }));
+    params.mockReturnValue({ spaceId: 'S' });
+    await render(<SpaceMembersScreen />);
+    await fireEvent.press(await screen.findByText('User u9'));
+    const editRoles = actionSheetStore.get()?.entries.find((e) => isActionItem(e) && e.key === 'roles');
+    expect(editRoles && isActionItem(editRoles) && !editRoles.disabled).toBe(true);
+    await act(async () => runActionItem(editRoles as never));
+    expect((await screen.findByLabelText('Mods, This role is at or above your own highest role.')).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByLabelText('Admins, This role is at or above your own highest role.').props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByLabelText('Helpers'));
+    await fireEvent.press(screen.getByTestId('member-roles-save'));
+    await waitFor(() => expect(net.writes()).toEqual([{ method: 'PUT', path: '/spaces/S/members/u9/roles', body: { role_ids: ['helper'] } }]));
+    await screen.unmount();
+  });
+
+  it("tells a bot's managed role how to let the bot hand out roles", async () => {
+    setSpaces({
+      spaces: [space('S', [...roles, role('robo', 1, 0, { name: 'Robo', bot_id: 'b1' })], { owner_id: ME })],
+      spaceRoomsBySpaceId: { S: [] },
+      loading: false,
+      hydrated: true,
+    });
+    params.mockReturnValue({ spaceId: 'S', roleId: 'robo' });
+    await render(<RoleEditorScreen />);
+    expect(await screen.findByText('A bot can only give out roles below its own. Use Edit order to move it above the roles it should hand out.')).toBeTruthy();
+    await screen.unmount();
+    params.mockReturnValue({ spaceId: 'S', roleId: 'helper' });
+    await render(<RoleEditorScreen />);
+    await screen.findByTestId('role-name');
+    expect(screen.queryByText(/A bot can only give out roles below its own/)).toBeNull();
+    await screen.unmount();
+  });
+});
+
+describe('edit order against live roles', () => {
+  const r = (id: string, position: number) => ({ id, name: id, position, permissions: 0, color: 0, hoist: false, mentionable: false }) as never;
+  it('reads each edited role at its live position, drops deleted ones and slots new ones in place', () => {
+    // Edited (highest first): helper moved above mod. Meanwhile a role was created at the bottom
+    // (everything shifted up one) and "old" was deleted.
+    const edited = [r('helper', 2), r('mod', 3), r('old', 1)];
+    const live = [r('mod', 4), r('helper', 3), r('v', 2), r('fresh', 1)];
+    const out = liveOrder(edited, live) as unknown as { id: string; position: number }[];
+    expect(out.map((x) => `${x.id}@${x.position}`)).toEqual(['helper@3', 'mod@4', 'v@2', 'fresh@1']);
+  });
+});
+
+describe('saving the role order', () => {
+  const roles: SpaceRole[] = [
+    role('everyone', 0, PermSendMessages, { name: '@everyone' }),
+    role('helper', 1, 0, { name: 'Helpers' }),
+    role('mod', 2, PermManageRoles, { name: 'Mods' }),
+    role('admin', 3, 0, { name: 'Admins' }),
+  ];
+  const storeRoles = () => spaces.spaces.find((x) => x.id === 'S')?.roles ?? [];
+  const position = (id: string) => storeRoles().find((r) => r.id === id)?.position;
+
+  beforeEach(() => {
+    // The viewer owns the space, so every custom role moves.
+    setSpaces({ spaces: [space('S', roles, { owner_id: ME })], spaceRoomsBySpaceId: { S: [] }, loading: false, hydrated: true });
+    setSpaceMembers({ bySpaceId: { S: [member(ME), member('u9', ['helper'])] }, loading: {}, loadedAt: { S: Date.now() } });
+    params.mockReturnValue({ spaceId: 'S' });
+  });
+
+  async function moveHelpersUpAndSave() {
+    await render(<SpaceRolesScreen />);
+    await fireEvent.press(await screen.findByTestId('roles-edit-order'));
+    await fireEvent.press(screen.getByLabelText('Move Helpers up'));
+    await fireEvent.press(screen.getByTestId('roles-save-order'));
+  }
+
+  it('sends one PATCH /spaces/:id/roles and merges the answer, never replacing the roles with it', async () => {
+    // The answer leaves out "admin" and names a role the store does not have: as the gateway can
+    // overtake an HTTP answer, neither may undo the store (admin stays, "ghost" is not added).
+    const net = answerFetch(({ method, path }) =>
+      method === 'PATCH' && path === '/spaces/S/roles'
+        ? { status: 200, body: [roles[0], { ...roles[1], position: 2 }, { ...roles[2], position: 1 }, role('ghost', 7, 0)] }
+        : { status: 500 },
+    );
+    await moveHelpersUpAndSave();
+    await waitFor(() => expect(position('helper')).toBe(2));
+    expect(net.writes()).toEqual([
+      {
+        method: 'PATCH',
+        path: '/spaces/S/roles',
+        body: [
+          { id: 'mod', position: 1 },
+          { id: 'helper', position: 2 },
+        ],
+      },
+    ]);
+    expect(position('mod')).toBe(1);
+    expect(storeRoles().map((r) => r.id).sort()).toEqual(['admin', 'everyone', 'helper', 'mod']);
+    expect(screen.queryByTestId('roles-save-order')).toBeNull();
+    await screen.unmount();
+  });
+
+  it('keeps a role the answer has an older copy of', async () => {
+    const at = '2026-10-28T12:00:00.000Z';
+    setSpaces({
+      spaces: [space('S', roles.map((r) => (r.id === 'mod' ? { ...r, updated_at: at } : r)), { owner_id: ME })],
+      spaceRoomsBySpaceId: { S: [] },
+      loading: false,
+      hydrated: true,
+    });
+    answerFetch(() => ({
+      status: 200,
+      body: [{ ...roles[1], position: 2 }, { ...roles[2], position: 1, updated_at: '2026-10-28T11:00:00.000Z' }],
+    }));
+    await moveHelpersUpAndSave();
+    await waitFor(() => expect(position('helper')).toBe(2));
+    expect(position('mod')).toBe(2);
+    await screen.unmount();
+  });
+
+  it('falls back to one PATCH per role, in order, on an instance without the batch endpoint', async () => {
+    const net = answerFetch(({ path, body }) => {
+      if (path === '/spaces/S/roles') return { status: 404 };
+      const r = roles.find((x) => x.id === path.split('/').pop());
+      return r ? { status: 200, body: { ...r, position: (body as { position: number }).position } } : { status: 500 };
+    });
+    await moveHelpersUpAndSave();
+    await waitFor(() => expect(position('admin')).toBe(3));
+    expect(net.writes().map((c) => `${c.method} ${c.path} ${JSON.stringify(c.body)}`)).toEqual([
+      'PATCH /spaces/S/roles [{"id":"mod","position":1},{"id":"helper","position":2}]',
+      'PATCH /spaces/S/roles/mod {"position":1}',
+      'PATCH /spaces/S/roles/helper {"position":2}',
+      'PATCH /spaces/S/roles/admin {"position":3}',
+    ]);
+    expect([position('mod'), position('helper')]).toEqual([1, 2]);
+    await screen.unmount();
+  });
+
+  it("does not fall back on the endpoint's own refusals, and words a hierarchy refusal for the role", async () => {
+    // A role deleted while editing: the server's real answer is 400 "unknown role id".
+    let net = answerFetch(() => ({ status: 400, body: { error: 'unknown role id' } }));
+    await moveHelpersUpAndSave();
+    expect(await screen.findByText('That role no longer exists.')).toBeTruthy();
+    expect(net.writes()).toHaveLength(1);
+    await screen.unmount();
+
+    // The endpoint's own 404 (the space is gone) is not an older instance either.
+    net = answerFetch(() => ({ status: 404, body: { error: 'space not found' } }));
+    await moveHelpersUpAndSave();
+    await waitFor(() => expect(net.writes()).toHaveLength(1));
+    await screen.unmount();
+
+    answerFetch(() => ({ status: 403, body: { error: 'cannot manage a role or member at or above your own highest role' } }));
+    await moveHelpersUpAndSave();
+    expect(await screen.findByText(/^That role is at or above your highest role/)).toBeTruthy();
+    expect(position('helper')).toBe(1);
+    await screen.unmount();
   });
 });

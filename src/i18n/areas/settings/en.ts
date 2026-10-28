@@ -134,6 +134,7 @@ export default {
   editOrderHint: 'Higher roles outrank lower ones. Move a role up or down, then save.',
   saveOrder: 'Save order',
   roleOrderSaved: 'Role order saved.',
+  botRoleOrderHint: 'A bot can only give out roles below its own. Use Edit order to move it above the roles it should hand out.',
   roleMemberCount_one: '{{count}} member',
   roleMemberCount_other: '{{count}} members',
   moveUp: 'Move {{name}} up',

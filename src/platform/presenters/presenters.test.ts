@@ -85,6 +85,27 @@ describe('action sheet', () => {
     contextMenu.showContextMenu([item]);
     expect(sheet.actionSheet().open).toBe(true);
   });
+
+  it("draws the web's item colour and submenu as its ContextMenu does", () => {
+    const { actionSheetStore, isActionItem } = require('@/ui/presenter') as typeof import('@/ui/presenter');
+    const leaf = { label: 'Blue', icon: 'fa-circle', color: '#3b82f6', onClick: jest.fn() };
+    const parent = { label: 'Move to folder', icon: 'fa-folder', onClick: jest.fn(), submenu: [leaf] };
+    const empty = { label: 'Plain', onClick: jest.fn(), submenu: [] };
+    contextMenu.showContextMenu([parent, empty]);
+    const [p, e] = (actionSheetStore.get()?.entries ?? []).filter(isActionItem);
+    // A non-empty submenu is a nested page whose items keep their colour as the icon's.
+    expect(Array.isArray(p?.submenu) && p.submenu.filter(isActionItem).map((x) => [x.label, x.iconColor])).toEqual([['Blue', '#3b82f6']]);
+    // An empty one is no submenu on the web: the item runs its own action.
+    expect(e?.submenu).toBeUndefined();
+    expect(sheet.actionSheetEntries([{ label: 'x', color: '#fff', iconColor: '#000', onClick: () => undefined } as never])[0]!.iconColor).toBe('#000');
+
+    // The logic-side selection opens the submenu instead of running the parent.
+    sheet.selectActionSheetItem(0);
+    expect(parent.onClick).not.toHaveBeenCalled();
+    expect(sheet.actionSheet()).toMatchObject({ open: true, title: 'Move to folder', items: [leaf] });
+    sheet.selectActionSheetItem(0);
+    expect(leaf.onClick).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('report sheet', () => {

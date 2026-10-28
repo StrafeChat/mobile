@@ -4,15 +4,18 @@
  * virtualised list of cells - avatar, name, BOT tag, owner crown, online dot, up to four role
  * chips and the join date. Members are shown by their space profile here (nickname and space
  * avatar), with the handle beside it. Tapping a member (or long-pressing) opens Edit roles /
- * Change Nickname / Reset Space Profile / Kick / Ban, with the web's hierarchy rules: actions
- * on someone ranked at or above you are shown disabled, so the rule is visible; the reset is
- * offered only when there is something to reset.
+ * Change Nickname / Reset Space Profile / Kick / Ban, with the web's hierarchy rules: Edit roles
+ * is offered on anyone with Manage Roles - the owner and members ranked above you included, as
+ * on Discord - and its sheet locks the roles at or above your own (and bot roles); nickname,
+ * kick and ban on someone ranked at or above you are shown disabled, so the rule is visible; the
+ * reset is offered only when there is something to reset.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { formatDate, t } from '@web/i18n/t';
 import { banSpaceMember, kickSpaceMember, setMemberSpaceRoles, type SpaceMember, type SpaceRole } from '@web/api/spaces';
+import { compareRolesHighestFirst, customRolesHighestFirst } from '@web/lib/roleOrder';
 import { loadSpaceMembers } from '@web/stores/spaceMembers';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { formatHandle } from '@web/stores/instance';
@@ -45,7 +48,16 @@ import {
 } from '@/ui';
 import { intToHex } from '../color';
 import { TextPromptSheet } from '../components/sheets';
-import { canEditMemberRoles, canModerateMember, customRolesDesc, everyoneRoleId, filterMembers, roleLocked, type HierarchyContext, type MemberSort } from './roleLogic';
+import {
+  canModerateMember,
+  everyoneRoleId,
+  filterMembers,
+  memberRoleChoices,
+  roleAssignable,
+  roleErrorText,
+  type HierarchyContext,
+  type MemberSort,
+} from './roleLogic';
 import { SpacePage } from './SpacePage';
 import type { SpaceSettingsData } from './useSpaceSettings';
 
@@ -139,7 +151,7 @@ function EditRolesSheet({
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberId]);
-  const custom = customRolesDesc(data.roles);
+  const custom = memberRoleChoices(data.roles, member?.id);
 
   async function save() {
     if (!member) return;
@@ -150,7 +162,7 @@ function EditRolesSheet({
       await loadSpaceMembers(data.spaceId).catch(() => undefined);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('spaceSettings.memberUpdateFailed'));
+      setError(roleErrorText(e, 'spaceSettings.memberUpdateFailed'));
     } finally {
       setBusy(false);
     }
@@ -169,7 +181,8 @@ function EditRolesSheet({
       <View style={{ gap: 4 }}>
         {custom.length === 0 ? <Text tone="muted">{t('spaceSettings.members.noCustomRoles')}</Text> : null}
         {custom.map((role) => {
-          const locked = roleLocked(role, data.gates.viewerHighestPosition);
+          // Locked: at or above the viewer's own, or a bot's managed role (only its bot holds it).
+          const locked = !roleAssignable(role, data.gates.viewerHighestPosition, data.gates.canManageRoles);
           const on = picked.has(role.id);
           return (
             <Touchable
@@ -186,14 +199,16 @@ function EditRolesSheet({
               }}
               accessibilityRole="switch"
               accessibilityState={{ checked: on, disabled: busy || locked }}
-              accessibilityLabel={locked ? `${role.name}, ${t('spaceSettings.members.roleLocked')}` : role.name}
+              accessibilityLabel={
+                role.bot_id ? `${role.name}, ${t('spaceSettings.botRole')}` : locked ? `${role.name}, ${t('spaceSettings.members.roleLocked')}` : role.name
+              }
               style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, opacity: locked ? 0.5 : 1 }}
             >
               <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: role.color ? intToHex(role.color) : undefined }} />
               <Text style={{ flex: 1 }} numberOfLines={1}>
                 {role.name}
               </Text>
-              {locked ? <Icon name="lock" size={11} tone="muted" /> : null}
+              {role.bot_id ? <Icon name="robot" size={11} tone="primary" /> : locked ? <Icon name="lock" size={11} tone="muted" /> : null}
               <ToggleVisual value={on} disabled={busy || locked} />
             </Touchable>
           );
@@ -228,7 +243,7 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
       .filter((id) => id !== everyoneId)
       .map((id) => rolesById.get(id))
       .filter((r): r is SpaceRole => !!r)
-      .sort((a, b) => b.position - a.position);
+      .sort(compareRolesHighestFirst);
 
   const isOwner = (id: string) => id === space.owner_id;
   const isSelf = (id: string) => id === data.viewerId;
@@ -236,8 +251,8 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
   // Manage Nicknames, and is then shown - disabled when outranked - except on the owner.
   const offersNickname = (m: SpaceMember) => (isSelf(m.id) ? canChangeOwnNickname : canManageNicknames && !isOwner(m.id));
   const nicknameAllowed = (m: SpaceMember) => memberCanEditNickname(space, data.roles, viewerRow, m);
-  const hasMenu = (m: SpaceMember) =>
-    (canManageRoles && (canEditMemberRoles(m, ctx, canManageRoles) || !isOwner(m.id))) || canKick || canBan || offersNickname(m) || nicknameAllowed(m);
+  // Edit roles needs only Manage Roles, on anyone (the sheet locks the roles out of reach).
+  const hasMenu = (m: SpaceMember) => canManageRoles || canKick || canBan || offersNickname(m) || nicknameAllowed(m);
 
   async function kick(m: SpaceMember) {
     const ok = await confirmDialog({
@@ -261,14 +276,12 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
     haptics.longPress();
     const mod = canModerateMember(m, ctx);
     const entries: ActionSheetEntry[] = [
-      canManageRoles &&
-        (canEditMemberRoles(m, ctx, canManageRoles) || !isOwner(m.id)) && {
-          key: 'roles',
-          label: t('spaceSettings.members.editRoles'),
-          icon: 'shield-halved',
-          disabled: !canEditMemberRoles(m, ctx, canManageRoles),
-          onSelect: () => setRolesTarget(m),
-        },
+      canManageRoles && {
+        key: 'roles',
+        label: t('spaceSettings.members.editRoles'),
+        icon: 'shield-halved',
+        onSelect: () => setRolesTarget(m),
+      },
       // This page's own entries, not the shared menu builders' (as on the web's
       // SpaceMembersPage), with the web's reset flow behind Reset Space Profile.
       (offersNickname(m) || nicknameAllowed(m)) && {
@@ -305,7 +318,7 @@ function Members({ data, setError }: { data: SpaceSettingsData; setError: (m: st
           style={{ flex: 1 }}
           value={roleFilter}
           sheetTitle={t('spaceSettings.members.filterRole')}
-          options={[{ value: '', label: t('spaceSettings.members.allRoles') }, ...customRolesDesc(data.roles).map((r) => ({ value: r.id, label: r.name }))]}
+          options={[{ value: '', label: t('spaceSettings.members.allRoles') }, ...customRolesHighestFirst(data.roles, everyoneId).map((r) => ({ value: r.id, label: r.name }))]}
           onValueChange={setRoleFilter}
         />
         <Select<MemberSort>

@@ -126,6 +126,7 @@ export default {
   editOrderHint: 'الأدوار الأعلى تتقدّم على الأدنى. انقل دورًا لأعلى أو لأسفل ثم احفظ.',
   saveOrder: 'حفظ الترتيب',
   roleOrderSaved: 'تم حفظ ترتيب الأدوار.',
+  botRoleOrderHint: 'لا يستطيع البوت منح إلا الأدوار التي تقع أسفل دوره. استخدم «تعديل الترتيب» لنقل هذا الدور فوق الأدوار التي يجب أن يمنحها.',
   roleMemberCount_zero: 'لا أعضاء',
   roleMemberCount_one: 'عضو واحد',
   roleMemberCount_two: 'عضوان',

@@ -122,6 +122,7 @@ export default {
   editOrderHint: 'Les rôles les plus hauts priment sur les plus bas. Montez ou descendez un rôle, puis enregistrez.',
   saveOrder: "Enregistrer l'ordre",
   roleOrderSaved: 'Ordre des rôles enregistré.',
+  botRoleOrderHint: "Un bot ne peut attribuer que des rôles situés sous le sien. Utilisez Modifier l'ordre pour le placer au-dessus des rôles qu'il doit attribuer.",
   roleMemberCount_one: '{{count}} membre',
   roleMemberCount_other: '{{count}} membres',
   moveUp: 'Monter {{name}}',

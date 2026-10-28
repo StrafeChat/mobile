@@ -5,12 +5,15 @@
  * Firefox's "NetworkError when attempting to fetch resource"). React Native's fetch says
  * "Network request failed" (or "...timed out" / "Aborted"), which would otherwise surface
  * raw instead of the translated "network error" line. Those are mapped to the browser's
- * wording before the web's translation runs; everything else is the web's code.
+ * wording before the web's translation runs; everything else is the web's code. Every function
+ * that translates a caught error is wrapped (translateCaughtApiError, translateRoleApiError):
+ * the web's call each other inside its own module, past this file.
  */
 import {
   splitErrorMessage,
   translateApiErrorMessage as webTranslateApiErrorMessage,
   translateCaughtApiError as webTranslateCaughtApiError,
+  translateRoleApiError as webTranslateRoleApiError,
   type ErrorTranslateFn,
 } from '@web-original/lib/formatApiError';
 
@@ -27,9 +30,18 @@ export function translateApiErrorMessage(raw: string, t: ErrorTranslateFn): stri
   return webTranslateApiErrorMessage(normalizeNetwork(raw), t);
 }
 
+function isRnNetworkError(err: unknown): boolean {
+  return err instanceof Error && RN_NETWORK.test(err.message.trim());
+}
+
 export function translateCaughtApiError(err: unknown, t: ErrorTranslateFn): string[] {
-  if (err instanceof Error && RN_NETWORK.test(err.message.trim())) {
-    return webTranslateApiErrorMessage('Failed to fetch', t);
-  }
+  if (isRnNetworkError(err)) return webTranslateApiErrorMessage('Failed to fetch', t);
   return webTranslateCaughtApiError(err, t);
+}
+
+/** The role surfaces' translation (the hierarchy refusal worded for a role), with the same
+ * dropped-connection mapping: the web's falls back to its own translateCaughtApiError. */
+export function translateRoleApiError(err: unknown, t: ErrorTranslateFn): string[] {
+  if (isRnNetworkError(err)) return webTranslateApiErrorMessage('Failed to fetch', t);
+  return webTranslateRoleApiError(err, t);
 }
