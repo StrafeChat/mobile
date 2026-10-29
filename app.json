@@ -2,7 +2,7 @@
   "expo": {
     "name": "Strafe",
     "slug": "strafe",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "strafe",
@@ -10,7 +10,7 @@
     "backgroundColor": "#101216",
     "ios": {
       "bundleIdentifier": "chat.strafe.mobile",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "supportsTablet": true,
       "icon": "./assets/images/icon.png",
       "infoPlist": {
@@ -27,7 +27,7 @@
     },
     "android": {
       "package": "chat.strafe.mobile",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#1b2b26",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
