@@ -4,7 +4,7 @@
     "When it fails: git -C web diff <web below> HEAD -- src/<file>, port every hunk into the file's `port` list, update its sha256, and set `web` to the new submodule commit.",
     "An area's `covers` are web/src path prefixes: an override of a module under one of them (manifest entry or @web-original/ import outside tests) must be pinned here. A wrapper that only re-exports needs no pin; list it under the area's `unpinned` with the reason."
   ],
-  "web": "fc0d0101cfd1a78071c7605b7db7445078a512f0",
+  "web": "b1f019b01e25217e6001af9e4a829340e4dda1be",
   "areas": {
     "voice": {
       "note": "stores/voice.ts is a copy that keeps its M1-M9 list of mobile changes; the lib/voice leaves are native implementations behind the same exports.",

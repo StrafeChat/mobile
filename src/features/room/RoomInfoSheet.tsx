@@ -10,6 +10,7 @@ import { useRef, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import {
+  pmStatusLine,
   useInstance,
   usePinsState,
   usePresence,
@@ -127,9 +128,8 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
 
   let line: string | undefined;
   if (info.kind === 'pm' && !info.official) {
-    // A custom status reads as current only while the person is around (the web's rule).
-    const present = presence.status === 'online' || presence.status === 'idle' || presence.status === 'dnd';
-    line = present && presence.custom_status ? presence.custom_status : presenceLabel(presence.status);
+    // A custom status (or a game) reads as current only while the person is around.
+    line = pmStatusLine(presence, presenceLabel);
   }
   else if (info.kind === 'group') line = t('threads.memberCount', { count: info.participantCount });
   else if (info.kind === 'thread' && info.parentName) line = `#${info.parentName}`;

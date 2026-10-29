@@ -3,7 +3,8 @@
  * settings/types.ts (ACCOUNT_ITEMS, APP_ITEMS, DEVELOPERS_ITEM, INSTANCE_ITEM) and
  * UserSettingsModal's navMatches, with the mobile differences spelled out:
  *
- * - no Desktop app page (Tauri only);
+ * - no Desktop app page and no Activity page (the desktop app's own: a phone never detects
+ *   or shares the game being played, it only shows other people's);
  * - Privacy & safety gathers the blocked list and the privacy switches (mobile only);
  * - "System & Keybinds" becomes Behaviour: phones have no keyboard shortcuts to rebind, only
  *   the two behaviour toggles that page also holds;

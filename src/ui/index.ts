@@ -41,6 +41,7 @@ export {
 
 // Type + icons
 export { Text, textStyle, toneColor, MONO_FONT, type TextProps, type TextVariant, type TextTone, type TextWeight } from './Text';
+export { SentenceWithName, sentenceParts, bidiIsolate, type SentenceWithNameProps, type SentenceParts } from './SentenceWithName';
 export { Icon, hasIcon, type IconProps } from './Icon';
 export { parseIcon, type ParsedIcon, type IconStyle } from './icons';
 

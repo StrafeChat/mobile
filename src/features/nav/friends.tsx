@@ -19,7 +19,7 @@ import { auth } from '@web/stores/auth';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { popoverSubjectFromParticipant } from '@web/lib/userProfilePopoverHelpers';
 import { useSolid } from '@/bridge/solid';
-import { deepEqual, useDerived, usePresence, useRelationship } from '@/data';
+import { deepEqual, playingLabel, useDerived, usePresence, useRelationship } from '@/data';
 import { presentProfileSheet } from '@/platform/presenters';
 import { useTheme } from '@/theme';
 import {
@@ -30,6 +30,7 @@ import {
   ListHeader,
   PresenceDot,
   SegmentedControl,
+  SentenceWithName,
   Spinner,
   Text,
   Touchable,
@@ -38,7 +39,7 @@ import {
 } from '@/ui';
 import { acceptFriendRequest, copyText, errorMessage } from './actions';
 import { ContentHeader } from './ContentHeader';
-import { FRIENDS_TABS, friendSections, friendSubtitle, hasAnyRelationship, incomingCount, type FriendsSection, type FriendsTab } from './friendsModel';
+import { FRIENDS_TABS, friendLine, friendSections, hasAnyRelationship, incomingCount, type FriendsSection, type FriendsTab } from './friendsModel';
 import { openPmWith } from './navigation';
 import { openAddFriendSheet } from './sheets/store';
 
@@ -127,7 +128,9 @@ const PersonRow = memo(function PersonRow({
     }
   }
 
-  const subtitle = kind === 'friend' ? friendSubtitle(rel, presence.byUser[userId] ? live : undefined, handle) : handle;
+  // Presence (a custom status, the game) only for friends: requests and blocks show the handle.
+  const line = kind === 'friend' ? friendLine(rel, presence.byUser[userId] ? live : undefined, handle) : { text: handle };
+  const subtitle = line.text;
   const dim = kind === 'outgoing' || kind === 'blocked';
   return (
     <Touchable
@@ -148,9 +151,13 @@ const PersonRow = memo(function PersonRow({
         <Text variant="label" numberOfLines={1}>
           {name}
         </Text>
-        <Text variant="caption" numberOfLines={1}>
-          {subtitle}
-        </Text>
+        {line.playing ? (
+          <SentenceWithName sentence={playingLabel} name={line.playing} />
+        ) : (
+          <Text variant="caption" numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
       </View>
       {kind === 'friend' ? (
         <IconButton

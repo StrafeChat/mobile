@@ -18,7 +18,10 @@
  * - after any reconnect, rooms already loaded re-pull their newest page - the first READY
  *   included, since on a phone a room can be read from the REST fallback before it;
  * - no push-to-talk keyboard listener (a phone has no keys; the voice UI holds the mic),
- *   no window title, update banner or Discord presence.
+ *   no window title, update banner or Discord presence, and no game reporting (the web starts
+ *   stores/activity.ts from desktop/boot, which is inert here and never called): the app
+ *   shows what other people are playing, through the web's presence handler, and reports
+ *   nothing itself.
  *
  * bootState() is what the router gates on.
  */
@@ -59,6 +62,7 @@ import { initUserProfileHandler } from '@web/stores/userProfile';
 import { applyVoiceSettingsToSession, initVoiceHandlers, voice } from '@web/stores/voice';
 import { voiceSettings } from '@web/stores/voiceSettings';
 import { useSolid } from '@/bridge/solid';
+import { dropActivitiesAfterReconnect } from '@/data/activity';
 import { closeView, currentRoomId } from '@/shell/state';
 import { isOnline, startConnectivity } from './connectivity';
 import { announceRoomGone } from './roomGone';
@@ -276,6 +280,8 @@ function handleReady(payload: ReadyPayload): void {
   void loadCustomEmojis();
   // Member lists are cached per connection; whatever changed while down was not seen.
   markSpaceMembersStale();
+  // ...including a co-member's game ending: drop the games only those lists vouched for.
+  dropActivitiesAfterReconnect();
   // Room keys pushed while disconnected wait as to-device messages.
   const uid = auth.user?.id;
   if (uid) resyncDevice(uid).catch((err: unknown) => console.warn('[e2ee] device resync after reconnect failed', err));

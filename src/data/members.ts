@@ -12,13 +12,14 @@ import type { SpaceMember } from '@web/api/spaces';
 import { spaces, spaceRoles } from '@web/stores/spaces';
 import { spaceMembers, ensureSpaceMembers } from '@web/stores/spaceMembers';
 import { rooms } from '@web/stores/rooms';
-import { presence } from '@web/stores/presence';
+import { activityOf, customStatusOf, presence } from '@web/stores/presence';
 import { channelOverridesSource, memberNameColorHex } from '@web/lib/spacePermissions';
 import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
 import { deepEqual, useDerived } from './derived';
 import { buildMemberList, isOnlineStatus, membersWhoCanView, type MemberListItem } from './memberList';
 import { isTextLike } from './constants';
+import { playingLabel } from './activity';
 import { resolveProfile, resolveSpaceUser, type SpaceProfileFields } from './spaceProfileCompat';
 
 /** Whose members: a space (optionally narrowed to who can see one of its channels), or a group PM. */
@@ -111,8 +112,11 @@ export interface MemberRowView {
   isOwner: boolean;
   status: string;
   online: boolean;
-  /** Custom status, else the status label - only while online/idle/dnd. */
+  /** Only while online/idle/dnd: their custom status, else what they are playing ("Playing
+   * X"), else the status label. Plain text - also the row's accessibility label. */
   subline?: string;
+  /** The game's name when the line is what they are playing (the row sets it in bold). */
+  playing?: string;
   roleIds: string[];
 }
 
@@ -132,7 +136,10 @@ export function memberRowView(source: MemberSource, userId: string): MemberRowVi
   if (!p) return undefined;
   const st = statusOf(p);
   const online = isOnlineStatus(st);
-  const custom = presence.byUser[p.id]?.custom_status ?? p.presence?.custom_status;
+  // The store's custom status whenever it knows the member, never falling back past a cleared
+  // one to the row's snapshot; the game only from the store (RoomMembersSidebar's rule).
+  const custom = online ? customStatusOf(p.id, p.presence) : undefined;
+  const playing = online && !custom ? activityOf(p.id)?.name : undefined;
   const roleIds = p.roles?.length ? [...p.roles] : [];
   const nameColor = memberNameColorHex(roleIds.length ? roleIds : undefined, roles);
   // A group's participants have no space profile; a space member's overlays their global one.
@@ -150,7 +157,8 @@ export function memberRowView(source: MemberSource, userId: string): MemberRowVi
     isOwner: ownerId != null && ownerId !== '' && ownerId === p.id,
     status: st ?? 'offline',
     online,
-    ...(online ? { subline: custom || t(`presence.${st}`) } : {}),
+    ...(online ? { subline: custom || (playing ? playingLabel(playing) : t(`presence.${st}`)) } : {}),
+    ...(playing ? { playing } : {}),
     roleIds,
   };
 }

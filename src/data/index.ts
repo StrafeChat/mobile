@@ -26,6 +26,7 @@ export * from './collapsedSections';
 export * from './memberList';
 export * from './members';
 export * from './users';
+export * from './activity';
 export * from './messageListModel';
 export * from './messages';
 export * from './typing';

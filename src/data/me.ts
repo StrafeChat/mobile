@@ -11,6 +11,7 @@ import { stargate } from '@web/stores/stargate';
 import { presence, type UserPresence } from '@web/stores/presence';
 import { useSolid } from '@/bridge/solid';
 import { instanceVersion } from '@/platform/overrides/runtime/instance';
+import { plainActivities } from './activity';
 
 export type AuthUser = NonNullable<AuthState['user']>;
 
@@ -37,14 +38,22 @@ export function useSession(): SessionState {
   return useSolid(() => ({ signedIn: !!auth.token, hydrated: auth.hydrated, loading: auth.loading }));
 }
 
-/** The user's own presence, as the status dot reads it ('offline' when unknown).
- * Re-renders on the user's own PRESENCE_UPDATE. */
+/** The user's own presence, as the status dot reads it ('offline' when unknown), with the
+ * game one of their desktops reports. A plain copy of every field. */
+export function selfPresence(): UserPresence {
+  const id = auth.user?.id;
+  const p = id ? presence.byUser[id] : undefined;
+  const activities = plainActivities(p?.activities);
+  return {
+    status: p?.status ?? 'offline',
+    ...(p?.custom_status ? { custom_status: p.custom_status } : {}),
+    ...(activities ? { activities } : {}),
+  };
+}
+
+/** Re-renders on the user's own PRESENCE_UPDATE. */
 export function useSelfPresence(): UserPresence {
-  return useSolid(() => {
-    const id = auth.user?.id;
-    const p = id ? presence.byUser[id] : undefined;
-    return { status: p?.status ?? 'offline', ...(p?.custom_status ? { custom_status: p.custom_status } : {}) };
-  });
+  return useSolid(selfPresence);
 }
 
 export interface InstanceInfo {

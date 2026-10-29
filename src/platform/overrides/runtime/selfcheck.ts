@@ -44,6 +44,23 @@ const checks: Record<string, Check> = {
     return 'Unicode property escapes work';
   },
 
+  'game activity'() {
+    // lib/activity builds its name matchers (general categories Cc, Cf, Mn, Me) at load, and
+    // formats "for 1 hr 2 min" with Intl unit styles - which a Hermes build may lack, and then
+    // reads "1:02". Both are fine; this says which one the profile card shows.
+    const { cleanActivityName, formatActivityDuration } = require('@web/lib/activity') as typeof import('@web/lib/activity');
+    const ch = (cp: number) => String.fromCodePoint(cp);
+    if (cleanActivityName(`${ch(0x202e)}Hades${ch(7)}  II `) !== 'Hades II') fail('a name is not cleaned');
+    if (cleanActivityName(`${ch(0x3164)} ${ch(0x2800)}`) !== null) fail('a blank name is kept');
+    if (cleanActivityName(`A${ch(0x200d)}B`) !== `A${ch(0x200d)}B`) fail('a joiner is dropped');
+    const d = formatActivityDuration(62 * 60_000, 'en');
+    if (!d.includes('1') || !d.includes('2')) fail(`62 minutes read "${d}"`);
+    for (const l of APP_LOCALES) if (!formatActivityDuration(62 * 60_000, l)) fail(`no duration in ${l}`);
+    const units = /^\d+:\d\d$/.test(d) ? 'no Intl unit style, durations read "1:02"' : `durations read "${d}"`;
+    const list = typeof (Intl as { ListFormat?: unknown }).ListFormat === 'function' ? '' : ' (no Intl.ListFormat: parts joined with a space)';
+    return `names cleaned; ${units}${list}`;
+  },
+
   intl() {
     if (typeof Intl === 'undefined') fail('no Intl');
     if (typeof Intl.PluralRules !== 'function') fail('Intl.PluralRules missing');

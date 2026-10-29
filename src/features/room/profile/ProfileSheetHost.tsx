@@ -1,7 +1,7 @@
 /**
  * The profile sheet - the web's UserProfilePopover, as Discord mobile shows it: a bottom
- * sheet with the banner, the avatar (tap: full profile), the identity block, About Me, the
- * birthday, the member's roles in the space (editable with Manage Roles, under the same
+ * sheet with the banner, the avatar (tap: full profile), the identity block, what they are
+ * playing, About Me, the birthday, the member's roles in the space (editable with Manage Roles, under the same
  * hierarchy rules as the server), when they joined, and a one-line "Message @name" composer.
  * Opened in a space it shows the space profile (the nickname, with the global name under it)
  * and offers "Edit Space Profile" on your own, and "Change Nickname" wherever you may.
@@ -25,7 +25,7 @@ import { formatBirthday } from '@web/lib/utils/birthday';
 import { spaces, spaceRoles } from '@web/stores/spaces';
 import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
-import { memberCanEditNickname, mySpaceMember, spaceMemberOf } from '@/data';
+import { memberCanEditNickname, mySpaceMember, spaceMemberOf, useActivity } from '@/data';
 import { openSpaceProfile } from '@/features/settings';
 import { dismissProfileSheet, profileSheet } from '@/platform/presenters';
 import { setProfileSheet } from '@/platform/presenters/profileSheet';
@@ -50,7 +50,9 @@ import { copyText, errorMessage } from '../util';
 import { openSafetyScreen } from '../navigation';
 import { presentNicknameSheet } from '../nicknameSheet';
 import { IdentityBlock } from './IdentityBlock';
+import { ProfileActivity } from './ProfileActivity';
 import { ProfileArt } from './ProfileArt';
+import { SectionLabel } from './SectionLabel';
 import {
   canEditMemberRoles,
   displayedRoles,
@@ -62,13 +64,7 @@ import {
 
 const MAX_ROLE_CHIPS = 3;
 
-export function SectionLabel({ children }: { children: string }) {
-  return (
-    <Text variant="overline" style={{ marginBottom: 6 }}>
-      {children}
-    </Text>
-  );
-}
+export { SectionLabel };
 
 /** "Birthday" + month and day, only for someone who opted in. */
 export function BirthdayFact({ birthday }: { birthday?: string }) {
@@ -318,6 +314,8 @@ export function ProfileSheetHost() {
   const botInstallable = useBotInstallable(subject?.userId, subject?.bot);
   const spaceId = subject?.spaceId;
   const canEditNickname = useCanEditNickname(spaceId, subject?.userId);
+  // Live, by user id: the game comes and goes while the sheet is open.
+  const playing = !!useActivity(subject?.userId);
 
   if (!subject) return <Sheet open={false} onClose={() => undefined} />;
   const isSelf = subject.userId === viewerId;
@@ -397,7 +395,7 @@ export function ProfileSheetHost() {
   );
 
   const aboutMe = subject.aboutMe?.trim();
-  const hasDetails = botInstallable || !!aboutMe || !!formatBirthday(subject.birthday) || !!ctx || !!subject.spaceRoles?.length || !!subject.joinedAtLabel;
+  const hasDetails = playing || botInstallable || !!aboutMe || !!formatBirthday(subject.birthday) || !!ctx || !!subject.spaceRoles?.length || !!subject.joinedAtLabel;
 
   return (
     <Sheet open={open && !!live.subject} onClose={close} scrollable padded={false} testID="profile-sheet">
@@ -458,6 +456,7 @@ export function ProfileSheetHost() {
           </View>
         ) : null}
         {hasDetails ? <Divider /> : null}
+        <ProfileActivity userId={subject.userId} />
         {botInstallable ? (
           <Button
             title={t('profile.addToSpace')}

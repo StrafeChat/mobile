@@ -5,6 +5,7 @@
 import './navTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { setSpaces } from '@web/stores/spaces';
 import { setRooms } from '@web/stores/rooms';
 import { readState, setReadState } from '@web/stores/readState';
@@ -110,6 +111,23 @@ describe('NavPanel', () => {
     const v = shell.view();
     expect(v.kind === 'room' && v.roomId).toBe('p2');
     expect(shell.panel()).toBe('content');
+  });
+
+  test("a PM row shows what the other person is playing, the name in bold, unless they have a custom status", async () => {
+    const iso = (name: string) => `${String.fromCodePoint(0x2068)}${name}${String.fromCodePoint(0x2069)}`;
+    setPresence({
+      byUser: {
+        a: { status: 'online', activities: [{ type: 'playing', name: 'Hades' }] },
+        b: { status: 'idle', custom_status: 'afk', activities: [{ type: 'playing', name: 'Celeste' }] },
+      },
+    });
+    await mount();
+    expect(StyleSheet.flatten(screen.getByText(iso('Hades')).props.style).fontWeight).toBe('600');
+    expect(screen.getByRole('button', { name: /^Alice, Playing Hades/ })).toBeTruthy();
+    expect(screen.getByText('afk')).toBeTruthy();
+    expect(screen.queryByText(iso('Celeste'))).toBeNull();
+    await act(async () => setPresence('byUser', 'a', { status: 'offline', activities: undefined }));
+    expect(screen.queryByText(iso('Hades'))).toBeNull();
   });
 
   test('an unread PM shows on the rail; a space selects its room list', async () => {
@@ -299,6 +317,33 @@ describe('FriendsView', () => {
     expect(screen.getByText('Cat')).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: 'Accept' }));
     expect(relApi.putRelationship).toHaveBeenCalledWith('3');
+  });
+
+  test("a friend's row: the game in bold when they have no custom status; never on a request's row", async () => {
+    const iso = (name: string) => `${String.fromCodePoint(0x2068)}${name}${String.fromCodePoint(0x2069)}`;
+    setPresence({
+      byUser: {
+        '1': { status: 'online', activities: [{ type: 'playing', name: 'Hades' }] },
+        // Offline to us (or invisible): the handle, whatever the store still holds.
+        '2': { status: 'offline', activities: [{ type: 'playing', name: 'Celeste' }] },
+        '3': { status: 'online', activities: [{ type: 'playing', name: 'Tetris' }] },
+      },
+    });
+    await render(
+      <UiProvider>
+        <FriendsView />
+      </UiProvider>,
+    );
+    expect(StyleSheet.flatten(screen.getByText(iso('Hades')).props.style).fontWeight).toBe('600');
+    expect(screen.getByRole('button', { name: 'Ann, Playing Hades' })).toBeTruthy();
+    expect(screen.queryByText(iso('Celeste'))).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ben, user2' })).toBeTruthy();
+    await act(async () => setPresence('byUser', '1', 'custom_status', 'raiding'));
+    expect(screen.getByRole('button', { name: 'Ann, raiding' })).toBeTruthy();
+    expect(screen.queryByText(iso('Hades'))).toBeNull();
+    await fireEvent.press(screen.getByRole('tab', { name: /Pending \(1\)/ }));
+    expect(screen.getByText('Cat')).toBeTruthy();
+    expect(screen.queryByText(iso('Tetris'))).toBeNull();
   });
 
   test('a reload keeps the list on screen (no full-page spinner over pull to refresh)', async () => {

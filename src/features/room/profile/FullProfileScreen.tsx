@@ -1,7 +1,7 @@
 /**
  * The full profile (the web's UserProfileFullModal) as a pushed screen: banner and avatar,
  * the identity block with the instance always named, the actions Discord mobile puts under
- * the name (Message, Call, the friend button, More), birthday, the bio (Markdown + limited
+ * the name (Message, Call, the friend button, More), what they are playing, birthday, the bio (Markdown + limited
  * HTML, drawn natively with images and media dropped), roles, when they joined, the spaces
  * you share, and "Verify encryption".
  *
@@ -47,6 +47,7 @@ import { backToShell, goBack, messageUser, openSafetyScreen } from '../navigatio
 import { copyText, errorMessage } from '../util';
 import { BioView } from './BioView';
 import { IdentityBlock } from './IdentityBlock';
+import { ProfileActivity } from './ProfileActivity';
 import { ProfileArt } from './ProfileArt';
 import { BirthdayFact, SectionLabel } from './ProfileSheetHost';
 import { useMutualSpaceIds } from './mutual';
@@ -279,6 +280,7 @@ export function FullProfileScreen() {
               ) : null}
               <IconButton icon="ellipsis" label={t('mobile.ui.moreOptions')} onPress={more} />
             </View>
+            <ProfileActivity userId={subject.userId} />
             <BirthdayFact birthday={subject.birthday} />
             <Divider />
             <View>

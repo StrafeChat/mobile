@@ -58,6 +58,7 @@ describe('routes', () => {
     expect(userSettingsPath('authorizedApps')).toBe('/settings/authorizedApps');
     // Desktop-only and unknown sections open the list.
     expect(userSettingsPath('desktop')).toBe('/settings');
+    expect(userSettingsPath('activity')).toBe('/settings');
     expect(userSettingsPath('nope')).toBe('/settings');
   });
 
@@ -126,9 +127,11 @@ describe('settings list', () => {
     expect(settingsGroups('nickname', { instanceAdmin: false })[0]!.items.map((i) => i.id)).toEqual(['spaceProfiles']);
   });
 
-  it('has no Desktop app page and calls keybinds Behaviour', () => {
+  it('has no Desktop app or Activity page and calls keybinds Behaviour', () => {
     const ids = settingsGroups('', { instanceAdmin: true }).flatMap((g) => g.items.map((i) => i.id));
     expect(ids).not.toContain('desktop');
+    // Game detection is the desktop app's; the phone only shows what others play.
+    expect(ids).not.toContain('activity');
     const behaviour = settingsGroups('', { instanceAdmin: false })[1]!.items.find((i) => i.id === 'keybinds')!;
     expect(behaviour.label()).toBe('Behaviour');
   });

@@ -7,7 +7,8 @@
  * as `openUserSettings('instance')` lands on the matching screen without a translation table.
  */
 
-/** User settings pages, by the web's section id. `desktop` (Tauri-only) has no mobile page. */
+/** User settings pages, by the web's section id. `desktop` and `activity` (the desktop app's
+ * window and game detection) have no mobile page. */
 export const USER_SETTINGS_SECTIONS = [
   'account',
   // Your nickname, avatar and profile in each space (the web's SpaceProfilesSettingsPage).
@@ -32,7 +33,7 @@ export function isUserSettingsSection(v: unknown): v is UserSettingsSectionId {
   return typeof v === 'string' && (USER_SETTINGS_SECTIONS as readonly string[]).includes(v);
 }
 
-/** `/settings`, or the page for a section; an unknown id (or `desktop`) opens the list. */
+/** `/settings`, or the page for a section; an unknown id (or `desktop`, `activity`) opens the list. */
 export function userSettingsPath(section?: string | null): string {
   return section && isUserSettingsSection(section) ? `/settings/${section}` : '/settings';
 }

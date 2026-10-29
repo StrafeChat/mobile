@@ -18,7 +18,7 @@ import type { RoomParticipant } from '@web/api/rooms';
 import type { UserProfilePopoverSubject } from '@web/stores/userProfilePopover';
 import type { Relationship } from '@web/api/relationships';
 import { auth } from '@web/stores/auth';
-import { presence, isPresentStatus, isVisibleStatus, type UserPresence } from '@web/stores/presence';
+import { presence, customStatusOf, isPresentStatus, isVisibleStatus, type UserPresence } from '@web/stores/presence';
 import { relationships, relationshipType, RelType } from '@web/stores/relationships';
 import { rooms } from '@web/stores/rooms';
 import { spaceRoles } from '@web/stores/spaces';
@@ -30,6 +30,7 @@ import { memberNameColorHex } from '@web/lib/spacePermissions';
 import { badgesFor, type BadgeDef } from '@web/lib/badges';
 import { snapshot } from '@/bridge/solid';
 import { deepEqual, sameArray, useDerived } from './derived';
+import { plainActivities } from './activity';
 import { spaceIdOfRoom } from './rooms';
 import { spaceMemberOf } from './spaceProfileCompat';
 
@@ -37,10 +38,17 @@ export { badgesFor, type BadgeDef };
 
 // ---- presence ---------------------------------------------------------------------------------------
 
-/** A user's presence as the status dot shows it: 'offline' when unknown (PresenceDot's rule). */
+/** A user's presence as the status dot shows it: 'offline' when unknown (PresenceDot's rule).
+ * A plain copy of the store's entry, every field of it: a copy that left `activities` out
+ * would hide what the person is playing from everything that reads it. */
 export function presenceOf(userId: string): UserPresence {
   const p = presence.byUser[userId];
-  return { status: p?.status ?? 'offline', ...(p?.custom_status ? { custom_status: p.custom_status } : {}) };
+  const activities = plainActivities(p?.activities);
+  return {
+    status: p?.status ?? 'offline',
+    ...(p?.custom_status ? { custom_status: p.custom_status } : {}),
+    ...(activities ? { activities } : {}),
+  };
 }
 
 /** Re-renders on that user's PRESENCE_UPDATE only. */
@@ -50,11 +58,12 @@ export function usePresence(userId: string | null | undefined): UserPresence {
 
 /** The custom status line - shown only while the person is online/idle/dnd (an offline user's
  * status reads as if they were around). `fallback` is a participant's embedded presence, used
- * when the live map has nothing. */
+ * only when the live map has no entry for them (the web's customStatusOf): one cleared since
+ * the list was fetched must not come back from the snapshot, and hide what they are playing. */
 export function presentCustomStatus(userId: string, fallback?: UserPresence): string | undefined {
   const st = presence.byUser[userId]?.status ?? fallback?.status;
   if (!isPresentStatus(st)) return undefined;
-  return presence.byUser[userId]?.custom_status ?? fallback?.custom_status ?? undefined;
+  return customStatusOf(userId, fallback);
 }
 
 // ---- relationships -------------------------------------------------------------------------------------

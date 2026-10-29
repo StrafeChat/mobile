@@ -1,15 +1,14 @@
 /**
  * Notes (NotesPage): your personal notes room - a room whose only participant is you. This view
  * only finds it and hands over: the store's copy when READY carried it, else GET /rooms/notes
- * (created on demand), seeding your presence and adding it to the store. Then the room opens
- * in its place like any conversation (end-to-end encrypted like a PM).
+ * (created on demand), added to the store. Then the room opens in its place like any
+ * conversation (end-to-end encrypted like a PM).
  */
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { getNotesRoom } from '@web/api/rooms';
 import { rooms, setRooms } from '@web/stores/rooms';
-import { setUserPresence } from '@web/stores/presence';
 import { useNotesRoomId } from '@/data';
 import { openRoom } from '@/shell/state';
 import { useTheme } from '@/theme';
@@ -20,9 +19,9 @@ import { ContentHeader } from './ContentHeader';
 /** Fetch the notes room (creating it server-side if needed) and put it in the store. */
 export async function fetchNotesRoom(): Promise<string> {
   const room = await getNotesRoom();
-  for (const p of room.participants ?? []) {
-    if (p.presence?.status) setUserPresence(p.id, p.presence);
-  }
+  // No presence seeding (the web's NotesPage): the only participant is us, and a participant's
+  // presence is the view others get - invisible reads offline there. Ours comes from READY and
+  // PRESENCE_UPDATE on our own channel.
   if (!rooms.rooms.some((r) => r.id === room.id)) setRooms('rooms', (list) => [...list, room]);
   return room.id;
 }

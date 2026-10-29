@@ -50,7 +50,8 @@ import { getDesktopInstance, setDesktopInstance, type DesktopInstance } from '@w
 import { apiUrl } from '@web/lib/runtimeConfig';
 import { disconnectStargate, onStargateEvent } from '@web/services/stargate/client';
 import { auth, logout, setAuth, setAuthToken, setAuthUser } from '@web/stores/auth';
-import { setUserPresence } from '@web/stores/presence';
+import { setUserPresence, type UserPresence } from '@web/stores/presence';
+import { normalizeActivities } from '@web/lib/activity';
 import { loadRelationships } from '@web/stores/relationships';
 import { loadRooms } from '@web/stores/rooms';
 import { loadSpaces } from '@web/stores/spaces';
@@ -567,6 +568,9 @@ export function installSessionGuard(): () => void {
 
 export type RestoreOutcome = 'restored' | 'offline' | 'expired' | 'signed-out';
 
+/** The statuses our own presence can have in GET /users/@me (the web's SELF_STATUSES). */
+const SELF_STATUSES: readonly string[] = ['online', 'idle', 'dnd', 'offline', 'invisible'];
+
 /**
  * The web's READY fallback (stores/auth bootstrapFromRest), for when the gateway has not
  * delivered READY in time: the same four requests and the same store updates - except
@@ -583,9 +587,16 @@ export async function restoreFromRest(): Promise<RestoreOutcome> {
   try {
     const [me] = await Promise.all([getMe(), loadRooms(), loadRelationships(), loadSpaces()]);
     if (auth.token !== token) return 'signed-out';
-    const p = me.presence as { status?: string; custom_status?: string } | undefined;
-    if (p?.status && ['online', 'idle', 'dnd', 'offline'].includes(p.status)) {
-      setUserPresence(me.id, { status: p.status as 'online' | 'idle' | 'dnd' | 'offline', custom_status: p.custom_status });
+    // Our own view (as in the web's bootstrapFromRest): invisible is a real status here (others
+    // see offline), and the game one of our desktops reports rides along - so this, unlike the
+    // payloads that embed someone's presence for others, writes the activity (none clears it).
+    const p = me.presence as { status?: string; custom_status?: string; activities?: unknown } | undefined;
+    if (p?.status && SELF_STATUSES.includes(p.status)) {
+      setUserPresence(
+        me.id,
+        { status: p.status as UserPresence['status'], custom_status: p.custom_status, activities: normalizeActivities(p.activities) },
+        { activities: true },
+      );
     }
     lastValidAt = Date.now();
     setAuth({ user: toAuthUser(me), loading: false, hydrated: true });

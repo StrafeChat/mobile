@@ -31,6 +31,9 @@ import { Touchable } from './Touchable';
 export interface ListRowProps {
   title: string;
   subtitle?: string;
+  /** Drawn in place of the subtitle's text (a line with a bold part, "Playing **Name**");
+   * `subtitle` still names it in the accessibility label. */
+  subtitleContent?: ReactNode;
   /** Font Awesome icon at the start. */
   icon?: string;
   iconColor?: string;
@@ -72,6 +75,7 @@ export interface ListRowProps {
 export function ListRow({
   title,
   subtitle,
+  subtitleContent,
   icon,
   iconColor,
   leading,
@@ -163,11 +167,12 @@ export function ListRow({
           </Text>
           {titleAccessory}
         </View>
-        {subtitle ? (
-          <Text variant="caption" numberOfLines={2}>
-            {subtitle}
-          </Text>
-        ) : null}
+        {subtitleContent ??
+          (subtitle ? (
+            <Text variant="caption" numberOfLines={2}>
+              {subtitle}
+            </Text>
+          ) : null)}
       </View>
       {value ? (
         <Text variant="body" tone="muted" numberOfLines={1} style={{ maxWidth: '45%' }}>

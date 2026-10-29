@@ -186,6 +186,25 @@ describe('restoring a stored session', () => {
     expect(stored('session_token')).toBe('tok-1');
   });
 
+  test('the REST fallback restores our own presence as we see it: invisible, with the game a desktop reports', async () => {
+    storeSession();
+    const game = { type: 'playing', name: 'Hades', started_at: 1_761_000_000_000 };
+    const app = await startApp(
+      routeFetch({
+        '/users/@me': () => reply(200, { ...ME, presence: { status: 'invisible', custom_status: 'brb', activities: [game] } }),
+        '/rooms': () => reply(200, []),
+        '/users/@me/relationships': () => reply(200, []),
+        '/spaces': () => reply(200, []),
+      }),
+    );
+    // The socket stays stuck connecting; READY never comes.
+    await jest.advanceTimersByTimeAsync(5_000);
+    await flush(10);
+    expect(app.auth.hydrated).toBe(true);
+    const { presence } = require('@web/stores/presence') as typeof import('@web/stores/presence');
+    expect(presence.byUser['1']).toEqual({ status: 'invisible', custom_status: 'brb', activities: [game] });
+  });
+
   test('READY hydrates the stores and subscribes the user, the spaces and their channels', async () => {
     storeSession();
     const app = await startApp(routeFetch({}));

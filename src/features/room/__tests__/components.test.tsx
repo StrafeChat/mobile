@@ -7,6 +7,7 @@
 import './roomTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { setRooms } from '@web/stores/rooms';
 import { setPresence } from '@web/stores/presence';
 import { userProfileFullModal } from '@web/stores/userProfileFullModal';
@@ -91,6 +92,68 @@ describe('member list', () => {
       fireEvent.press(screen.getByText('Add people'));
     });
     expect(navArea.openAddPeopleSheet).toHaveBeenCalledWith('g');
+  });
+});
+
+describe('what people are playing', () => {
+  // The name is drawn as a bidi isolate (what <bdi> does on the web).
+  const iso = (name: string) => `${String.fromCodePoint(0x2068)}${name}${String.fromCodePoint(0x2069)}`;
+  const playing = (name: string, started_at?: number) => [{ type: 'playing' as const, name, ...(started_at ? { started_at } : {}) }];
+
+  test('a member row says "Playing <name>" with the name in bold; a custom status beats it; invisible hides it', async () => {
+    setRooms({ rooms: [group('g', [user('a', { display_name: 'Ann' }), user('b', { display_name: 'Ben' })])] });
+    setPresence({
+      byUser: {
+        a: { status: 'online', activities: playing('Hades') },
+        b: { status: 'online', custom_status: 'brb', activities: playing('Celeste') },
+      },
+    });
+    await render(<MembersList roomId="g" spaceId={null} />);
+    const name = screen.getByText(iso('Hades'));
+    expect(StyleSheet.flatten(name.props.style).fontWeight).toBe('600');
+    expect(screen.getByText(`Playing ${iso('Hades')}`)).toBeTruthy();
+    // Read out as one line, without the isolates.
+    expect(screen.getByLabelText(/^Ann, Playing Hades/)).toBeTruthy();
+    expect(screen.getByText('brb')).toBeTruthy();
+    expect(screen.queryByText(iso('Celeste'))).toBeNull();
+    // Others see an invisible user as offline: no line at all.
+    await act(async () => setPresence('byUser', 'a', 'status', 'offline'));
+    expect(screen.queryByText(iso('Hades'))).toBeNull();
+  });
+
+  test("a PM's header: the game when there is no custom status", async () => {
+    setRooms({ rooms: [pm('r', user('a', { display_name: 'Alice' }))] });
+    setPresence({ byUser: { a: { status: 'dnd', activities: playing('Hades') } } });
+    await render(<RoomView roomId="r" spaceId={null} mode="shell" />);
+    expect(screen.getByText(`Playing ${iso('Hades')}`)).toBeTruthy();
+    await act(async () => setPresence('byUser', 'a', 'custom_status', 'heads down'));
+    expect(screen.getByText('heads down')).toBeTruthy();
+    expect(screen.queryByText(`Playing ${iso('Hades')}`)).toBeNull();
+  });
+
+  test('the profile sheet shows the card with how long, ticking on, and follows the game live', async () => {
+    jest.setSystemTime(new Date('2026-10-28T12:00:00.000Z'));
+    setPresence({ byUser: { '200': { status: 'online', activities: playing('Hades', Date.now() - 62 * 60_000) } } });
+    await render(<ProfileSheetHost />);
+    await act(async () => {
+      presentProfileSheet({ subject: { userId: '200', displayName: 'Bob', username: 'bob' }, currentUserId: ME });
+    });
+    expect(screen.getByTestId('profile-activity').props.accessibilityLabel).toBe('Playing a game, Hades, for 1 hr 2 min');
+    expect(screen.getByText('Playing a game')).toBeTruthy();
+    expect(screen.getByText(iso('Hades'))).toBeTruthy();
+    expect(screen.getByText('for 1 hr 2 min')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByText('for 1 hr 3 min')).toBeTruthy();
+    // They went invisible (offline to us): the card goes, the sheet stays.
+    await act(async () => setPresence('byUser', '200', 'status', 'offline'));
+    expect(screen.queryByTestId('profile-activity')).toBeNull();
+    expect(screen.getByText('Bob')).toBeTruthy();
+    // Back, playing something else with no known start: no duration line.
+    await act(async () => setPresence('byUser', '200', { status: 'idle', activities: playing('Celeste') }));
+    expect(screen.getByTestId('profile-activity').props.accessibilityLabel).toBe('Playing a game, Celeste');
+    expect(screen.queryByText(/^for /)).toBeNull();
   });
 });
 

@@ -22,6 +22,7 @@ import { loadSpaceMembers } from '@web/stores/spaceMembers';
 import { t } from '@web/i18n/t';
 import {
   memberRowView,
+  playingLabel,
   useMemberList,
   useMemberRow,
   useMyId,
@@ -39,6 +40,7 @@ import {
   IconButton,
   ListRow,
   SearchInput,
+  SentenceWithName,
   SheetFlashList,
   SkeletonRow,
   Text,
@@ -96,6 +98,7 @@ const MemberRow = memo(function MemberRow({ source, userId, dim, roomId, spaceId
       title={row.displayName}
       titleColor={row.nameColor}
       subtitle={row.subline}
+      subtitleContent={row.playing ? <SentenceWithName sentence={playingLabel} name={row.playing} /> : undefined}
       leading={<UserAvatar userId={row.id} uri={row.avatar} name={row.displayName} size="md" ringColor={theme.colors.card} />}
       titleAccessory={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginStart: 4 }}>

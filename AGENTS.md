@@ -87,6 +87,15 @@ web/                     the web client (submodule, pinned) - do not edit from h
   matches; mobile-only copy goes in `src/i18n/locales/*.ts` under `mobile.` in **all six**
   locales (Arabic plurals `_zero/_one/_two/_few/_many/_other`). `npm run check:i18n`.
 - Ids are snowflake **strings**. Never `Number()` an id.
+- Game activity ("Playing X") is **display only**. The web reports it from `stores/activity.ts`,
+  which only `desktop/boot` starts; the app never imports that, and the `desktop/native`
+  override's game wrappers are inert (`gamesAvailable()` is false).
+  `src/platform/overrides/desktop/games.test.ts` walks the bundle's import graph and fails if
+  anything reaches the store. Read a user's game live through `@/data` (`useActivity`, on the
+  web's `activityOf`), never from a row's snapshot. One-line rows show it only when there is no
+  custom status (`customStatusOf`). Draw the name with `SentenceWithName`, as bidi-isolated
+  plain text. A copy of a presence object keeps `activities`. Only a payload that carries
+  activities may write them (`setUserPresence(id, p, { activities: true })`).
 
 ## Native & build
 

@@ -20,7 +20,7 @@ import type { SpaceRoom, ThreadInfo } from '@web/api/spaces';
 import { getUnreadCountForDisplay } from '@web/stores/readState';
 import { messages } from '@web/stores/messages';
 import { auth } from '@web/stores/auth';
-import { presence, isPresentStatus } from '@web/stores/presence';
+import { presence, activityOf, customStatusOf, isPresentStatus } from '@web/stores/presence';
 import { lastSpaceRoom } from '@web/stores/lastSpaceRoom';
 import { effectiveNotifyMode, isRoomMuted } from '@web/lib/roomNotify';
 import { t } from '@web/i18n/t';
@@ -110,6 +110,8 @@ export interface PmRowView {
   system: boolean;
   /** The other person's custom status, only while they are online/idle/dnd. */
   subtitle?: string;
+  /** What the other person is playing, when there is no custom status (RoomsBar's rule). */
+  playing?: string;
   /** 0 for the room on screen (it is read as it arrives). */
   unread: number;
   muted: boolean;
@@ -133,11 +135,16 @@ export function pmRowView(roomId: string, onScreenRoomId: string | null): PmRowV
   const list = messages.byRoom[room.id] ?? [];
   const unread = onScreenRoomId === room.id || !uid ? 0 : getUnreadCountForDisplay(room.id, room, list, uid);
   let subtitle: string | undefined;
+  let playing: string | undefined;
   if (!isGroup && other) {
     const st = presence.byUser[other.id]?.status ?? other.presence?.status;
     if (isPresentStatus(st)) {
-      subtitle = presence.byUser[other.id]?.custom_status ?? other.presence?.custom_status ?? undefined;
+      // The store's whenever it knows them: one cleared since the room list was fetched must
+      // not come back from the participant snapshot (and hide what they are playing).
+      subtitle = customStatusOf(other.id, other.presence);
     }
+    // Only from the store, and only while they are around (activityOf).
+    if (!subtitle) playing = activityOf(other.id)?.name;
   }
   const latestMessageId = latestSnowflakeId(list, room.last_message_id);
   return {
@@ -149,6 +156,7 @@ export function pmRowView(roomId: string, onScreenRoomId: string | null): PmRowV
     bot: !isGroup && other?.bot === true,
     system: !isGroup && other?.system === true,
     ...(subtitle ? { subtitle } : {}),
+    ...(playing ? { playing } : {}),
     unread,
     muted: isRoomMuted(room),
     latestMessageId,

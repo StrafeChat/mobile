@@ -8,7 +8,8 @@
  */
 import type { Relationship } from '@web/api/relationships';
 import { RelType } from '@web/stores/relationships';
-import { isVisibleStatus, type UserPresence } from '@web/stores/presence';
+import { isPresentStatus, isVisibleStatus, type UserPresence } from '@web/stores/presence';
+import { playingLabel } from '@/data/activity';
 
 export type FriendsTab = 'online' | 'all' | 'pending' | 'blocked';
 
@@ -78,14 +79,30 @@ export function incomingCount(list: readonly Relationship[]): number {
   return list.filter((r) => r.type === RelType.IncomingRequest).length;
 }
 
-/** The status line under a friend: their custom status while present, else their handle. */
-export function friendSubtitle(
-  rel: Relationship,
-  live: UserPresence | undefined,
-  handle: string,
-): string {
+export interface FriendLine {
+  /** The line as plain text (also the row's accessibility label). */
+  text: string;
+  /** The game's name when the line is what they are playing (set in bold). */
+  playing?: string;
+}
+
+/**
+ * The line under a friend (FriendsPage's FriendRow): while they are around, their custom
+ * status, else what they are playing, else their handle. `live` is their entry in the
+ * presence store, undefined when it has none - then the relationship's own presence stands
+ * in for the status and custom status, but never for the game (only the store has a current
+ * one), and a store entry without a custom status never falls back to the relationship's.
+ */
+export function friendLine(rel: Relationship, live: UserPresence | undefined, handle: string): FriendLine {
   const st = live?.status ?? rel.user.presence?.status;
-  const present = st === 'online' || st === 'idle' || st === 'dnd';
-  const custom = present ? (live?.custom_status ?? rel.user.presence?.custom_status) : undefined;
-  return custom || handle;
+  if (!isPresentStatus(st)) return { text: handle };
+  const custom = (live ? live.custom_status : rel.user.presence?.custom_status) || undefined;
+  if (custom) return { text: custom };
+  const playing = live && isPresentStatus(live.status) ? live.activities?.[0]?.name : undefined;
+  return playing ? { text: playingLabel(playing), playing } : { text: handle };
+}
+
+/** The status line under a friend, as plain text (friendLine). */
+export function friendSubtitle(rel: Relationship, live: UserPresence | undefined, handle: string): string {
+  return friendLine(rel, live, handle).text;
 }

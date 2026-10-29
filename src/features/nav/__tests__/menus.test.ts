@@ -28,6 +28,7 @@ import { channelMenuEntries, pmMenuEntries, sectionMenuEntries, spaceMenuEntries
 import { deleteRoomFlow, leaveGroupFlow, leaveSpaceFlow } from '../actions';
 import { moveRoomStep } from '../reorder';
 import { setOwnCustomStatus, setOwnStatus } from '../you/ownPresence';
+import { fetchNotesRoom } from '../notes';
 
 // navTestSetup stands in for the other feature areas (links.ts).
 const links = jest.requireMock('../links') as { openSpaceProfile: jest.Mock };
@@ -48,6 +49,7 @@ jest.mock('@web/api/users', () => ({
 jest.mock('@web/api/rooms', () => ({
   ...jest.requireActual<object>('@web/api/rooms'),
   removeRoomParticipant: jest.fn(async () => undefined),
+  getNotesRoom: jest.fn(async () => undefined),
 }));
 
 const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
@@ -257,10 +259,89 @@ describe('own presence', () => {
     expect(presence.byUser[ME]?.custom_status).toBe('at lunch');
   });
 
+  const GAME = { type: 'playing' as const, name: 'Hades', started_at: 1_761_000_000_000 };
+  const patchMe = usersApi.patchMe as jest.Mock<(...args: unknown[]) => Promise<object>>;
+  /** The next PATCH /users/@me waits until `release` is called. */
+  function holdNextSave(): () => void {
+    let release: () => void = () => undefined;
+    patchMe.mockImplementationOnce(() => new Promise<object>((resolve) => (release = () => resolve({}))));
+    return () => release();
+  }
+
+  test('a change to invisible shows only once the server has it, and leaves the game alone', async () => {
+    setPresence({ byUser: { [ME]: { status: 'online', activities: [GAME] } } });
+    const release = holdNextSave();
+    const done = setOwnStatus('invisible');
+    await flush();
+    expect(usersApi.patchMe).toHaveBeenLastCalledWith({ presence: { status: 'invisible' } });
+    expect(presence.byUser[ME]?.status).toBe('online');
+    release();
+    expect(await done).toBe(true);
+    expect(presence.byUser[ME]?.status).toBe('invisible');
+    // What a desktop of ours reports is not this write's to clear.
+    expect(presence.byUser[ME]?.activities).toEqual([GAME]);
+  });
+
+  test('leaving invisible waits for the server too; a refusal keeps invisible showing', async () => {
+    setPresence({ byUser: { [ME]: { status: 'invisible', custom_status: 'shh' } } });
+    patchMe.mockImplementationOnce(async () => {
+      expect(presence.byUser[ME]?.status).toBe('invisible');
+      throw new Error('nope');
+    });
+    expect(await setOwnStatus('online')).toBe(false);
+    expect(presence.byUser[ME]).toEqual({ status: 'invisible', custom_status: 'shh' });
+    const release = holdNextSave();
+    const done = setOwnStatus('idle');
+    await flush();
+    expect(presence.byUser[ME]?.status).toBe('invisible');
+    release();
+    expect(await done).toBe(true);
+    expect(presence.byUser[ME]).toEqual({ status: 'idle', custom_status: 'shh' });
+  });
+
+  test('only the newest change applies: a save to invisible answered late does not undo a newer one', async () => {
+    setPresence({ byUser: { [ME]: { status: 'online' } } });
+    const release = holdNextSave();
+    const first = setOwnStatus('invisible');
+    await flush();
+    // Online to dnd is instant, while the save to invisible is still out.
+    expect(await setOwnStatus('dnd')).toBe(true);
+    expect(presence.byUser[ME]?.status).toBe('dnd');
+    release();
+    expect(await first).toBe(true);
+    expect(presence.byUser[ME]?.status).toBe('dnd');
+  });
+
+  test('a custom status edit keeps the game; its rollback keeps a status saved meanwhile', async () => {
+    setPresence({ byUser: { [ME]: { status: 'online', activities: [GAME] } } });
+    expect(await setOwnCustomStatus('raiding')).toBe(true);
+    expect(presence.byUser[ME]).toEqual({ status: 'online', custom_status: 'raiding', activities: [GAME] });
+    patchMe.mockImplementationOnce(async () => {
+      // A change to invisible confirmed while this save was out.
+      setPresence('byUser', ME, 'status', 'invisible');
+      throw new Error('nope');
+    });
+    expect(await setOwnCustomStatus('')).toBe(false);
+    expect(presence.byUser[ME]).toEqual({ status: 'invisible', custom_status: 'raiding', activities: [GAME] });
+  });
+
   test('clearing sends an empty custom status (a missing field leaves the old one on the server)', async () => {
     setPresence({ byUser: { [ME]: { status: 'online', custom_status: 'busy' } } });
     expect(await setOwnCustomStatus('   ')).toBe(true);
     expect(usersApi.patchMe).toHaveBeenLastCalledWith({ presence: { custom_status: '' } });
     expect(presence.byUser[ME]?.custom_status).toBeUndefined();
+  });
+});
+
+describe('the notes room', () => {
+  test("is added to the store without seeding our presence from its participant (others' view of us)", async () => {
+    setPresence({ byUser: { [ME]: { status: 'invisible' } } });
+    (roomsApi.getNotesRoom as jest.Mock).mockImplementationOnce(async () => ({
+      ...pm('notes', null),
+      participants: [user(ME, { presence: { status: 'offline' } })],
+    }));
+    expect(await fetchNotesRoom()).toBe('notes');
+    expect(rooms.rooms.some((r) => r.id === 'notes')).toBe(true);
+    expect(presence.byUser[ME]?.status).toBe('invisible');
   });
 });

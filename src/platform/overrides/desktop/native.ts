@@ -2,8 +2,8 @@
  * Mobile replacement for web/src/desktop/native.ts - the native-shell hooks the shared
  * stores call when `isDesktop()` is true (which it is on mobile; see ./env.ts).
  *
- * Same exports as the desktop module; window chrome, autostart and Discord presence have no
- * meaning on a phone and are inert.
+ * Same exports as the desktop module; window chrome, autostart, Discord presence and game
+ * detection have no meaning on a phone and are inert.
  */
 import * as Application from 'expo-application';
 import * as Notifications from 'expo-notifications';
@@ -12,6 +12,7 @@ import { Linking } from 'react-native';
 import { router } from 'expo-router';
 import { reloadApp } from '../../reload';
 import { showLocalNotification } from '../../notifications';
+import type { GameActivity, GameRow, GamesState, RunningProgram } from '@web-original/desktop/native';
 
 export type { ScreenSource } from '@web-original/desktop/electronBridge';
 
@@ -190,4 +191,58 @@ export function screenShareSources(): Promise<null> {
 
 export function chooseScreenShareSource(_id: string): Promise<void> {
   return Promise.resolve();
+}
+
+// ---- games (activity) ------------------------------------------------------------------------
+
+/*
+ * Game detection ("Playing X") is the desktop shell's: it looks at what is running and says what
+ * to share. A phone has no shell and never detects or reports a game - it only shows what other
+ * people's desktops report, through the presence store. So gamesAvailable() answers false, which
+ * is what every caller checks first (the web's stores/activity.ts and its Activity settings page,
+ * neither of which the app loads: the one is started from desktop/boot, overridden by an inert
+ * module here, the other is web UI). The reads answer "nothing", the writes refuse, as an older
+ * desktop build without games does.
+ */
+
+export type { CurrentGame, GameActivity, GameRow, GameSource, GamesState, RunningProgram } from '@web-original/desktop/native';
+
+const NO_GAMES = 'Game detection is only in the Strafe desktop app.';
+
+export function gamesAvailable(): Promise<boolean> {
+  return Promise.resolve(false);
+}
+
+/** Sharing off, no account, nothing playing, no games. */
+export function gamesGetState(): Promise<GamesState> {
+  return Promise.resolve({ share: false, account: null, current: null, games: [] });
+}
+
+export function gamesSetShare(_on: boolean, _account: string): Promise<void> {
+  return Promise.reject(new Error(NO_GAMES));
+}
+
+export function gamesSetHidden(_key: string, _hidden: boolean): Promise<void> {
+  return Promise.reject(new Error(NO_GAMES));
+}
+
+export function gamesRename(_key: string, _name: string | null): Promise<void> {
+  return Promise.reject(new Error(NO_GAMES));
+}
+
+export function gamesRunningPrograms(): Promise<RunningProgram[]> {
+  return Promise.resolve([]);
+}
+
+export function gamesAdd(_id: string, _name: string): Promise<GameRow | null> {
+  return Promise.reject(new Error(NO_GAMES));
+}
+
+export function gamesRemove(_key: string): Promise<void> {
+  return Promise.reject(new Error(NO_GAMES));
+}
+
+/** Never calls back: nothing on a phone detects a game. */
+export function onActivityChanged(_cb: (activity: GameActivity | null) => void): Promise<() => void> {
+  return Promise.resolve(() => undefined);
 }

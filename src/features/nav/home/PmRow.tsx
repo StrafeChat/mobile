@@ -1,16 +1,16 @@
 /**
  * One conversation in the Home list (RoomsBar's ConvItem): avatar with presence (a group icon
  * for groups), name with BOT / OFFICIAL tags and a muted bell, the other person's custom
- * status while they are around, and the unread state - a primary count pill, or for a muted
+ * status while they are around (else what they are playing), and the unread state - a primary count pill, or for a muted
  * room just a grey dot and no bold name. Long-press for the conversation menu.
  */
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { t } from '@web/i18n/t';
-import { usePmRow } from '@/data';
+import { playingLabel, usePmRow } from '@/data';
 import { openRoom } from '@/shell/state';
 import { useTheme } from '@/theme';
-import { Avatar, Badge, BotTag, Icon, OfficialTag, Text, Touchable, UserAvatar, useLongPressActions, withAlpha } from '@/ui';
+import { Avatar, Badge, BotTag, Icon, OfficialTag, SentenceWithName, Text, Touchable, UserAvatar, useLongPressActions, withAlpha } from '@/ui';
 import { pmMenuEntries } from '../menus';
 
 /**
@@ -28,7 +28,7 @@ export const PmRow = memo(function PmRow({ roomId, active, onScreen }: { roomId:
   const loud = unread && !row.muted;
   const label = [
     row.name,
-    row.subtitle,
+    row.subtitle ?? (row.playing ? playingLabel(row.playing) : null),
     row.muted ? t('room.notify.muted') : null,
     unread ? t('mobile.notifications.unread', { count: row.unread }) : null,
   ]
@@ -74,6 +74,8 @@ export const PmRow = memo(function PmRow({ roomId, active, onScreen }: { roomId:
           <Text variant="caption" numberOfLines={1}>
             {row.subtitle}
           </Text>
+        ) : row.playing ? (
+          <SentenceWithName sentence={playingLabel} name={row.playing} />
         ) : null}
       </View>
       {loud ? <Badge count={row.unread} tone="primary" /> : null}

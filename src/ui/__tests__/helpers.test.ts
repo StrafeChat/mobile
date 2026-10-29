@@ -13,6 +13,7 @@ import { snapToStep } from '../Slider';
 import { normalizePresence, presenceLabel } from '../PresenceDot';
 import { cleanEntries, type ActionSheetEntry } from '../presenter';
 import { hitSlopFor } from '../tokens';
+import { bidiIsolate, sentenceParts } from '../SentenceWithName';
 import { BADGES } from '@web/lib/badges';
 
 describe('color', () => {
@@ -125,5 +126,20 @@ describe('hitSlopFor', () => {
   it('grows small targets to 44pt', () => {
     expect(hitSlopFor(24, 24)).toEqual({ top: 10, bottom: 10, left: 10, right: 10 });
     expect(hitSlopFor(44)).toBeUndefined();
+  });
+});
+
+describe('SentenceWithName', () => {
+  it("cuts a translated sentence where the name goes, in each language's own order", () => {
+    // English and German put the name last; a language may put it first or in the middle.
+    expect(sentenceParts((name) => `Playing ${name}`)).toEqual({ before: 'Playing ', after: '' });
+    expect(sentenceParts((name) => `${name} wird gespielt`)).toEqual({ before: '', after: ' wird gespielt' });
+    expect(sentenceParts((name) => `Joue à ${name} maintenant`)).toEqual({ before: 'Joue à ', after: ' maintenant' });
+    // A translation that lost its placeholder keeps its words, the name after them.
+    expect(sentenceParts(() => 'Playing')).toEqual({ before: 'Playing ', after: '' });
+  });
+
+  it('isolates the name so a right-to-left one cannot reorder the words around it', () => {
+    expect(bidiIsolate('Hades')).toBe(`${String.fromCodePoint(0x2068)}Hades${String.fromCodePoint(0x2069)}`);
   });
 });

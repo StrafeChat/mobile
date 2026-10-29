@@ -2,7 +2,7 @@
  * A conversation's header (the web's RoomHeader, laid out the way Discord mobile does it):
  * back (on a phone: the rails), the room's glyph or the other person's avatar, the name with
  * its BOT / OFFICIAL tags, the encryption lock and a muted bell, and a second line - presence
- * for a PM, the topic for a channel, the channel for a thread. Tapping the title opens the
+ * for a PM (a custom status, else what they are playing, else the status), the topic for a channel, the channel for a thread. Tapping the title opens the
  * room's info sheet, which holds everything; the bar itself keeps the two or three actions
  * that matter for the kind of room (calls in PMs, threads and members in channels, search
  * everywhere). Wider screens have room for pins and notifications too.
@@ -11,6 +11,7 @@ import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { useSolid } from '@/bridge/solid';
 import {
+  pmStatusLine,
   useCallActive,
   useInstance,
   usePinsState,
@@ -39,8 +40,7 @@ function useSubtitle(info: RoomInfo): string | undefined {
   const presence = usePresence(info.kind === 'pm' ? info.otherUserId : null);
   if (info.kind === 'pm') {
     if (info.official) return undefined;
-    const present = presence.status === 'online' || presence.status === 'idle' || presence.status === 'dnd';
-    return present && presence.custom_status ? presence.custom_status : presenceLabel(presence.status);
+    return pmStatusLine(presence, presenceLabel);
   }
   if (info.kind === 'group') return t('threads.memberCount', { count: info.participantCount });
   if (info.kind === 'thread') return info.parentName ? `#${info.parentName}` : undefined;
