@@ -108,6 +108,8 @@ jest.mock('@web/stores/voice', () => {
     isConnectedTo: (roomId: string) => voice.session.roomId === roomId && voice.session.status !== 'idle',
     clearVoice: () => undefined,
     hydrateVoiceFromReady: () => undefined,
+    forgetVoiceRooms: () => undefined,
+    refreshVoiceStates: async () => undefined,
   };
 });
 

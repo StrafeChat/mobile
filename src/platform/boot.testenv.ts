@@ -150,6 +150,8 @@ jest.mock('@web/stores/voice', () => {
     voice,
     clearVoice: jest.fn(),
     hydrateVoiceFromReady: jest.fn(),
+    forgetVoiceRooms: jest.fn(),
+    refreshVoiceStates: jest.fn(async () => undefined),
     initVoiceHandlers: jest.fn(() => () => undefined),
     applyVoiceSettingsToSession: jest.fn(async () => undefined),
   };
