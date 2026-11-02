@@ -150,10 +150,13 @@ if (!i18next.isInitialized) {
 
 /**
  * Deliver a gateway event to the registered handlers, in registration order, shaped as the
- * real client delivers it: the frame `{ t, space_id, d: payload }` as `event.d`.
+ * real client delivers it: the frame `{ t, space_id, room_id, d: payload }` as `event.d`. The
+ * envelope ids follow the payload's, as the gateway's do: space_id is the space (absent for a
+ * PM), room_id the room (absent for a space-wide event), never one standing in for the other.
  */
 export function emitStargateEvent(t: string, payload: Record<string, unknown>): void {
   const spaceId = payload.space_id != null ? String(payload.space_id) : undefined;
-  const frame = { t, space_id: spaceId, d: payload };
-  for (const h of [...mockStargateHandlers]) h({ t, space_id: spaceId, room_id: spaceId, user_id: undefined, d: frame });
+  const roomId = payload.room_id != null ? String(payload.room_id) : undefined;
+  const frame = { t, space_id: spaceId, room_id: roomId, d: payload };
+  for (const h of [...mockStargateHandlers]) h({ t, space_id: spaceId, room_id: roomId, user_id: undefined, d: frame });
 }
