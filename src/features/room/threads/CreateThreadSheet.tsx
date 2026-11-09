@@ -19,7 +19,7 @@ import { upsertSpaceRoomFromPayload } from '@web/stores/spaces';
 import { messages } from '@web/stores/messages';
 import { spaceMembers } from '@web/stores/spaceMembers';
 import { auth } from '@web/stores/auth';
-import { getMessageBodyText, messagePreviewText } from '@web/components/messageList/utils';
+import { getMessagePreviewSource, messagePreviewText } from '@web/components/messageList/utils';
 import { t } from '@web/i18n/t';
 import { useRoomGates } from '@/data';
 import { useTheme } from '@/theme';
@@ -48,7 +48,7 @@ function durationLabel(minutes: number): string {
 export function starterPreview(roomId: string, messageId: string, spaceId: string): string {
   const m = messages.byRoom[roomId]?.find((x) => x.id === messageId);
   if (!m) return '';
-  return messagePreviewText(getMessageBodyText(m), spaceMembers.bySpaceId[spaceId] ?? [], auth.user?.id, MAX_THREAD_NAME_LENGTH);
+  return messagePreviewText(getMessagePreviewSource(m), spaceMembers.bySpaceId[spaceId] ?? [], auth.user?.id, MAX_THREAD_NAME_LENGTH);
 }
 
 function CreateThreadForm({ request, busy, setBusy }: { request: CreateThreadRequest; busy: boolean; setBusy: (b: boolean) => void }) {

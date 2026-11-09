@@ -61,6 +61,26 @@ export function useLinkPreviewsAllowed(roomId: string): boolean {
 }
 
 /**
+ * Whether a room shows the rich embeds bots attach (the web MessageList's rule): only a plain
+ * room - an end-to-end encrypted one shows none, whatever arrives - and only while the reader
+ * keeps "Show embeds from bots" on. A PM or group counts as plain only when its E2EE is off
+ * (the wire always says, for a PM), a space room unless it is on; a room this client does not
+ * know shows none. A message read in the clear is also the only kind that carries embeds
+ * (lib/messageWireFormat), so this is the second of two locks.
+ */
+export function embedsShown(roomId: string): boolean {
+  if (settings.botEmbeds === false) return false;
+  const pm = findPmRoom(roomId);
+  if (pm) return pm.e2ee_enabled === false;
+  const channel = findSpaceRoom(roomId)?.room;
+  return !!channel && channel.e2ee_enabled !== true;
+}
+
+export function useEmbedsShown(roomId: string): boolean {
+  return useDerived(`embedsShown:${roomId}`, () => embedsShown(roomId));
+}
+
+/**
  * A URL's preview card state, fetched on first use (once per URL, deduped, cached 24 h).
  * Pass `enabled` = useLinkPreviewsAllowed(roomId) - never unfurl a link from an encrypted room
  * the user did not opt in for.

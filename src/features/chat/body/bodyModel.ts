@@ -8,8 +8,12 @@
  * naturally), and each block node - heading, subtext, quote, list item, code block - and each
  * link that carries an embed (invite card, inline media) becomes a block of its own, as the
  * web's block <div>s already break the line there.
+ *
+ * Text inside a bot's embed is parsed the same way, with the web's two embed rules: a title
+ * or a field's name is styling only (parseStyleOnlyContent), and a link there never carries
+ * an invite card or inline media (an embed's pictures come only through the instance).
  */
-import { parseMessageContent, walkSegments, type MessageSegment } from '@web/lib/utils/markdown';
+import { parseMessageContent, parseStyleOnlyContent, walkSegments, type MessageSegment } from '@web/lib/utils/markdown';
 import { mediaKind, type MediaKind } from '@web/lib/gif/providers';
 import { extractSpaceInviteCodeFromUrl } from '@web/lib/utils/spaceInviteLink';
 
@@ -19,21 +23,25 @@ export type LinkSegment = Extract<MessageSegment, { type: 'link' }>;
 
 const CACHE_MAX = 500;
 const cache = new Map<string, readonly MessageSegment[]>();
+/** Embed titles and field names: the same text parses differently there, so a cache of its own. */
+const styleOnlyCache = new Map<string, readonly MessageSegment[]>();
 
-/** parseMessageContent, memoised by text (rows are recycled and re-render often). */
-export function parseBody(text: string): readonly MessageSegment[] {
-  const hit = cache.get(text);
+/** parseMessageContent (or, `styleOnly`, parseStyleOnlyContent), memoised by text (rows are
+ * recycled and re-render often). */
+export function parseBody(text: string, styleOnly = false): readonly MessageSegment[] {
+  const store = styleOnly ? styleOnlyCache : cache;
+  const hit = store.get(text);
   if (hit) {
     // Refresh recency: Map keeps insertion order, so the oldest entry is first.
-    cache.delete(text);
-    cache.set(text, hit);
+    store.delete(text);
+    store.set(text, hit);
     return hit;
   }
-  const parsed = parseMessageContent(text);
-  cache.set(text, parsed);
-  if (cache.size > CACHE_MAX) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
+  const parsed = styleOnly ? parseStyleOnlyContent(text) : parseMessageContent(text);
+  store.set(text, parsed);
+  if (store.size > CACHE_MAX) {
+    const oldest = store.keys().next().value;
+    if (oldest !== undefined) store.delete(oldest);
   }
   return parsed;
 }
@@ -109,8 +117,9 @@ function trimEdge(nodes: MessageSegment[], side: 'start' | 'end'): void {
   else nodes[i] = { ...n, content };
 }
 
-function nestedEmbeds(nodes: readonly MessageSegment[]): { href: string; embed: LinkEmbed }[] {
+function nestedEmbeds(nodes: readonly MessageSegment[], embedded: boolean): { href: string; embed: LinkEmbed }[] {
   const out: { href: string; embed: LinkEmbed }[] = [];
+  if (embedded) return out;
   walkSegments(nodes as MessageSegment[], (s) => {
     if (s.type !== 'link') return;
     const embed = linkEmbedOf(s);
@@ -119,8 +128,9 @@ function nestedEmbeds(nodes: readonly MessageSegment[]): { href: string; embed: 
   return out;
 }
 
-/** Group a node list (the top level, or a quote's children) into runs and blocks. */
-export function groupBlocks(nodes: readonly MessageSegment[]): BodyBlock[] {
+/** Group a node list (the top level, or a quote's children) into runs and blocks. `embedded`
+ * (text inside a bot's embed): links stay links, with no invite card or inline media. */
+export function groupBlocks(nodes: readonly MessageSegment[], embedded = false): BodyBlock[] {
   const out: BodyBlock[] = [];
   let run: MessageSegment[] = [];
   let afterBlock = false;
@@ -128,7 +138,7 @@ export function groupBlocks(nodes: readonly MessageSegment[]): BodyBlock[] {
     if (run.length === 0) return;
     if (afterBlock) trimEdge(run, 'start');
     if (beforeBlock) trimEdge(run, 'end');
-    if (run.length > 0) out.push({ kind: 'run', nodes: run, embeds: nestedEmbeds(run) });
+    if (run.length > 0) out.push({ kind: 'run', nodes: run, embeds: nestedEmbeds(run, embedded) });
     run = [];
   };
   for (const node of nodes) {
@@ -138,7 +148,7 @@ export function groupBlocks(nodes: readonly MessageSegment[]): BodyBlock[] {
       afterBlock = true;
       continue;
     }
-    if (node.type === 'link') {
+    if (node.type === 'link' && !embedded) {
       const embed = linkEmbedOf(node);
       if (embed) {
         flush(true);

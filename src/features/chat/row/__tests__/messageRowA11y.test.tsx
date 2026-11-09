@@ -77,6 +77,7 @@ const CTX: ListContextValue = {
   spaceId: null,
   compact: false,
   allowLinkPreviews: false,
+  showEmbeds: false,
   canReply: true,
   canReact: true,
   canJoinReactions: true,

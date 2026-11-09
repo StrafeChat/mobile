@@ -53,6 +53,7 @@ import { dismissNewHeader } from '@web/stores/newHeaderDismissed';
 import {
   newestLoadedMessageId,
   takeJumpTarget,
+  useEmbedsShown,
   useEnsureRoomHistory,
   useEntrySnapshot,
   useJumpTarget,
@@ -199,6 +200,7 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp, screen }: MessageListPr
   const gates = useRoomGates(roomId, spaceId);
   const settings = useSettings();
   const allowLinkPreviews = useLinkPreviewsAllowed(roomId);
+  const showEmbeds = useEmbedsShown(roomId);
   const jump = useJumpTarget(roomId);
   const signals = useScrollSignals(roomId);
   const hydrated = useSolid(() => auth.hydrated);
@@ -210,13 +212,14 @@ function RoomMessageList({ roomId, spaceId: spaceIdProp, screen }: MessageListPr
       spaceId,
       compact: settings.messageCompact === true,
       allowLinkPreviews,
+      showEmbeds,
       canReply: gates?.canReply ?? false,
       canReact: gates?.canReact ?? false,
       canJoinReactions: gates?.canJoinReactions ?? false,
       ...(gates?.customEmojiSpaceId ? { customEmojiSpaceId: gates.customEmojiSpaceId } : {}),
       groupSpacing: theme.messageGroupSpacing,
     }),
-    [roomId, spaceId, settings.messageCompact, allowLinkPreviews, gates, theme.messageGroupSpacing],
+    [roomId, spaceId, settings.messageCompact, allowLinkPreviews, showEmbeds, gates, theme.messageGroupSpacing],
   );
 
   // ---- scroll state (refs: none of it renders) --------------------------------------------------------

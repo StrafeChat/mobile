@@ -33,7 +33,7 @@ import { spaceMembers } from '@web/stores/spaceMembers';
 import type { RoomParticipant } from '@web/api/rooms';
 import {
   augmentParticipants,
-  getMessageBodyText,
+  getMessagePreviewSource,
   getSenderDisplay,
   messagePreviewText,
 } from '@web/components/messageList/utils';
@@ -337,7 +337,9 @@ export function replyReferenceView(roomId: string, replyToId: string, embedded: 
     authorName: sender.name,
     ...(sender.avatar ? { authorAvatar: sender.avatar } : {}),
     authorBot: sender.bot === true,
-    preview: messagePreviewText(getMessageBodyText(replied), pool, me, 90),
+    // A bot's embed-only message reads as its first embed's title or description (only for a
+    // message this client read in the clear).
+    preview: messagePreviewText(getMessagePreviewSource(replied), pool, me, 90),
   };
 }
 

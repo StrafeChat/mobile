@@ -1,19 +1,23 @@
 /**
  * One message as a card - the pinned-messages screen and search results (the web's
- * RoomPinnedPanel / RoomSearchPanel cards): author avatar and name, time, the body and the
- * files it carries, drawn by the chat area's own MessageBody / MessageAttachments so a card
- * reads exactly like the message in the list. Tap jumps to it; long-press opens the card's
- * actions.
+ * RoomPinnedPanel / RoomSearchPanel cards): author avatar and name, time, the body, the
+ * files it carries and a bot's embeds, drawn by the chat area's own MessageBody /
+ * MessageAttachments / MessageEmbeds so a card reads exactly like the message in the list. Tap
+ * jumps to it; long-press opens the card's actions.
+ *
+ * Embeds follow the web's panels: shown while the reader keeps "Show embeds from bots" on (only
+ * a message read in the clear carries any), and a file an embed shows is not repeated.
  */
-import { memo, type ReactNode } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import { View } from 'react-native';
 import type { DecryptedMessage } from '@web/stores/messages';
 import { getMessageBodyText } from '@web/components/messageList/utils';
+import { attachmentsBesideEmbeds, embedPreviewText } from '@web/lib/embeds/messageEmbeds';
 import { formatMessageTimestamp } from '@web/lib/utils/datetime';
 import { t } from '@web/i18n/t';
-import { isPlaceholderBody, useUserDisplay } from '@/data';
+import { isPlaceholderBody, useSettings, useUserDisplay } from '@/data';
 import { useTheme } from '@/theme';
-import { MessageAttachments, MessageBody } from '@/features/chat';
+import { MessageAttachments, MessageBody, MessageEmbeds } from '@/features/chat';
 import { Avatar, BotTag, Text, Touchable, useLongPress, withAlpha } from '@/ui';
 import { showUserProfile } from '../profile/present';
 
@@ -38,7 +42,11 @@ export const MessageCard = memo(function MessageCard({ message, roomId, spaceId,
   const body = getMessageBodyText(message);
   const placeholder = isPlaceholderBody(message) || message.plaintext == null;
   const longPress = useLongPress(() => onLongPress?.(), { disabled: !onLongPress });
-  const attachments = message.attachments ?? [];
+  const showEmbeds = useSettings().botEmbeds !== false;
+  const embeds = useMemo(() => (showEmbeds ? (message.embeds ?? []) : []), [showEmbeds, message.embeds]);
+  const attachments = useMemo(() => attachmentsBesideEmbeds(message.attachments ?? [], embeds), [message.attachments, embeds]);
+  // An embed-only message is read out by its first embed (the card itself is one element).
+  const spoken = body || embedPreviewText(embeds);
 
   return (
     <Touchable
@@ -47,7 +55,7 @@ export const MessageCard = memo(function MessageCard({ message, roomId, spaceId,
       {...(onLongPress ? longPress : null)}
       feedback="highlight"
       accessibilityRole="button"
-      accessibilityLabel={`${name}, ${time}, ${placeholder ? body : body.slice(0, 200)}`}
+      accessibilityLabel={`${name}, ${time}, ${placeholder ? spoken : spoken.slice(0, 200)}`}
       accessibilityHint={t('mobile.room.jumpHint')}
       style={{
         flexDirection: 'row',
@@ -84,6 +92,7 @@ export const MessageCard = memo(function MessageCard({ message, roomId, spaceId,
           <MessageBody text={body} roomId={roomId} spaceId={spaceId ?? null} allowLinkPreviews={false} inlineOnly italic={placeholder} numberOfLines={8} />
         ) : null}
         {attachments.length > 0 ? <MessageAttachments attachments={attachments} /> : null}
+        {embeds.length > 0 ? <MessageEmbeds embeds={embeds} roomId={roomId} spaceId={spaceId ?? null} /> : null}
       </View>
     </Touchable>
   );

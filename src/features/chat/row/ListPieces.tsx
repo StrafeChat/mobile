@@ -10,7 +10,7 @@ import { auth } from '@web/stores/auth';
 import { getMessage, type Message } from '@web/api/messages';
 import { decryptServerMessages } from '@web/stores/messages';
 import { formatDateHeader } from '@web/lib/utils/datetime';
-import { getMessageBodyText, messagePreviewText } from '@web/components/messageList/utils';
+import { getMessagePreviewSource, messagePreviewText } from '@web/components/messageList/utils';
 import { roomParticipantPool, useRoomInfo, useUserDisplay } from '@/data';
 import { useTheme } from '@/theme';
 import { Icon, OfficialTag, Text, UserAvatar, withAlpha } from '@/ui';
@@ -85,14 +85,15 @@ export const HistoryEdge = memo(function HistoryEdge({ side }: { side: 'older' |
 
 const starterCache = new Map<string, Promise<string | null>>();
 
-/** A thread's starter message text, from its parent channel (decrypted like any page). */
+/** A thread's starter message text, from its parent channel (decrypted like any page); a bot's
+ * embed-only starter reads as its first embed's title or description. */
 function loadStarter(parentId: string, messageId: string, roomId: string): Promise<string | null> {
   const key = `${parentId}:${messageId}`;
   let p = starterCache.get(key);
   if (!p) {
     p = getMessage(parentId, messageId)
       .then((raw) => decryptServerMessages([raw as unknown as Message]))
-      .then(([m]) => (m ? messagePreviewText(getMessageBodyText(m), roomParticipantPool(roomId), auth.user?.id, 300) : null))
+      .then(([m]) => (m ? messagePreviewText(getMessagePreviewSource(m), roomParticipantPool(roomId), auth.user?.id, 300) : null))
       .catch(() => null);
     starterCache.set(key, p);
   }

@@ -1,7 +1,8 @@
 /**
  * One message in the list (the body of the web's MessageListView <For>): a group's first row
  * with avatar, name (role colour), BOT / OFFICIAL tags and time; a continuation pulled tight
- * under it; the reply line and its spine; the body; attachments; the thread strip; reactions.
+ * under it; the reply line and its spine; the body; attachments; a bot's embeds; the thread
+ * strip; reactions.
  *
  * Mobile shape: long-press the row for the message sheet, swipe it left to reply, tap the
  * avatar or name for the profile (long-press them for the user menu), tap a continuation to
@@ -13,7 +14,11 @@
  * text, which VoiceOver cannot enter: links, the images, invite cards and code blocks under or
  * among them, mentions, rooms (messageA11y.ts). The row itself is not an element: on iOS that
  * would hide everything inside it from VoiceOver, so the avatar, the reply line, attachments
- * (play, open, save), the thread strip and the reactions each stay their own.
+ * (play, open, save), a bot's embeds, the thread strip and the reactions each stay their own.
+ *
+ * Embeds show where the list allows them (a plain room, "Show embeds from bots" on); a file an
+ * embed already shows as its picture is left out of the attachments, and a link an embed
+ * already carries gets no preview card of its own (the web's rules).
  */
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text as RNText, View, type AccessibilityActionEvent, type AccessibilityActionInfo } from 'react-native';
@@ -23,6 +28,7 @@ import { auth } from '@web/stores/auth';
 import type { DecryptedMessage } from '@web/stores/messages';
 import { formatMessageTimestamp, formatTimeOfDay } from '@web/lib/utils/datetime';
 import { formatSystemMessageText, getMessageBodyText, isEdited, messagePreviewText } from '@web/components/messageList/utils';
+import { attachmentsBesideEmbeds, safeHttpUrl } from '@web/lib/embeds/messageEmbeds';
 import { isPlaceholderBody, roomParticipantPool, useMessage, useUserDisplay, type MessageListItem } from '@/data';
 import { useSolid } from '@/bridge/solid';
 import { useTheme } from '@/theme';
@@ -31,6 +37,7 @@ import { composerFor, startReply } from '@/features/composer/state';
 import { dismissKeyboard } from '@/ui/keyboard';
 import { MessageAttachments } from '../attachments/Attachments';
 import { MessageBody, bodyColor } from '../body/MessageBody';
+import { MessageEmbeds } from '../body/MessageEmbed';
 import { EditedMarker } from '../body/inline';
 import { showMessageActions } from '../actions/messageActions';
 import { FLASH_FADE_MS, FLASH_HOLD_MS, useFlashNonce } from '../flash';
@@ -46,6 +53,8 @@ import { activateBodyTarget, bodyActionIndex, bodyActionName, bodyTargets } from
 import { sameMessageItem } from '../list/listLogic';
 
 type MessageItem = Extract<MessageListItem, { kind: 'message' }>;
+
+const NO_EMBEDS: NonNullable<DecryptedMessage['embeds']> = [];
 
 /** System lines (joins, pins, calls...): centred, muted, no avatar, no actions. */
 function SystemRow({ msg }: { msg: DecryptedMessage }) {
@@ -137,6 +146,9 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const swipeReply = useSolid(() => swipeToReplyEnabled());
   const canSwipeReply = canReply && swipeReply;
   const bodyText = getMessageBodyText(msg);
+  const embeds = ctx.showEmbeds ? (msg.embeds ?? NO_EMBEDS) : NO_EMBEDS;
+  const attachments = useMemo(() => attachmentsBesideEmbeds(msg.attachments ?? [], embeds), [msg.attachments, embeds]);
+  const embedLinks = useMemo(() => embeds.map((e) => safeHttpUrl(e.url)).filter((u): u is string => !!u), [embeds]);
   // The participant pool walks the room's loaded messages: once per text, not per render.
   const preview = useMemo(() => messagePreviewText(bodyText, roomParticipantPool(roomId), auth.user?.id, 500), [bodyText, roomId]);
   // Screen readers can neither long-press a row reliably nor swipe it: both as actions. The
@@ -202,6 +214,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
       roomId={roomId}
       spaceId={spaceId}
       allowLinkPreviews={ctx.allowLinkPreviews}
+      skipPreviewUrls={embedLinks}
       color={color}
       italic={placeholder}
       trailing={edited}
@@ -222,7 +235,8 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
 
   const extras = (
     <>
-      {msg.attachments?.length ? <MessageAttachments key={`a:${msg.id}`} attachments={msg.attachments} /> : null}
+      {attachments.length ? <MessageAttachments key={`a:${msg.id}`} attachments={attachments} /> : null}
+      {embeds.length ? <MessageEmbeds key={`e:${msg.id}`} embeds={embeds} roomId={roomId} spaceId={spaceId} /> : null}
       {msg.thread_id ? <ThreadFooter key={msg.thread_id} threadId={msg.thread_id} spaceId={spaceId} /> : null}
       {msg.reactions?.length ? (
         <MessageReactionsRow

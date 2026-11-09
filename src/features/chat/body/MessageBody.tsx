@@ -10,11 +10,17 @@
  * emoji; links open through the external-link guard and carry their invite card or inline
  * media; a lone GIF is only the animation; preview cards follow when the room allows them.
  * `trailing` (the "(edited)" marker) sits at the end of the last line.
+ *
+ * Inside a bot's embed (`embedded`, the web's rule) links stay links - no invite card, inline
+ * media, lone GIF or preview card, since an embed never nests another and its pictures come
+ * only through the instance - and emoji are never jumbo. Its title and field names are
+ * <InlineStyledText>: styling, inline code and emoji only.
  */
 import { Fragment, memo, useMemo, type ReactNode } from 'react';
-import { StyleSheet, Text as RNText, View, type TextStyle } from 'react-native';
+import { StyleSheet, Text as RNText, View, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import type { MessageSegment } from '@web/lib/utils/markdown';
 import { previewUrlsFor } from '@web/lib/linkPreviewUrls';
+import { previewUrlsBesideEmbeds } from '@web/lib/embeds/messageEmbeds';
 import { useTheme, type Theme } from '@/theme';
 import { MONO_FONT, withAlpha } from '@/ui';
 import { CodeBlock } from './CodeBlock';
@@ -56,12 +62,24 @@ export interface MessageBodyProps {
   /** Don't render embeds or cards (reply previews, compact surfaces). */
   inlineOnly?: boolean;
   numberOfLines?: number;
+  /** Links not to preview: the ones a bot's embed on the same message already shows a card for
+   * (compared normalized, so a link written `https://Example.com` matches the embed's
+   * `https://example.com/`). */
+  skipPreviewUrls?: readonly string[];
+  /** Text inside a bot's embed (its description, a field's value): see the top of the file. */
+  embedded?: boolean;
+  /** A size down from a message's text (an embed's description and fields, as on the web). */
+  small?: boolean;
 }
 
-function baseStyle(theme: Theme, color: string | undefined, italic: boolean | undefined): TextStyle {
+/** An embed's text runs a size below a message's (the web's text-sm under 15 px messages). */
+const SMALL_FONT = 14;
+const SMALL_LINE = 19;
+
+function baseStyle(theme: Theme, color: string | undefined, italic: boolean | undefined, small?: boolean): TextStyle {
   return {
-    fontSize: theme.font(BODY_FONT),
-    lineHeight: Math.round(theme.font(BODY_LINE)),
+    fontSize: theme.font(small ? SMALL_FONT : BODY_FONT),
+    lineHeight: Math.round(theme.font(small ? SMALL_LINE : BODY_LINE)),
     color: color ?? theme.colors.foreground,
     ...(italic ? { fontStyle: 'italic' as const } : {}),
   };
@@ -154,6 +172,7 @@ interface BlockOptions {
   allowLinkPreviews: boolean;
   inlineOnly: boolean;
   jumbo: boolean;
+  embedded: boolean;
 }
 
 function Embed({ href, embed, allowLinkPreviews }: { href: string; embed: LinkEmbed; allowLinkPreviews: boolean }) {
@@ -239,7 +258,7 @@ function renderBlocks(
           <View key={key} style={styles.quote}>
             <View style={[styles.quoteBar, { backgroundColor: theme.colors.border }]} />
             <View style={styles.quoteBody}>
-              {renderBlocks(groupBlocks(node.children), theme, { ...opts, base: { ...opts.base, color: opts.muted } }, key)}
+              {renderBlocks(groupBlocks(node.children, opts.embedded), theme, { ...opts, base: { ...opts.base, color: opts.muted } }, key)}
             </View>
           </View>,
         );
@@ -278,15 +297,23 @@ export const MessageBody = memo(function MessageBody({
   italic,
   inlineOnly = false,
   numberOfLines,
+  skipPreviewUrls,
+  embedded = false,
+  small,
 }: MessageBodyProps) {
   const theme = useTheme();
   const segments = useMemo(() => parseBody(text), [text]);
-  const jumbo = useMemo(() => isJumbo(segments), [segments]);
-  const gif = useMemo(() => (inlineOnly ? null : loneGif(segments)), [segments, inlineOnly]);
-  const blocks = useMemo(() => groupBlocks(segments), [segments]);
-  const previews = useMemo(() => (allowLinkPreviews && !inlineOnly ? previewUrlsFor(text) : []), [allowLinkPreviews, inlineOnly, text]);
+  const jumbo = useMemo(() => !embedded && isJumbo(segments), [segments, embedded]);
+  const gif = useMemo(() => (inlineOnly || embedded ? null : loneGif(segments)), [segments, inlineOnly, embedded]);
+  const blocks = useMemo(() => groupBlocks(segments, embedded), [segments, embedded]);
+  // Joined so a fresh array with the same links (each render of the row) keeps the memo.
+  const skip = skipPreviewUrls?.join('\n') ?? '';
+  const previews = useMemo(() => {
+    if (!allowLinkPreviews || inlineOnly || embedded) return [];
+    return previewUrlsBesideEmbeds(previewUrlsFor(text), skip ? skip.split('\n') : undefined);
+  }, [allowLinkPreviews, inlineOnly, embedded, text, skip]);
   const ctx = useMemo<BodyContextValue>(() => ({ roomId, spaceId: spaceId ?? null, jumbo }), [roomId, spaceId, jumbo]);
-  const base = baseStyle(theme, color, italic);
+  const base = baseStyle(theme, color, italic, small);
   const muted = theme.colors.mutedForeground;
 
   if (numberOfLines != null) {
@@ -311,11 +338,36 @@ export const MessageBody = memo(function MessageBody({
           {trailing != null ? <RNText style={base}>{trailing}</RNText> : null}
         </View>
       ) : (
-        <View>{renderBlocks(blocks, theme, { base, muted, allowLinkPreviews, inlineOnly, jumbo }, 'b', trailing, leading)}</View>
+        <View>{renderBlocks(blocks, theme, { base, muted, allowLinkPreviews, inlineOnly, jumbo, embedded }, 'b', trailing, leading)}</View>
       )}
       {previews.map((u) => (
         <LinkPreview key={u} url={u} />
       ))}
+    </BodyContext.Provider>
+  );
+});
+
+export interface InlineStyledTextProps extends Omit<TextProps, 'children' | 'style'> {
+  text: string;
+  roomId: string;
+  spaceId?: string | null;
+  style?: StyleProp<TextStyle>;
+}
+
+/**
+ * One line's worth of styled text - an embed's title or a field's name: bold, italic, inline
+ * code, emoji, all in one <Text> (so it can be a link, or clamp). Links, mentions and blocks
+ * stay literal text there, as on the web.
+ */
+export const InlineStyledText = memo(function InlineStyledText({ text, roomId, spaceId, style, ...textProps }: InlineStyledTextProps) {
+  const theme = useTheme();
+  const segments = useMemo(() => parseBody(text, true), [text]);
+  const ctx = useMemo<BodyContextValue>(() => ({ roomId, spaceId: spaceId ?? null, jumbo: false }), [roomId, spaceId]);
+  return (
+    <BodyContext.Provider value={ctx}>
+      <RNText style={style} {...textProps}>
+        {renderInline(segments, theme, 's')}
+      </RNText>
     </BodyContext.Provider>
   );
 });

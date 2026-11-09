@@ -31,7 +31,7 @@ import {
   type FontScale,
   type UiDensity,
 } from '@web/stores/appearance';
-import { setLinkPreviewsInEncrypted, setMessageCompact } from '@web/stores/settings';
+import { setBotEmbeds, setLinkPreviewsInEncrypted, setMessageCompact } from '@web/stores/settings';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { requestOpenExternalLink } from '@web/stores/externalLink';
 import { EMOJI_ATTRIBUTIONS, EMOJI_PROVIDERS, getEmojiProvider, type EmojiProviderId } from '@web/lib/emoji/providers';
@@ -381,6 +381,14 @@ export function AppearanceScreen() {
           value={!!settings.linkPreviewsInEncrypted}
           onValueChange={setLinkPreviewsInEncrypted}
           testID="appearance-link-previews"
+        />
+        <SettingToggle
+          icon="robot"
+          title={t('settings.appearance.chat.botEmbeds')}
+          description={t('settings.appearance.chat.botEmbedsDescription')}
+          value={settings.botEmbeds !== false}
+          onValueChange={setBotEmbeds}
+          testID="appearance-bot-embeds"
         />
       </ListSection>
 

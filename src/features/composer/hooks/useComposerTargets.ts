@@ -9,7 +9,7 @@ import { auth } from '@web/stores/auth';
 import { rooms } from '@web/stores/rooms';
 import { spaces } from '@web/stores/spaces';
 import { isSnowflake, messageIdGt } from '@web/stores/readState';
-import { getMessageBodyText, messagePreviewText } from '@web/components/messageList/utils';
+import { getMessagePreviewSource, messagePreviewText } from '@web/components/messageList/utils';
 import { t } from '@web/i18n/t';
 import { deepEqual, useDerived } from '@/data/derived';
 import { roomParticipantPool } from '@/data/messages';
@@ -35,7 +35,7 @@ export function replyTargetView(roomId: string, messageId: string): ReplyTargetV
     id: messageId,
     // userDisplay, not the web's getSenderDisplay: it names the author by their space profile.
     name: userDisplay(target.sender_id, { roomId }).name,
-    preview: messagePreviewText(getMessageBodyText(target), pool, me, REPLY_PREVIEW_CHARS),
+    preview: messagePreviewText(getMessagePreviewSource(target), pool, me, REPLY_PREVIEW_CHARS),
     loaded: true,
   };
 }

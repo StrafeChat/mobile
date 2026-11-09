@@ -10,6 +10,8 @@ export interface ListContextValue {
   spaceId: string | null;
   compact: boolean;
   allowLinkPreviews: boolean;
+  /** Bots' embeds: a plain room, and the reader's "Show embeds from bots" on (data/settings). */
+  showEmbeds: boolean;
   canReply: boolean;
   /** Start new reactions (the "+" pill, the picker). */
   canReact: boolean;
@@ -25,6 +27,7 @@ export const ListContext = createContext<ListContextValue>({
   spaceId: null,
   compact: false,
   allowLinkPreviews: false,
+  showEmbeds: false,
   canReply: false,
   canReact: false,
   canJoinReactions: false,

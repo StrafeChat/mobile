@@ -167,18 +167,7 @@ function Card({ d, fallbackUrl }: { d: LinkMetadata; fallbackUrl: string }) {
   }
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          maxWidth: maxW,
-          borderColor: withAlpha(theme.colors.border, 0.6),
-          borderStartColor: d.color || theme.colors.primary,
-          backgroundColor: withAlpha(theme.colors.card, 0.4),
-          borderRadius: theme.radii.md,
-        },
-      ]}
-    >
+    <EmbedShell color={d.color} maxWidth={maxW}>
       {thumbnail && image ? (
         <View style={styles.row}>
           <View style={[styles.pad, styles.flex]}>{text}</View>
@@ -192,6 +181,31 @@ function Card({ d, fallbackUrl }: { d: LinkMetadata; fallbackUrl: string }) {
           {media}
         </View>
       )}
+    </EmbedShell>
+  );
+}
+
+/**
+ * The card both a link preview and a bot's embed sit in (the web's EmbedShell), Discord's
+ * shape: a coloured edge on the start side (the site's theme colour, the embed's `color`), a
+ * quiet surface, rounded corners.
+ */
+export function EmbedShell({ color, maxWidth, children }: { color?: string; maxWidth: number; children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.card,
+        {
+          maxWidth,
+          borderColor: withAlpha(theme.colors.border, 0.6),
+          borderStartColor: color || theme.colors.primary,
+          backgroundColor: withAlpha(theme.colors.card, 0.4),
+          borderRadius: theme.radii.md,
+        },
+      ]}
+    >
+      {children}
     </View>
   );
 }

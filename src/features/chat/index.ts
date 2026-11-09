@@ -11,6 +11,8 @@
  * Also useful to other areas:
  * - <MessageBody text roomId … />: one message's rendered text (pins, search results).
  * - <MessageAttachments attachments />: a message's attachments.
+ * - <MessageEmbeds embeds roomId spaceId />: a bot's rich embeds (the caller applies the rules:
+ *   a plain room, "Show embeds from bots").
  * - openMedia(items, index?, label?) and <MediaViewerHost /> (mount once at the root: it shows
  *   the /media screen whenever shared code opens stores/mediaViewer directly).
  * - openReactionPicker / confirmDeleteMessage: the sheets the list hosts. (Create thread is
@@ -22,6 +24,7 @@ export { MessageList, type MessageListProps } from './list/MessageList';
 export { TypingIndicator, TYPING_ROW_HEIGHT } from './TypingIndicator';
 export { MessageBody, type MessageBodyProps } from './body/MessageBody';
 export { MessageAttachments } from './attachments/Attachments';
+export { MessageEmbeds } from './body/MessageEmbed';
 export { openMedia, MediaViewerHost } from './mediaViewer';
 export { openReactionPicker } from './reactions/ReactionPicker';
 export { confirmDeleteMessage } from './actions/DeleteMessageSheet';
