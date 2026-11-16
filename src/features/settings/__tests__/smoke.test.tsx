@@ -73,6 +73,7 @@ jest.mock('@web/stores/recoveryPrompt', () => ({ setRecoveryPrompt: jest.fn() })
 jest.mock('@web/api/users', () => ({
   ...jest.requireActual('@web/api/users'),
   getMe: jest.fn(async () => ({ id: '100', username: 'me', display_name: 'Me', email: 'me@example.org', verified_email: false })),
+  getEmailState: jest.fn(async () => ({ email: 'me@example.org', verified_email: false, pending: null })),
 }));
 jest.mock('@web/api/developers', () => {
   const actual = jest.requireActual('@web/api/developers');
@@ -170,6 +171,16 @@ describe('user settings screens render', () => {
   it('security', async () => {
     await shows(<SecurityScreen />, 'YubiKey');
     await shows(<SecurityScreen />, '8 unused codes remaining');
+    await shows(<SecurityScreen />, 'me@example.org');
+  });
+  it('security, with an email change waiting', async () => {
+    const users = jest.requireMock('@web/api/users') as { getEmailState: jest.Mock };
+    users.getEmailState.mockResolvedValueOnce({
+      email: 'me@example.org',
+      verified_email: true,
+      pending: { email: 'next@example.org', expires_at: '2026-11-15T15:04:05Z' },
+    });
+    await shows(<SecurityScreen />, /next@example\.org/);
   });
   it('devices', () => shows(<DevicesScreen />, 'ABCD EFGH'));
   it('authorized apps', () => shows(<AuthorizedAppsScreen />, 'Thing'));

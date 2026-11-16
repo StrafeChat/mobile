@@ -117,6 +117,9 @@ export interface TextPromptSheetProps {
   autoCapitalize?: 'none' | 'sentences' | 'words';
   /** Extra content under the field (chips, a checkbox). */
   children?: ReactNode;
+  /** A client-side check run before onConfirm: a message keeps the sheet open and shows it
+   * under the field, as a server error would. */
+  validate?: (value: string) => string | null;
   onConfirm: (value: string) => Promise<void> | void;
   onClose: () => void;
 }
@@ -138,6 +141,7 @@ export function TextPromptSheet({
   keyboardType = 'default',
   autoCapitalize = 'sentences',
   children,
+  validate,
   onConfirm,
   onClose,
 }: TextPromptSheetProps) {
@@ -158,6 +162,11 @@ export function TextPromptSheet({
 
   async function submit() {
     if (!canSubmit || busy) return;
+    const invalid = validate?.(value);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     setBusy(true);
     setError('');
     try {

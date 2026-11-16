@@ -1,6 +1,6 @@
 /**
- * Security (SecuritySettingsPage): the account's email and its verification, the
- * authenticator app (set up with a QR code, or opened straight in an authenticator on this
+ * Security (SecuritySettingsPage): the account's email - its verification, changing it, and a
+ * change waiting for its confirmation link - the authenticator app (set up with a QR code, or opened straight in an authenticator on this
  * phone, or the secret copied), passkeys, and recovery codes. Every change is proven with a
  * code or the password, as on the web.
  *
@@ -8,7 +8,7 @@
  * app on arbitrary self-hosted instances cannot claim), but ones added on the web are listed
  * and can be removed - that takes only the password.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Linking, View } from 'react-native';
 import { t, formatDate } from '@web/i18n/t';
 import {
@@ -21,14 +21,25 @@ import {
   type TotpSetupResponse,
   type TwoFactorStatus,
 } from '@web/api/twoFactor';
-import { getMe, sendVerificationEmail } from '@web/api/users';
+import { sendVerificationEmail } from '@web/api/users';
+import {
+  accountEmail,
+  cancelPendingEmailChange,
+  confirmPendingEmailChange,
+  currentAccountEmail,
+  loadAccountEmail,
+  resendPendingEmailChange,
+} from '@web/stores/accountEmail';
+import { parseEmailChangeToken } from '@web/lib/emailChange';
 import { loadInstanceInfo } from '@web/stores/instance';
+import { useSolid } from '@/bridge/solid';
 import { useInstance } from '@/data';
 import { Button, Input, ListSection, MONO_FONT, Sheet, Spinner, Text, toast } from '@/ui';
 import { useTheme } from '@/theme';
 import { QrCode } from '../components/QrCode';
 import { Note, SettingItem, StatusPill } from '../components/rows';
-import { PasswordPromptSheet, RecoveryCodesSheet, errorText } from '../components/sheets';
+import { PasswordPromptSheet, RecoveryCodesSheet, TextPromptSheet, errorText } from '../components/sheets';
+import { ChangeEmailSentSheet, ChangeEmailSheet } from '../components/ChangeEmailSheet';
 import { SettingsScreen } from '../components/SettingsScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useCopy } from '../hooks/useCopy';
@@ -38,7 +49,16 @@ type ActiveSheet =
   | { kind: 'disableTotp' }
   | { kind: 'deletePasskey'; credentialId: string; name: string }
   | { kind: 'regenerateCodes' }
+  | { kind: 'changeEmail' }
+  | { kind: 'changeEmailSent'; email: string }
+  | { kind: 'pasteEmailLink' }
   | null;
+
+/** Status lines for the email rows, after an action on this screen. */
+type EmailNotice = '' | 'changed' | 'cancelled';
+
+/** Resend shares the server's one-a-minute cooldown with the request itself. */
+const RESEND_LOCK_MS = 60_000;
 
 function TotpSetupSheet({ open, onClose, onEnabled }: { open: boolean; onClose: () => void; onEnabled: (codes: string[] | null) => void }) {
   const theme = useTheme();
@@ -171,18 +191,32 @@ export function SecurityScreen() {
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState<ActiveSheet>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
-  const [emailInfo, setEmailInfo] = useState<{ email: string; verified: boolean } | null>(null);
+  // The account's address, whether a link sent to it was ever opened, and any change waiting
+  // for confirmation (the web's stores/accountEmail; live through USER_EMAIL_UPDATE). The
+  // section shows whether or not the instance can send email - only verifying needs that.
+  const emailState = useSolid(() => currentAccountEmail());
+  const changeSupported = useSolid(() => accountEmail.supported);
   const [sendState, setSendState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [sendError, setSendError] = useState('');
+  const [notice, setNotice] = useState<EmailNotice>('');
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendLocked, setResendLocked] = useState(false);
+  const [resendNotice, setResendNotice] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const resendTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(resendTimer.current), []);
 
-  async function loadEmail() {
+  function lockResend() {
+    clearTimeout(resendTimer.current);
+    setResendLocked(true);
+    resendTimer.current = setTimeout(() => setResendLocked(false), RESEND_LOCK_MS);
+  }
+
+  function loadEmail() {
     void loadInstanceInfo();
-    try {
-      const me = await getMe();
-      if (me.email) setEmailInfo({ email: me.email, verified: me.verified_email === true });
-    } catch {
-      // The 2FA sections do not depend on this; a failed load just hides the row.
-    }
+    // A failed load leaves the section as it was; the 2FA sections do not depend on it.
+    void loadAccountEmail();
   }
 
   async function refresh(asPull = false) {
@@ -216,8 +250,57 @@ export function SecurityScreen() {
     }
   }
 
+  async function resend() {
+    setResendNotice('');
+    setActionError('');
+    setResendBusy(true);
+    try {
+      await resendPendingEmailChange();
+      lockResend();
+      setResendNotice(t('settings.security.email.pending.resent'));
+    } catch (err) {
+      setActionError(errorText(err));
+    } finally {
+      setResendBusy(false);
+    }
+  }
+
+  async function cancelChange() {
+    setResendNotice('');
+    setActionError('');
+    setCancelBusy(true);
+    try {
+      await cancelPendingEmailChange();
+      setNotice('cancelled');
+    } catch (err) {
+      setActionError(errorText(err));
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+
+  /** The address moved (a direct change, or a pasted link): the old send state no longer
+   * describes it. */
+  function emailChanged() {
+    setSendState('idle');
+    setSendError('');
+    setResendNotice('');
+    setActionError('');
+    setNotice('changed');
+  }
+
+  function emailHint(verified: boolean): string {
+    if (notice === 'changed') return t('settings.security.email.change.changed');
+    if (notice === 'cancelled') return t('settings.security.email.pending.cancelled');
+    if (!instanceInfo.emailEnabled) return t('settings.security.email.noMailHint');
+    if (verified) return t('settings.security.email.verifiedHint');
+    return sendState === 'sent' ? t('settings.security.email.sent') : t('settings.security.email.unverifiedHint');
+  }
+
   const s = status;
   const hasSecondFactor = !!s && (s.totp_enabled || s.webauthn_credentials.length > 0);
+  const info = emailState?.email.includes('@') ? emailState : null;
+  const pending = info?.pending ?? null;
 
   return (
     <SettingsScreen
@@ -230,29 +313,25 @@ export function SecurityScreen() {
       }}
       testID="settings-security"
     >
-      {instanceInfo.emailEnabled && emailInfo ? (
+      {info ? (
         <ListSection title={t('settings.security.email.sectionTitle')}>
           <SettingItem
             icon="envelope"
-            title={emailInfo.email}
+            title={info.email}
             titleAccessory={
-              <StatusPill
-                label={emailInfo.verified ? t('settings.security.email.verified') : t('settings.security.email.unverified')}
-                tone={emailInfo.verified ? 'success' : 'warning'}
-              />
+              // Verification means something only where the instance can send the link.
+              instanceInfo.emailEnabled ? (
+                <StatusPill
+                  label={info.verified_email ? t('settings.security.email.verified') : t('settings.security.email.unverified')}
+                  tone={info.verified_email ? 'success' : 'warning'}
+                />
+              ) : null
             }
-            description={
-              sendError
-                ? undefined
-                : emailInfo.verified
-                  ? t('settings.security.email.verifiedHint')
-                  : sendState === 'sent'
-                    ? t('settings.security.email.sent')
-                    : t('settings.security.email.unverifiedHint')
-            }
+            description={sendError ? undefined : emailHint(info.verified_email)}
             error={sendError}
+            testID="security-email"
           />
-          {!emailInfo.verified ? (
+          {instanceInfo.emailEnabled && !info.verified_email && !pending ? (
             <SettingItem
               icon="paper-plane"
               title={t('settings.security.email.send')}
@@ -261,6 +340,59 @@ export function SecurityScreen() {
               onPress={() => void sendVerification()}
               testID="security-send-verification"
             />
+          ) : null}
+          {changeSupported ? (
+            <SettingItem
+              icon="pen"
+              title={t('settings.security.email.change.title')}
+              chevron
+              disabled={loading}
+              onPress={() => {
+                setNotice('');
+                setSheet({ kind: 'changeEmail' });
+              }}
+              testID="security-change-email"
+            />
+          ) : null}
+          {pending ? (
+            <>
+              <SettingItem
+                icon="clock"
+                title={t('settings.security.email.pending.title')}
+                description={t('settings.security.email.pending.body', {
+                  email: pending.email,
+                  time: formatDate(pending.expires_at, { timeStyle: 'short' }),
+                })}
+                error={actionError}
+                testID="security-email-pending"
+              />
+              <SettingItem
+                icon="rotate-right"
+                title={t('settings.security.email.pending.resend')}
+                description={resendNotice || undefined}
+                busy={resendBusy}
+                disabled={resendLocked || cancelBusy}
+                onPress={() => void resend()}
+                testID="security-email-resend"
+              />
+              <SettingItem
+                icon="link"
+                title={t('settings.security.email.pending.paste')}
+                chevron
+                disabled={cancelBusy}
+                onPress={() => setSheet({ kind: 'pasteEmailLink' })}
+                testID="security-email-paste"
+              />
+              <SettingItem
+                icon="xmark"
+                title={t('settings.security.email.pending.cancel')}
+                destructive
+                busy={cancelBusy}
+                disabled={resendBusy}
+                onPress={() => void cancelChange()}
+                testID="security-email-cancel"
+              />
+            </>
           ) : null}
         </ListSection>
       ) : null}
@@ -372,6 +504,51 @@ export function SecurityScreen() {
         onClose={() => setSheet((cur) => (cur?.kind === 'regenerateCodes' ? null : cur))}
       />
       <RecoveryCodesSheet open={!!codes} codes={codes ?? []} onClose={() => setCodes(null)} />
+      <ChangeEmailSheet
+        open={sheet?.kind === 'changeEmail'}
+        currentEmail={info?.email ?? ''}
+        mailEnabled={instanceInfo.emailEnabled}
+        totpEnabled={s?.totp_enabled === true}
+        hasPasskeys={(s?.webauthn_credentials.length ?? 0) > 0}
+        onDone={(state, sent) => {
+          if (sent && state.pending) {
+            // The request was a 202, which starts the same one-minute cooldown as a resend.
+            lockResend();
+            setResendNotice('');
+            setActionError('');
+            setSheet({ kind: 'changeEmailSent', email: state.pending.email });
+          } else {
+            emailChanged();
+            setSheet(null);
+          }
+        }}
+        onClose={() => setSheet((cur) => (cur?.kind === 'changeEmail' ? null : cur))}
+      />
+      <ChangeEmailSentSheet
+        open={sheet?.kind === 'changeEmailSent'}
+        email={sheet?.kind === 'changeEmailSent' ? sheet.email : ''}
+        onClose={() => setSheet((cur) => (cur?.kind === 'changeEmailSent' ? null : cur))}
+      />
+      <TextPromptSheet
+        open={sheet?.kind === 'pasteEmailLink'}
+        title={t('settings.security.email.paste.title')}
+        description={t('settings.security.email.paste.description', { email: pending?.email ?? '' })}
+        icon="link"
+        label={t('settings.security.email.paste.label')}
+        placeholder={t('settings.security.email.paste.placeholder')}
+        confirmLabel={t('settings.security.email.paste.submit')}
+        keyboardType="url"
+        autoCapitalize="none"
+        validate={(value) => (parseEmailChangeToken(value) ? null : t('settings.security.email.paste.invalid'))}
+        onConfirm={async (value) => {
+          const token = parseEmailChangeToken(value);
+          if (!token) return;
+          await confirmPendingEmailChange(token);
+          emailChanged();
+          setSheet(null);
+        }}
+        onClose={() => setSheet((cur) => (cur?.kind === 'pasteEmailLink' ? null : cur))}
+      />
     </SettingsScreen>
   );
 }
