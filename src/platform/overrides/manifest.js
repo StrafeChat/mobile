@@ -6,7 +6,8 @@
  * mobile imports - `npm run check:overrides` compares them after a web submodule bump.
  *
  * PACKAGE_OVERRIDES: bare import specifier -> mobile file. For packages the web imports that
- * cannot run on Hermes (WASM, Tauri, DOM-only widgets).
+ * cannot run on Hermes (WASM, Tauri, DOM-only widgets), or that the app never loads but a
+ * web module still names in an `import()` (Metro resolves those at bundle time too).
  *
  * Areas keep their entries in `<area>.manifest.js` beside this file (crypto, media, voice...)
  * and this file merges them, so each area owns its list. A path claimed twice is an error.
@@ -40,6 +41,9 @@ const OMITTED_EXPORTS = {
 const PACKAGE_OVERRIDES = {
   // desktop/accounts.ts (reused as-is) keeps its account list through invoke().
   '@tauri-apps/api/core': 'src/platform/overrides/packages/tauri-core.ts',
+  // lib/latex (via lib/utils/markdown) loads KaTeX with import('katex'), which Metro resolves
+  // at bundle time. The app draws math as its TeX source and never loads it; not installed.
+  katex: 'src/platform/overrides/packages/katex.ts',
 };
 
 for (const file of fs.readdirSync(__dirname).sort()) {

@@ -21,6 +21,14 @@ export default {
     openImage: 'Bild öffnen: {{name}}',
   },
   copyCode: 'Code kopieren',
+  // Math (LaTeX) in messages: shown as its source (src/features/chat/body).
+  math: {
+    label: 'Formel',
+    document: 'LaTeX-Dokument',
+    inline: 'Formel: {{tex}}',
+    sourceHint: 'In der App werden Formeln als LaTeX-Quelltext angezeigt',
+    copy: 'LaTeX kopieren',
+  },
   reactions: {
     title: 'Reaktionen',
     none: 'Niemand anzuzeigen.',

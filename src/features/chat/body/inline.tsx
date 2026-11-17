@@ -24,7 +24,7 @@ import {
 import { useSolid } from '@/bridge/solid';
 import { useCustomEmoji, useSpaceRoles, useUserDisplay } from '@/data';
 import { useTheme, type Theme } from '@/theme';
-import { haptics, toast, withAlpha } from '@/ui';
+import { haptics, Icon, MONO_FONT, toast, withAlpha } from '@/ui';
 import { navigateToRoom, openMessageLink, showLinkActions } from '../navigation';
 import { openUserProfile } from '../people';
 import { useLiveNow } from './clock';
@@ -279,6 +279,32 @@ export function TimestampPill({ unix, style }: { unix: number; style: TimestampS
       {HAIR}
       {label}
       {HAIR}
+    </RNText>
+  );
+}
+
+// ---- math -----------------------------------------------------------------------------------------
+
+/**
+ * Inline math (`$x^2$`, `\(x\)`): the app has no KaTeX, so it shows the TeX source - the
+ * web's own fallback - in the inline-code chip, marked with the square-root glyph; a tap says
+ * why it is source.
+ */
+export function InlineMath({ tex }: { tex: string }) {
+  const theme = useTheme();
+  const hint = t('mobile.chat.math.sourceHint');
+  return (
+    <RNText
+      style={{ fontFamily: MONO_FONT, fontSize: theme.font(13.5), backgroundColor: theme.colors.muted }}
+      onPress={() => toast(hint)}
+      accessibilityLabel={t('mobile.chat.math.inline', { tex })}
+      accessibilityHint={hint}
+    >
+      {' '}
+      <Icon name="square-root-variable" size={10} tone="muted" scaleWithText />
+      {' '}
+      {tex}
+      {' '}
     </RNText>
   );
 }

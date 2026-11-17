@@ -11,7 +11,7 @@ import { voiceSettings } from '@web/stores/voiceSettings';
 import { voiceParticipantName, voicePermsFor } from '@web/lib/voice/perms';
 import type { VoicePerms } from '@web/lib/spacePermissions';
 import { useSolid } from '@/bridge/solid';
-import { resolveSpaceUser, spaceMemberOf } from '@/data/spaceProfileCompat';
+import { resolveProfile, resolveSpaceUser, spaceMemberOf } from '@/data/spaceProfileCompat';
 import { cameraFacing, speakerphone } from '@/platform/voice';
 import { buildCallTiles, sortByJoined, type CallTile, type VoiceStateLike } from './model';
 
@@ -55,7 +55,8 @@ export type ParticipantRef = Pick<VoiceStateLike, 'user_id' | 'user'>;
  * profile), then the state's user. */
 export function callParticipantName(st: ParticipantRef, roomId: string, spaceId: string | null | undefined): string {
   const p = roomParticipants(roomId)?.find((x) => x.id === st.user_id);
-  if (p) return p.display_name || p.username;
+  // resolveProfile: a deleted account reads "Deleted User".
+  if (p) return resolveProfile(p, null, '…').name;
   const m = spaceMemberOf(spaceId, st.user_id);
   if (m) return resolveSpaceUser(spaceId, st.user_id, m).name;
   return voiceParticipantName(st.user_id, st, spaceId ?? undefined);
@@ -63,6 +64,7 @@ export function callParticipantName(st: ParticipantRef, roomId: string, spaceId:
 
 export function callParticipantAvatar(st: ParticipantRef, roomId: string, spaceId: string | null | undefined): string | undefined {
   const p = roomParticipants(roomId)?.find((x) => x.id === st.user_id);
+  if (p?.deleted) return undefined;
   if (p?.avatar) return p.avatar;
   const m = spaceMemberOf(spaceId, st.user_id);
   const avatar = m ? resolveSpaceUser(spaceId, st.user_id, m).avatar : undefined;

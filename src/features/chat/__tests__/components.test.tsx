@@ -12,7 +12,7 @@ import { setRooms } from '@web/stores/rooms';
 import { setMessages } from '@web/stores/messages';
 import { setReadState } from '@web/stores/readState';
 import { addTyping } from '@web/stores/typing';
-import { actionSheetStore, isActionItem } from '@/ui';
+import { actionSheetStore, isActionItem, toastStore } from '@/ui';
 import { ME, message, pm, resetStores, user } from '@/data/testing/fixtures';
 import { composerFor, forgetComposer } from '@/features/composer/state';
 
@@ -197,6 +197,46 @@ describe('message body', () => {
     expect(screen.getByLabelText('Copied')).toBeTruthy();
   });
 
+  // Area strings (mobile.chat.*) are not loaded in tests: they read as their keys.
+  test('inline math shows its TeX source as a math chip; a tap says why', async () => {
+    await body('area $\\pi r^2$ here');
+    const chip = screen.getByLabelText('mobile.chat.math.inline');
+    expect(screen.getAllByText(/\\pi r\^2/).length).toBeGreaterThan(0);
+    await act(async () => {
+      await fireEvent.press(chip);
+    });
+    expect(toastStore.get()?.message).toBe('mobile.chat.math.sourceHint');
+  });
+
+  test('display math is a Math box with its source and Copy', async () => {
+    await body('$$\n\\frac{a}{b}\n$$');
+    expect(screen.getByText('mobile.chat.math.label')).toBeTruthy();
+    expect(screen.getByText('\\frac{a}{b}')).toBeTruthy();
+    expect(screen.getByLabelText('mobile.chat.math.inline')).toBeTruthy();
+    await act(async () => {
+      await fireEvent.press(screen.getByLabelText('Copy'));
+    });
+    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('\\frac{a}{b}');
+  });
+
+  test('a LaTeX document fence shows its source in a LaTeX document box', async () => {
+    await body('```latex\n\\documentclass{article}\n\\section{Hi}\n```');
+    expect(screen.getByText('mobile.chat.math.document')).toBeTruthy();
+    expect(screen.getByText('\\documentclass{article}\n\\section{Hi}')).toBeTruthy();
+  });
+
+  test('display math nested in styling stays on the line as a chip', async () => {
+    await body('**$$x=1$$**');
+    expect(screen.getByLabelText('mobile.chat.math.inline')).toBeTruthy();
+    expect(screen.queryByText('mobile.chat.math.label')).toBeNull();
+  });
+
+  test('display math and LaTeX documents are Copy actions for screen readers; inline math is not', () => {
+    const { bodyTargets } = require('../row/messageA11y') as typeof import('../row/messageA11y');
+    const targets = bodyTargets('inline $x$ then\n$$\n\\sum_i i\n$$\n```latex\n\\section{A}\n```', { roomId: 'r', spaceId: null });
+    expect(targets.map((x) => x.kind === 'code' && x.content)).toEqual(['\\sum_i i', '\\section{A}']);
+  });
+
   test('unknown rooms and roles degrade as on the web', async () => {
     await body('<#999> <@&5>');
     expect(screen.getByText(/#unknown/)).toBeTruthy();
@@ -242,6 +282,25 @@ describe('message list', () => {
     expect(screen.getAllByText('User a').length).toBeGreaterThan(0);
     await act(async () => view.unmount());
     expect(mockLeave).toHaveBeenCalled();
+  });
+
+  test('space joins and leaves and new threads render as system lines (formatSystemMessageText)', async () => {
+    setMessages('byRoom', 'r', [
+      message('r', '1', 'a'),
+      message('r', '2', 'a', { system_type: 'space_member_join', system_payload: JSON.stringify({ user_id: 'a' }) } as never),
+      message('r', '3', 'a', { system_type: 'space_member_leave', system_payload: JSON.stringify({ user_id: 'a' }) } as never),
+      message('r', '4', 'a', { system_type: 'space_member_leave', system_payload: JSON.stringify({ user_id: 'a', how: 'kicked' }) } as never),
+      message('r', '5', 'a', { system_type: 'thread_created', system_payload: JSON.stringify({ actor_id: 'a', name: 'Ideas' }) } as never),
+    ]);
+    setMessages('hasMoreOlder', 'r', false);
+    await render(<MessageList roomId="r" spaceId={null} />);
+    await act(async () => {
+      jest.advanceTimersByTime(10);
+    });
+    expect(screen.getByText('User a joined the space')).toBeTruthy();
+    expect(screen.getByText('User a left the space')).toBeTruthy();
+    expect(screen.getByText('User a was removed from the space')).toBeTruthy();
+    expect(screen.getByText('User a started a thread: Ideas')).toBeTruthy();
   });
 
   test('the read cursor follows the bottom-most visible message (debounced)', async () => {

@@ -54,12 +54,15 @@ export const [profileSheet, setProfileSheet] = createStore<ProfileSheetState>({
 });
 
 export function presentProfileSheet(opts: PresentProfileOptions): void {
+  // Nothing can be done to a deleted account - no message, roles or nickname (the web's
+  // openUserProfilePopover rule); the sheet offers only Copy User ID.
+  const deleted = opts.subject.deleted === true;
   setProfileSheet({
     open: true,
     subject: opts.subject,
     currentUserId: opts.currentUserId,
-    onMessageUser: opts.onMessageUser,
-    spaceRoleContext: opts.spaceRoleContext ?? null,
+    onMessageUser: deleted ? undefined : opts.onMessageUser,
+    spaceRoleContext: deleted ? null : (opts.spaceRoleContext ?? null),
   });
 }
 

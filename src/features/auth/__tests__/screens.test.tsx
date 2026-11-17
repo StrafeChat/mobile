@@ -228,6 +228,12 @@ describe('sign in', () => {
     expect(screen.getByText(webEn.auth.login.bannedNotice)).toBeTruthy();
   });
 
+  test('an account an administrator deleted says so at sign-in', async () => {
+    session.peekSignOutNotice.mockReturnValue({ reason: 'deleted', at: 1 });
+    await render(<SignInScreen />);
+    expect(screen.getByText(webEn.auth.login.deletedNotice)).toBeTruthy();
+  });
+
   test('"forgot your password?" only when the instance can send email', async () => {
     instanceStore.setInstance('email', { enabled: false, verificationRequired: false });
     const { rerender } = await render(<SignInScreen />);

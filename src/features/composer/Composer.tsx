@@ -116,7 +116,14 @@ export function Composer({ roomId, spaceId, maxHeight }: ComposerProps) {
 
   let notice: { icon: string; text: string } | null = null;
   if (lock && lockText) {
-    const icon = lock.kind === 'officialReadOnly' ? 'circle-info' : lock.kind === 'verification' ? 'shield-halved' : 'lock';
+    const icon =
+      lock.kind === 'officialReadOnly'
+        ? 'circle-info'
+        : lock.kind === 'recipientDeleted'
+          ? 'user-slash'
+          : lock.kind === 'verification'
+            ? 'shield-halved'
+            : 'lock';
     notice = { icon, text: lockText };
   } else if (info?.e2ee && engineFailed) {
     notice = { icon: 'lock', text: t('mobile.composer.e2eeUnavailable') };

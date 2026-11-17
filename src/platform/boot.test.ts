@@ -313,6 +313,59 @@ describe('noticing that a session ended', () => {
     expect(app.session.takeSignOutNotice()).toMatchObject({ reason: 'banned' });
   });
 
+  test("SESSION_REVOKED \"deleted\" wipes this account's encryption store first, then signs out with the notice", async () => {
+    let finishWipe: () => void = () => undefined;
+    const reset = jest.fn((_userId: string) => new Promise<void>((resolve) => (finishWipe = resolve)));
+    jest.doMock('@web/lib/e2ee/machine', () => ({
+      ...(jest.requireActual('@web/lib/e2ee/machine') as object),
+      resetLocalE2eeStore: reset,
+    }));
+    const dropPassphrase = jest.fn(async (_userId: string) => undefined);
+    jest.doMock('@/platform/overrides/e2ee/passphrase', () => ({
+      ...(jest.requireActual('@/platform/overrides/e2ee/passphrase') as object),
+      deletePassphrase: dropPassphrase,
+    }));
+    const fetch = routeFetch({
+      '/users/@me': () => reply(401, { error: 'session revoked' }),
+      '/rooms/9/ack': () => reply(401, { error: 'session revoked' }),
+    });
+    const app = await readyApp(fetch);
+    jest.advanceTimersByTime(31_000);
+    app.socket.receive({ op: 3, d: { t: 'SESSION_REVOKED', user_id: '1', d: { reason: 'deleted' } } });
+    await flush(10);
+    // Once: the web's own handler (which would wipe through a dynamic import) stands aside.
+    expect(reset.mock.calls).toEqual([['1']]);
+    expect(dropPassphrase).toHaveBeenCalledWith('1');
+    // A revoked session's requests answer 401; none of them may restart the app mid-wipe.
+    const { ackRoom } = require('@web/api/rooms') as typeof import('@web/api/rooms');
+    await ackRoom('9', '10').catch(() => undefined);
+    await flush(10);
+    expect(app.reloadApp).not.toHaveBeenCalled();
+    expect(stored('session_token')).toBe('tok-1');
+    finishWipe();
+    await flush(20);
+    expect(stored('session_token')).toBeNull();
+    expect(accountsFile().accounts).toEqual([]);
+    expect(app.reloadApp).toHaveBeenCalled();
+    expect(app.session.takeSignOutNotice()).toMatchObject({ reason: 'deleted' });
+  });
+
+  test('SESSION_REVOKED "deleted" signs out even when the wipe never answers', async () => {
+    jest.doMock('@web/lib/e2ee/machine', () => ({
+      ...(jest.requireActual('@web/lib/e2ee/machine') as object),
+      resetLocalE2eeStore: jest.fn(() => new Promise<void>(() => undefined)),
+    }));
+    const app = await readyApp(routeFetch({}));
+    app.socket.receive({ op: 3, d: { t: 'SESSION_REVOKED', user_id: '1', d: { reason: 'deleted' } } });
+    await flush(10);
+    expect(app.reloadApp).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(4_000);
+    await flush(30);
+    expect(stored('session_token')).toBeNull();
+    expect(app.reloadApp).toHaveBeenCalled();
+    expect(app.session.takeSignOutNotice()).toMatchObject({ reason: 'deleted' });
+  });
+
   test('signing out tells the server, forgets the account and restarts, with no notice', async () => {
     const fetch = routeFetch({ '/auth/logout': () => reply(200, { ok: true }) });
     const app = await readyApp(fetch);

@@ -21,6 +21,14 @@ export default {
     openImage: 'فتح الصورة: {{name}}',
   },
   copyCode: 'نسخ الشيفرة',
+  // Math (LaTeX) in messages: shown as its source (src/features/chat/body).
+  math: {
+    label: 'معادلة',
+    document: 'مستند LaTeX',
+    inline: 'معادلة: {{tex}}',
+    sourceHint: 'تظهر المعادلات في التطبيق بصيغة LaTeX المصدرية',
+    copy: 'نسخ LaTeX',
+  },
   reactions: {
     title: 'التفاعلات',
     none: 'لا يوجد أحد لعرضه.',

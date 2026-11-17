@@ -23,9 +23,11 @@ export interface ProfileArtProps {
   onAvatarPress?: () => void;
   /** Rounded top corners (inside a sheet). */
   rounded?: boolean;
+  /** No presence dot (a deleted account has no presence). */
+  hideStatus?: boolean;
 }
 
-export function ProfileArt({ userId, displayName, avatar, banner, bannerHeight, avatarSize, actions, onAvatarPress, rounded }: ProfileArtProps) {
+export function ProfileArt({ userId, displayName, avatar, banner, bannerHeight, avatarSize, actions, onAvatarPress, rounded, hideStatus }: ProfileArtProps) {
   const theme = useTheme();
   const c = theme.colors;
   const radius = rounded ? theme.radii.xl : 0;
@@ -36,6 +38,7 @@ export function ProfileArt({ userId, displayName, avatar, banner, bannerHeight, 
       name={displayName}
       size={avatarSize}
       ringColor={c.card}
+      hideStatus={hideStatus}
       accessibilityLabel={displayName}
     />
   );

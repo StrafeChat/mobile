@@ -3,6 +3,10 @@
  * override: highlight.js run synchronously, the same grammars and aliases, never guessing a
  * language) in the theme's code colours, scrolling sideways inside the block. The language
  * label and the Copy button are always visible (there is no hover); a long-press copies too.
+ *
+ * Math the app cannot typeset (display LaTeX, a LaTeX document: see MessageBody) uses the same
+ * box for its source, with `label` and `icon` in place of the language - the web's own
+ * fallback while KaTeX loads is that source in code style.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text as RNText, View, type TextStyle } from 'react-native';
@@ -10,7 +14,7 @@ import * as Clipboard from 'expo-clipboard';
 import { t } from '@web/i18n/t';
 import { highlightCodeLines, type CodeToken } from '@/platform/overrides/lib/codeHighlight';
 import { useTheme, type CodeColors } from '@/theme';
-import { haptics, MONO_FONT, Text, Touchable, withAlpha } from '@/ui';
+import { haptics, Icon, MONO_FONT, Text, Touchable, withAlpha } from '@/ui';
 import { RowHorizontalOwner } from '../row/SwipeToReply';
 
 const COPIED_MS = 1500;
@@ -37,7 +41,18 @@ function tokenStyle(code: CodeColors, token: CodeToken): TextStyle {
   };
 }
 
-export const CodeBlock = memo(function CodeBlock({ lang, content }: { lang: string; content: string }) {
+export interface CodeBlockProps {
+  lang: string;
+  content: string;
+  /** Shown in place of the language (and no highlighting is attempted when `lang` is ''). */
+  label?: string;
+  /** A Font Awesome glyph before the label. */
+  icon?: string;
+  /** What the content is, for screen readers ("Math: …"); the source is read as it is. */
+  accessibilityLabel?: string;
+}
+
+export const CodeBlock = memo(function CodeBlock({ lang, content, label, icon, accessibilityLabel }: CodeBlockProps) {
   const theme = useTheme();
   const highlighted = useMemo(() => (lang ? highlightCodeLines(content, lang) : null), [content, lang]);
   const [copied, setCopied] = useState(false);
@@ -83,9 +98,12 @@ export const CodeBlock = memo(function CodeBlock({ lang, content }: { lang: stri
       ]}
     >
       <View style={styles.bar}>
-        <Text variant="caption" style={styles.lang} numberOfLines={1}>
-          {highlighted?.language ?? lang}
-        </Text>
+        <View style={styles.labelRow}>
+          {icon ? <Icon name={icon} size={10} tone="muted" /> : null}
+          <Text variant="caption" style={styles.lang} numberOfLines={1}>
+            {label ?? highlighted?.language ?? lang}
+          </Text>
+        </View>
         <Touchable
           onPress={() => void copy()}
           accessibilityRole="button"
@@ -102,6 +120,7 @@ export const CodeBlock = memo(function CodeBlock({ lang, content }: { lang: stri
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           <RNText
             onLongPress={() => void copy()}
+            accessibilityLabel={accessibilityLabel}
             style={{ fontFamily: MONO_FONT, fontSize, lineHeight, color: theme.code.fg }}
           >
             {body}
@@ -115,6 +134,7 @@ export const CodeBlock = memo(function CodeBlock({ lang, content }: { lang: stri
 const styles = StyleSheet.create({
   box: { borderWidth: StyleSheet.hairlineWidth, marginVertical: 6, overflow: 'hidden', alignSelf: 'stretch' },
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingTop: 6 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
   lang: { textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 10, flexShrink: 1 },
   copy: { borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 8, paddingVertical: 2 },
   scroll: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 10 },

@@ -129,6 +129,28 @@ describe('PM list and the rail under Home', () => {
     setRooms({ rooms: [pm('p-official', user('o', { system: true }), { last_message_id: '40' })] });
     expect(roomInfo('p-official')).toMatchObject({ kind: 'pm', official: true, callable: false });
   });
+
+  test('a PM whose other account was deleted: "Deleted User", no picture or presence, no calls', () => {
+    const gone = user('d', { username: '', display_name: '', avatar: '', deleted: true });
+    setRooms({ rooms: [pm('p-gone', gone, { last_message_id: '40' })] });
+    setPresence('byUser', 'd', { status: 'online', custom_status: 'stale' });
+    const row = pmRowView('p-gone', null);
+    expect(row).toMatchObject({ name: 'common.deletedUser', deleted: true, avatar: null });
+    expect(row?.otherUserId).toBeUndefined();
+    expect(row?.subtitle).toBeUndefined();
+    // Two participants: never mistaken for the Notes room.
+    expect(pmRoomIds()).toEqual(['p-gone']);
+    expect(roomInfo('p-gone')).toMatchObject({
+      kind: 'pm',
+      name: 'common.deletedUser',
+      otherUserId: 'd',
+      recipientDeleted: true,
+      callable: false,
+    });
+    expect(userDisplay('d', { roomId: 'p-gone' })).toMatchObject({ name: 'common.deletedUser', deleted: true });
+    expect(userDisplay('d', { roomId: 'p-gone' }).avatar).toBeUndefined();
+    expect(profileSubject('d', { roomId: 'p-gone' })).toMatchObject({ displayName: 'common.deletedUser', username: '', deleted: true });
+  });
 });
 
 describe('space room list rows', () => {

@@ -315,6 +315,14 @@ describe('Composer', () => {
     expect(screen.queryByTestId('composer-input')).toBeNull();
   });
 
+  test('a PM whose other account was deleted is read-only', async () => {
+    setRooms({ rooms: [pm('gone', user('8', { username: '', display_name: '', avatar: '', deleted: true }))] });
+    await render(<Composer roomId="gone" spaceId={null} />);
+    expect(screen.getByTestId('composer-locked')).toBeTruthy();
+    expect(screen.getByText("This account no longer exists. You can't send messages here.")).toBeTruthy();
+    expect(screen.queryByTestId('composer-input')).toBeNull();
+  });
+
   test('an encrypted room closes when the encryption engine has failed', async () => {
     const { cryptoHost } = jest.requireMock<{ cryptoHost: { mockSet(s: string): void } }>('@/platform/crypto/host');
     await render(<Composer roomId="r" spaceId={null} />);

@@ -1,7 +1,8 @@
 /**
  * Why the person is looking at the sign-in screen when they did not sign out: the session
- * expired, was revoked (signed out everywhere, password reset), or the account was banned
- * (the web's ?reason= notice, plus "expired", which only the app notices). Read once when
+ * expired, was revoked (signed out everywhere, password reset), or the account was banned or
+ * deleted by an administrator (the web's ?reason= notice, plus "expired", which only the app
+ * notices). Read once when
  * the screen opens; signing in clears it, and so does dismissing it.
  */
 import { useState } from 'react';
@@ -15,6 +16,8 @@ export function signOutNoticeText(reason: SignOutReason): string {
       return t('auth.login.bannedNotice');
     case 'revoked':
       return t('auth.login.revokedNotice');
+    case 'deleted':
+      return t('auth.login.deletedNotice');
     default:
       return t('mobile.auth.sessionExpiredNotice');
   }
@@ -25,8 +28,8 @@ export function SessionNotice() {
   if (!reason) return null;
   return (
     <Banner
-      tone={reason === 'banned' ? 'error' : 'warning'}
-      icon={reason === 'banned' ? 'ban' : reason === 'revoked' ? 'right-from-bracket' : 'clock'}
+      tone={reason === 'banned' || reason === 'deleted' ? 'error' : 'warning'}
+      icon={reason === 'banned' ? 'ban' : reason === 'deleted' ? 'user-xmark' : reason === 'revoked' ? 'right-from-bracket' : 'clock'}
       message={signOutNoticeText(reason)}
       onDismiss={() => {
         takeSignOutNotice();

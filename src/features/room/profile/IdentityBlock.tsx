@@ -95,18 +95,22 @@ export function IdentityBlock(props: IdentityBlockProps) {
       ) : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 8, rowGap: 2 }}>
-        <Touchable
-          onPress={props.onOpenProfile ?? copyHandle}
-          onLongPress={copyHandle}
-          feedback="opacity"
-          accessibilityRole="button"
-          accessibilityLabel={handle}
-          accessibilityHint={props.onOpenProfile ? t('profile.viewFull') : t('common.copy')}
-          hitSlop={8}
-          style={{ flexShrink: 1 }}
-        >
-          {tag}
-        </Touchable>
+        {/* No handle without a username: a deleted account's is empty (its name may be someone
+            else's by now). */}
+        {props.username ? (
+          <Touchable
+            onPress={props.onOpenProfile ?? copyHandle}
+            onLongPress={copyHandle}
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={handle}
+            accessibilityHint={props.onOpenProfile ? t('profile.viewFull') : t('common.copy')}
+            hitSlop={8}
+            style={{ flexShrink: 1 }}
+          >
+            {tag}
+          </Touchable>
+        ) : null}
         {props.pronouns?.trim() ? (
           <Text variant="caption" numberOfLines={1}>
             {props.pronouns.trim()}

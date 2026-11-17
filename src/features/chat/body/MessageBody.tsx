@@ -9,6 +9,9 @@
  * the reader's own zone; Unicode and custom emoji are images, large when the message is only
  * emoji; links open through the external-link guard and carry their invite card or inline
  * media; a lone GIF is only the animation; preview cards follow when the room allows them.
+ * Math (the web's `latex` / `latexDocument` pieces, which it typesets with KaTeX) shows as its
+ * TeX source - the web's own fallback - marked as math: inline as a code chip, display math
+ * and LaTeX documents as a code box labelled Math / LaTeX document, with Copy.
  * `trailing` (the "(edited)" marker) sits at the end of the last line.
  *
  * Inside a bot's embed (`embedded`, the web's rule) links stay links - no invite card, inline
@@ -21,6 +24,7 @@ import { StyleSheet, Text as RNText, View, type StyleProp, type TextProps, type 
 import type { MessageSegment } from '@web/lib/utils/markdown';
 import { previewUrlsFor } from '@web/lib/linkPreviewUrls';
 import { previewUrlsBesideEmbeds } from '@web/lib/embeds/messageEmbeds';
+import { t } from '@web/i18n/t';
 import { useTheme, type Theme } from '@/theme';
 import { MONO_FONT, withAlpha } from '@/ui';
 import { CodeBlock } from './CodeBlock';
@@ -36,6 +40,7 @@ import {
   EveryonePill,
   InlineCustomEmoji,
   InlineEmoji,
+  InlineMath,
   LinkText,
   MentionPill,
   RoleMentionPill,
@@ -156,9 +161,14 @@ function renderInlineNode(seg: MessageSegment, theme: Theme, key: string): React
       return <InlineEmoji key={key} emoji={seg.emoji} />;
     case 'customEmoji':
       return <InlineCustomEmoji key={key} id={seg.id} name={seg.name} />;
+    // Display math nested in styling (`**$$x$$**`) cannot leave the line: a chip like inline math.
+    case 'latex':
+      return <InlineMath key={key} tex={seg.tex} />;
     // Blocks never reach here from groupBlocks; render their content inline if they do.
     case 'codeBlock':
       return seg.content;
+    case 'latexDocument':
+      return seg.source;
     default:
       return 'children' in seg ? <Fragment key={key}>{renderInline(seg.children, theme, key)}</Fragment> : null;
   }
@@ -275,6 +285,29 @@ function renderBlocks(
         return;
       case 'codeBlock':
         out.push(<CodeBlock key={key} lang={node.lang} content={node.content} />);
+        return;
+      case 'latex':
+        out.push(
+          <CodeBlock
+            key={key}
+            lang=""
+            content={node.tex.trim()}
+            label={t('mobile.chat.math.label')}
+            icon="square-root-variable"
+            accessibilityLabel={t('mobile.chat.math.inline', { tex: node.tex.trim() })}
+          />,
+        );
+        return;
+      case 'latexDocument':
+        out.push(
+          <CodeBlock
+            key={key}
+            lang=""
+            content={node.source}
+            label={t('mobile.chat.math.document')}
+            icon="square-root-variable"
+          />,
+        );
         return;
       default:
         return;

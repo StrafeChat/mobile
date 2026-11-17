@@ -6,11 +6,13 @@
  * "Network request failed" (or "...timed out" / "Aborted"), which would otherwise surface
  * raw instead of the translated "network error" line. Those are mapped to the browser's
  * wording before the web's translation runs; everything else is the web's code. Every function
- * that translates a caught error is wrapped (translateCaughtApiError, translateRoleApiError):
- * the web's call each other inside its own module, past this file.
+ * that translates a caught error is wrapped (translateCaughtApiError, translateRoleApiError,
+ * translateAccountDeletionError): the web's call each other inside its own module, past this
+ * file.
  */
 import {
   splitErrorMessage,
+  translateAccountDeletionError as webTranslateAccountDeletionError,
   translateApiErrorMessage as webTranslateApiErrorMessage,
   translateCaughtApiError as webTranslateCaughtApiError,
   translateRoleApiError as webTranslateRoleApiError,
@@ -44,4 +46,11 @@ export function translateCaughtApiError(err: unknown, t: ErrorTranslateFn): stri
 export function translateRoleApiError(err: unknown, t: ErrorTranslateFn): string[] {
   if (isRnNetworkError(err)) return webTranslateApiErrorMessage('Failed to fetch', t);
   return webTranslateRoleApiError(err, t);
+}
+
+/** The admin account-deletion surfaces' translation (their own codes, and a 500 naming a
+ * `stage`), with the same dropped-connection mapping. */
+export function translateAccountDeletionError(err: unknown, t: ErrorTranslateFn): string[] {
+  if (isRnNetworkError(err)) return webTranslateApiErrorMessage('Failed to fetch', t);
+  return webTranslateAccountDeletionError(err, t);
 }

@@ -21,6 +21,14 @@ export default {
     openImage: 'Open image: {{name}}',
   },
   copyCode: 'Copy code',
+  // Math (LaTeX) in messages: shown as its source (src/features/chat/body).
+  math: {
+    label: 'Math',
+    document: 'LaTeX document',
+    inline: 'Math: {{tex}}',
+    sourceHint: 'Math shows as its LaTeX source in the app',
+    copy: 'Copy LaTeX',
+  },
   reactions: {
     title: 'Reactions',
     none: 'Nobody to show.',

@@ -118,6 +118,8 @@ export interface MemberRowView {
   /** The game's name when the line is what they are playing (the row sets it in bold). */
   playing?: string;
   roleIds: string[];
+  /** A deleted account still listed until the list reloads: its menu offers only Copy User ID. */
+  deleted?: boolean;
 }
 
 export function memberRowView(source: MemberSource, userId: string): MemberRowView | undefined {
@@ -160,6 +162,7 @@ export function memberRowView(source: MemberSource, userId: string): MemberRowVi
     ...(online ? { subline: custom || (playing ? playingLabel(playing) : t(`presence.${st}`)) } : {}),
     ...(playing ? { playing } : {}),
     roleIds,
+    ...(view.deleted ? { deleted: true } : {}),
   };
 }
 

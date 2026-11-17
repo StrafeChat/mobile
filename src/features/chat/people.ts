@@ -103,6 +103,8 @@ export function authorMenuItems(userId: string, ctx: UserContext) {
     (spaceId ? spaceAbilities(space, spaceRoles(spaceId), mySpaceMember(spaceId), me).viewerHighestRolePosition : undefined);
   return buildUserMenuItems({
     userId,
+    // A deleted account: the builder offers only Copy User ID.
+    ...(d.deleted ? { deleted: true } : {}),
     bot: d.bot,
     username: d.username || '',
     displayName: d.name,

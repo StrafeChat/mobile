@@ -21,7 +21,7 @@ import {
 import { shell } from '@/shell/state';
 import { useIsWide } from '@/shell/SwipeShell';
 import { useTheme } from '@/theme';
-import { BotTag, Header, Icon, OfficialTag, UserAvatar, presenceLabel, withAlpha, type HeaderAction } from '@/ui';
+import { Avatar, BotTag, Header, Icon, OfficialTag, UserAvatar, presenceLabel, withAlpha, type HeaderAction } from '@/ui';
 import { openPinsScreen, openSearchScreen, openThreadsScreen } from './navigation';
 import { openRoomNotifySheet } from './presenters';
 import { startOrJoinCall, toggleMembers, type RoomMode } from './roomActions';
@@ -37,9 +37,10 @@ export interface RoomHeaderProps {
 }
 
 function useSubtitle(info: RoomInfo): string | undefined {
-  const presence = usePresence(info.kind === 'pm' ? info.otherUserId : null);
+  // A deleted account has no presence to show.
+  const presence = usePresence(info.kind === 'pm' && !info.recipientDeleted ? info.otherUserId : null);
   if (info.kind === 'pm') {
-    if (info.official) return undefined;
+    if (info.official || info.recipientDeleted) return undefined;
     return pmStatusLine(presence, presenceLabel);
   }
   if (info.kind === 'group') return t('threads.memberCount', { count: info.participantCount });
@@ -99,7 +100,9 @@ export function RoomHeader({ info, mode, onBack, onOpenInfo }: RoomHeaderProps) 
   const subtitle = useSubtitle(info);
 
   const leading =
-    info.kind === 'pm' && info.otherUserId ? (
+    info.kind === 'pm' && info.recipientDeleted ? (
+      <Avatar name={info.name} size="md" />
+    ) : info.kind === 'pm' && info.otherUserId ? (
       <UserAvatar userId={info.otherUserId} name={info.name} size="md" ringColor={theme.colors.card} />
     ) : (
       <Icon name={roomKindIcon(info.kind, { privateThread: info.thread?.private })} size={16} tone="muted" />

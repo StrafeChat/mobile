@@ -7,7 +7,7 @@ import '@/ui/__tests__/setup';
 import '@/data/testing/webMocks';
 import { describe, expect, jest, test } from '@jest/globals';
 import type { MessageListItem } from '@/data';
-import { groupBlocks, isJumbo, linkEmbedOf, loneGif, mediaFilename, parseBody, segmentsPlainText } from '../body/bodyModel';
+import { groupBlocks, isBlockSegment, isJumbo, linkEmbedOf, loneGif, mediaFilename, parseBody, segmentsPlainText } from '../body/bodyModel';
 import {
   EDGE_LOAD_MARGIN_PX,
   bottomVisibleMessageId,
@@ -98,6 +98,34 @@ describe('body model', () => {
     const [spoiler] = parseBody('||secret **bold** <@1>||');
     expect(spoiler?.type).toBe('spoiler');
     expect(spoiler && 'children' in spoiler ? segmentsPlainText(spoiler.children) : '').toBe('secret bold @user');
+  });
+
+  test('inline math stays in the run; display math and LaTeX documents are blocks of their own', () => {
+    const blocks = groupBlocks(parseBody('area $\\pi r^2$ and\n$$\n\\frac{a}{b}\n$$\nafter'));
+    expect(blocks.map((b) => b.kind)).toEqual(['run', 'block', 'run']);
+    const [run, math, after] = blocks;
+    expect(run?.kind === 'run' && run.nodes.find((n) => n.type === 'latex')).toEqual({ type: 'latex', tex: '\\pi r^2', display: false });
+    expect(math?.kind === 'block' && math.node).toEqual({ type: 'latex', tex: '\\frac{a}{b}', display: true });
+    // The newline that touched the block is swallowed, as the browser does.
+    expect(after?.kind === 'run' && after.nodes).toEqual([{ type: 'text', content: 'after' }]);
+
+    // `$$…$$` closed on its own line is still display math: a block between two runs.
+    expect(groupBlocks(parseBody('see $$x=1$$ ok')).map((b) => b.kind)).toEqual(['run', 'block', 'run']);
+
+    const doc = groupBlocks(parseBody('```latex\n\\documentclass{article}\n\\section{Hi}\n```'));
+    expect(doc).toEqual([{ kind: 'block', node: { type: 'latexDocument', source: '\\documentclass{article}\n\\section{Hi}' } }]);
+    expect(groupBlocks(parseBody('```math\nE = mc^2\n```'))).toEqual([{ kind: 'block', node: { type: 'latex', tex: 'E = mc^2', display: true } }]);
+  });
+
+  test('isBlockSegment: display math and documents are blocks, inline math is not', () => {
+    expect(isBlockSegment({ type: 'latex', tex: 'x', display: true })).toBe(true);
+    expect(isBlockSegment({ type: 'latex', tex: 'x', display: false })).toBe(false);
+    expect(isBlockSegment({ type: 'latexDocument', source: '\\section{x}' })).toBe(true);
+  });
+
+  test('math inside a spoiler is hidden as its source', () => {
+    const [spoiler] = parseBody('||$x^2$ and $$y$$||');
+    expect(spoiler && 'children' in spoiler ? segmentsPlainText(spoiler.children) : '').toBe('x^2 and y');
   });
 
   test('media filename is the last path segment', () => {

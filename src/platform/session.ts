@@ -27,6 +27,9 @@
  *   is told to stop pushing here while the session can still say so, and the account's
  *   push keys and notifications go (setAccountLeavingHook: the push lifecycle installs
  *   push/registration.ts forgetPushAccount, so this module does not load push itself).
+ * - **A deleted account leaves nothing behind**: SESSION_REVOKED with reason "deleted" wipes
+ *   that account's encryption store and its keystore passphrase before the session ends
+ *   (accountDeleted), and the sign-in screen says an administrator deleted it.
  */
 import Constants from 'expo-constants';
 import { createComputed, createEffect, createRoot, createSignal } from 'solid-js';
@@ -55,6 +58,7 @@ import { normalizeActivities } from '@web/lib/activity';
 import { loadRelationships } from '@web/stores/relationships';
 import { loadRooms } from '@web/stores/rooms';
 import { loadSpaces } from '@web/stores/spaces';
+import { deletePassphrase } from './overrides/e2ee/passphrase';
 import { loadInstanceInfo, resetInstanceInfo } from './overrides/runtime/instance';
 import { reloadApp } from './reload';
 import { appStorage } from './storage';
@@ -68,8 +72,9 @@ export {
   activeDesktopAccountId as activeAccountId,
 };
 
-/** Why the sign-in screen is showing after a session ended without the person asking. */
-export type SignOutReason = 'expired' | 'revoked' | 'banned';
+/** Why the sign-in screen is showing after a session ended without the person asking
+ * ('deleted': an instance administrator deleted the account). */
+export type SignOutReason = 'expired' | 'revoked' | 'banned' | 'deleted';
 
 export interface SignOutNotice {
   reason: SignOutReason;
@@ -90,6 +95,9 @@ const ACCOUNT_WRITE_TIMEOUT_MS = 3_000;
 const INSTANCE_PROBE_TIMEOUT_MS = 8_000;
 /** Unsubscribing from push must not hold a sign-out up when the instance is slow. */
 const ACCOUNT_LEAVING_TIMEOUT_MS = 4_000;
+/** A deleted account's local encryption store is wiped before signing out, within this (the
+ * web's bound): a slow store must never leave the person on a dead session. */
+const DELETED_WIPE_TIMEOUT_MS = 4_000;
 
 // ---- small helpers ---------------------------------------------------------------------------
 
@@ -189,7 +197,8 @@ function readMarker(): EndedMarker | null {
     const raw = appStorage.getString(ENDED_KEY);
     if (!raw) return null;
     const m = JSON.parse(raw) as Partial<EndedMarker>;
-    const reason = m.reason === 'expired' || m.reason === 'revoked' || m.reason === 'banned' ? m.reason : null;
+    const reason =
+      m.reason === 'expired' || m.reason === 'revoked' || m.reason === 'banned' || m.reason === 'deleted' ? m.reason : null;
     return { reason, accountId: typeof m.accountId === 'string' ? m.accountId : null, at: typeof m.at === 'number' ? m.at : 0 };
   } catch {
     return null;
@@ -218,9 +227,10 @@ function noteSessionEnded(reason: SignOutReason | null): void {
 
 /**
  * Why the last session ended, if the person did not end it themselves - for the sign-in
- * screen (t('auth.login.bannedNotice'), t('auth.login.revokedNotice'), and a mobile key for
- * "expired"). This clears it; a screen that renders it should rather peekSignOutNotice()
- * (render twice, effects run twice in development) - signing in clears it anyway.
+ * screen (t('auth.login.bannedNotice'), t('auth.login.revokedNotice'),
+ * t('auth.login.deletedNotice'), and a mobile key for "expired"). This clears it; a screen
+ * that renders it should rather peekSignOutNotice() (render twice, effects run twice in
+ * development) - signing in clears it anyway.
  */
 export function takeSignOutNotice(): SignOutNotice | null {
   const m = readMarker();
@@ -365,6 +375,46 @@ export async function forgetAccount(id: string): Promise<void> {
   await removeDesktopAccount(id);
 }
 
+async function wipeLocalE2eeStore(userId: string): Promise<void> {
+  // Required lazily: the engine's module (and the crypto host behind it) is not something the
+  // session layer should load at start-up.
+  const { resetLocalE2eeStore } = require('@web/lib/e2ee/machine') as typeof import('@web/lib/e2ee/machine');
+  await resetLocalE2eeStore(userId);
+}
+
+/**
+ * An administrator deleted this account (SESSION_REVOKED, reason "deleted"): the web's
+ * signOutDeletedAccount, done here (overrides/runtime/instance.ts leaves this reason to us).
+ * Its encryption store on this device is useless now - every key belonged to an id that will
+ * never exist again - and the device may be shared, so it goes before the session ends:
+ * - resetLocalE2eeStore(userId), the mobile override: deletes this account's store in the
+ *   crypto host WebView and this account's device id keys, no other account's;
+ * - the store's passphrase leaves the keystore (the web has no such secret). Without it the
+ *   store is unreadable even if its deletion did not complete, and nothing will open it again.
+ * Its push keys and notifications leave too, as for any session the server ended (the
+ * instance dropped its subscriptions). Bounded, as on the web. The session is leaving from the
+ * first moment: every request of a revoked session answers 401 (the reset's own device revoke
+ * does), and the fetch guard must not restart the app before the wipe has run. The splash
+ * stays up meanwhile; then the account leaves this device and the app restarts on the sign-in
+ * screen with the notice.
+ */
+function accountDeleted(userId: string | undefined): void {
+  setLeaving(true);
+  disconnectStargate();
+  const pushGone = accountLeaving(activeDesktopAccountId() ?? knownAccountId, { server: false });
+  void (async () => {
+    if (userId) {
+      const wipe = Promise.all([
+        wipeLocalE2eeStore(userId).catch((err: unknown) => console.warn("[e2ee] could not wipe the deleted account's local store", err)),
+        deletePassphrase(userId).catch((err: unknown) => console.warn("[e2ee] could not drop the deleted account's store passphrase", err)),
+      ]);
+      await settleWithin(wipe, DELETED_WIPE_TIMEOUT_MS);
+    }
+    await pushGone;
+    await endSession();
+  })();
+}
+
 /**
  * Wire the session's end to a restart. Call once at start-up, before the web's instance
  * handlers are registered (stores/instance initInstanceHandlers): gateway handlers run in
@@ -375,6 +425,11 @@ export function initSessionLifecycle(): () => void {
   const offRevoked = onStargateEvent((event) => {
     if (event.t !== 'SESSION_REVOKED' || leaving) return;
     const d = ((event.d as { d?: unknown } | undefined)?.d ?? event.d) as { reason?: unknown } | undefined;
+    if (d?.reason === 'deleted') {
+      noteSessionEnded('deleted');
+      accountDeleted(auth.user?.id);
+      return;
+    }
     noteSessionEnded(d?.reason === 'banned' ? 'banned' : 'revoked');
   });
   const dispose = createRoot((d) => {

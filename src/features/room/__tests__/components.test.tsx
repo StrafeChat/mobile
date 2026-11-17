@@ -65,6 +65,23 @@ describe('conversation frame', () => {
     expect(shell.membersAvailable()).toBe(false);
   });
 
+  test('a PM whose other account was deleted: "Deleted User", read-only, no calls, only its id to copy', async () => {
+    const READ_ONLY = "This account no longer exists. You can't send messages here.";
+    setRooms({ rooms: [pm('r', user('d', { username: '', display_name: '', avatar: '', deleted: true }))] });
+    await render(<RoomView roomId="r" spaceId={null} mode="shell" />);
+    expect(screen.getAllByText('Deleted User').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Start voice call')).toBeNull();
+    expect(screen.queryByLabelText('Start video call')).toBeNull();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText(/^Deleted User/));
+    });
+    expect(screen.getByText(READ_ONLY)).toBeTruthy();
+    expect(screen.getByText('Copy User ID')).toBeTruthy();
+    expect(screen.queryByText('View full profile')).toBeNull();
+    expect(screen.queryByText('Verify encryption')).toBeNull();
+    expect(screen.queryByText('Start voice call')).toBeNull();
+  });
+
   test('a group offers the member drawer; an unknown room says so', async () => {
     setRooms({ rooms: [group('g', [user('a'), user('b')], { name: 'Weekend' })] });
     const view = await render(<RoomView roomId="g" spaceId={null} mode="shell" />);
@@ -194,6 +211,23 @@ describe('profile sheet', () => {
     });
     expect(userProfileFullModal.open).toBe(true);
     expect(userProfileFullModal.subject?.userId).toBe('200');
+  });
+
+  test('a deleted account offers only Copy User ID', async () => {
+    await render(<ProfileSheetHost />);
+    await act(async () => {
+      presentProfileSheet({
+        subject: { userId: '300', displayName: 'Deleted User', username: '', deleted: true },
+        currentUserId: ME,
+        onMessageUser: jest.fn(),
+      });
+    });
+    expect(screen.getByText('Deleted User')).toBeTruthy();
+    expect(screen.getByLabelText('Copy User ID')).toBeTruthy();
+    expect(screen.queryByLabelText('More options')).toBeNull();
+    expect(screen.queryByLabelText('Message')).toBeNull();
+    expect(screen.queryByText('View full profile')).toBeNull();
+    expect(screen.queryByLabelText('View full profile')).toBeNull();
   });
 
   test("edits the owner's roles too, by each role's position, and words a refusal for the role", async () => {

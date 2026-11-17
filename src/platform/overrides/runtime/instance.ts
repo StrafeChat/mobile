@@ -1,6 +1,7 @@
 /**
- * Mobile wrapper for web/src/stores/instance.ts: the same store and exports, with one
- * behaviour changed - how long a caller waits when GET / cannot be reached.
+ * Mobile wrapper for web/src/stores/instance.ts: the same store and exports, with two
+ * behaviours changed - how long a caller waits when GET / cannot be reached, and who handles
+ * SESSION_REVOKED for a deleted account (initInstanceHandlers, at the end of this file).
  *
  * `instance.loaded` means "this instance has answered GET /", and nothing less: the E2EE
  * engine names the account's identity from the answer (`@id:<domain>` on a federating
@@ -27,6 +28,8 @@
  * failure.
  */
 import { createSignal } from 'solid-js';
+import { disconnectStargate, onStargateEvent } from '@web/services/stargate/client';
+import { logout } from '@web/stores/auth';
 import {
   instance,
   setInstance,
@@ -176,4 +179,25 @@ export function resetInstanceInfo(): void {
   }
   // A retry waiting on the old instance gives up at once.
   wake?.();
+}
+
+/**
+ * The web's SESSION_REVOKED handler, but for the reason "deleted". Banned and revoked go as
+ * on the web: sign out and navigate to /login?reason=..., which the location shim turns into
+ * a restart, and session.ts (initSessionLifecycle) has already recorded the reason for the
+ * sign-in screen. A deleted account is session.ts's alone: it wipes this account's encryption
+ * store (the web's signOutDeletedAccount does that through a dynamic import of
+ * lib/e2ee/machine, which the app does not depend on), then ends the session itself. Running
+ * the web's handler too would wipe twice and sign out before the wipe had finished.
+ */
+export function initInstanceHandlers(): () => void {
+  return onStargateEvent((event) => {
+    if (event.t !== 'SESSION_REVOKED') return;
+    const d = ((event.d as { d?: unknown })?.d ?? event.d) as { reason?: string } | undefined;
+    if (d?.reason === 'deleted') return;
+    logout();
+    disconnectStargate();
+    const why = d?.reason === 'banned' ? 'banned' : 'revoked';
+    window.location.assign(`/login?reason=${why}`);
+  });
 }

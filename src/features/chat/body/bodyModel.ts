@@ -5,9 +5,9 @@
  * On the web the tree renders as nested inline elements with a few block <div>s among them;
  * the browser flows it all. React Native flows text only inside one <Text>, so the top-level
  * nodes are grouped: consecutive inline nodes become one run (one <Text>, wrapping
- * naturally), and each block node - heading, subtext, quote, list item, code block - and each
- * link that carries an embed (invite card, inline media) becomes a block of its own, as the
- * web's block <div>s already break the line there.
+ * naturally), and each block node - heading, subtext, quote, list item, code block, display
+ * math, LaTeX document - and each link that carries an embed (invite card, inline media)
+ * becomes a block of its own, as the web's block <div>s already break the line there.
  *
  * Text inside a bot's embed is parsed the same way, with the web's two embed rules: a title
  * or a field's name is styling only (parseStyleOnlyContent), and a link there never carries
@@ -93,10 +93,13 @@ export function linkEmbedOf(seg: LinkSegment): LinkEmbed | null {
 
 // ---- runs and blocks --------------------------------------------------------------------------------
 
-const BLOCK_TYPES = new Set<MessageSegment['type']>(['heading', 'subtext', 'quote', 'listItem', 'codeBlock']);
+const BLOCK_TYPES = new Set<MessageSegment['type']>(['heading', 'subtext', 'quote', 'listItem', 'codeBlock', 'latexDocument']);
 
+/** Display math (`$$…$$`, `\[…\]`, an environment, a ```math fence) is a block, as the
+ * web's `.latex-block` is; inline math (`$…$`, `\(…\)`) flows with the text. A LaTeX
+ * document (a ```latex fence with \documentclass, \section...) is a block too. */
 export function isBlockSegment(seg: MessageSegment): boolean {
-  return BLOCK_TYPES.has(seg.type);
+  return BLOCK_TYPES.has(seg.type) || (seg.type === 'latex' && seg.display);
 }
 
 export type BodyBlock =
@@ -199,6 +202,12 @@ export function segmentsPlainText(nodes: readonly MessageSegment[]): string {
         break;
       case 'codeBlock':
         out += n.content;
+        break;
+      case 'latex':
+        out += n.tex;
+        break;
+      case 'latexDocument':
+        out += n.source;
         break;
       default:
         if ('children' in n) out += segmentsPlainText(n.children);

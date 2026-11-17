@@ -4,9 +4,10 @@
  * On iOS a message's header and text are one accessibility element (MessageRow), read as
  * "name, time: text", so VoiceOver does not walk into anything drawn inside the text: its
  * links, mentions and room pills, nor what renders under a link or as a block - an image or
- * GIF, an invite card, a code block's Copy, a preview card. Each becomes an action of that
- * element instead, in the actions rotor, doing what a tap on it does: "Open image: …" (the
+ * GIF, an invite card, a code or math block's Copy, a preview card. Each becomes an action of
+ * that element instead, in the actions rotor, doing what a tap on it does: "Open image: …" (the
  * viewer), "Open invite page" (the invite in the app, where the card's Join is), "Copy code",
+ * "Copy LaTeX",
  * "Open profile: …", "Go to #…", and "Open link: …" for any other link - a video link or one
  * with a preview card included, which opens the page itself. (TalkBack lists the same entries
  * in its actions menu.) Attachments, the thread strip and the reactions are outside that
@@ -122,6 +123,10 @@ export function bodyTargets(
       }
     } else if (seg.type === 'codeBlock') {
       add({ kind: 'code', content: seg.content, label: t('mobile.chat.copyCode') }, seg.lang);
+    } else if (seg.type === 'latexDocument' || (seg.type === 'latex' && seg.display)) {
+      // Display math and LaTeX documents are code boxes with a Copy button (MessageBody).
+      const content = seg.type === 'latex' ? seg.tex.trim() : seg.source;
+      add({ kind: 'code', content, label: t('mobile.chat.math.copy') }, content.split('\n')[0]);
     } else if (seg.type === 'mention') {
       if (seen.has(`u:${seg.userId}`)) return;
       seen.add(`u:${seg.userId}`);

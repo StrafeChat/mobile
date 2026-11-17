@@ -128,6 +128,30 @@ export function FullProfileScreen() {
   const canCall = !isSelf && instanceInfo.voiceEnabled && !subject.bot && !subject.system;
   const onMessage = storedOnMessage ?? ((id: string) => void messageUser(id));
 
+  // A deleted account has no profile left: "Deleted User" and its id, nothing to act on.
+  if (subject.deleted && !isSelf) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.colors.card }}>
+        <Header title={subject.displayName} onBack={goBack} border={false} />
+        <ReadableWidth>
+          <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+            <ProfileArt
+              userId={subject.userId}
+              displayName={subject.displayName}
+              bannerHeight={136}
+              avatarSize={92}
+              hideStatus
+              actions={<IconButton icon="fa-regular fa-id-card" label={t('userArea.copyUserId')} tone="overlay" onPress={() => void copyText(subject.userId)} />}
+            />
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <IdentityBlock displayName={subject.displayName} username="" />
+            </View>
+          </ScrollView>
+        </ReadableWidth>
+      </View>
+    );
+  }
+
   async function run(key: string, fn: () => Promise<unknown>, failKey = 'errors.unknown') {
     setBusy(key);
     try {

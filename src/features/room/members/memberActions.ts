@@ -94,6 +94,7 @@ export function memberMenuItems(row: MemberRowView, ctx: MemberMenuContext): Act
   }
   return buildUserMenuItems({
     userId: row.id,
+    ...(row.deleted ? { deleted: true } : {}),
     bot: row.bot,
     username: row.username,
     displayName: row.displayName,

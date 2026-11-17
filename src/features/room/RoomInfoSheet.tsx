@@ -22,6 +22,7 @@ import { openAddPeopleSheet } from '@/features/nav';
 import { openRoomSettings } from '@/features/settings';
 import { useTheme } from '@/theme';
 import {
+  Avatar,
   BotTag,
   Divider,
   Icon,
@@ -97,7 +98,8 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
   const pins = usePinsState(info.id);
   const gates = useRoomGates(info.id, spaceId);
   const abilities = useSpaceAbilities(spaceId);
-  const presence = usePresence(info.kind === 'pm' ? info.otherUserId : null);
+  // A deleted account has no presence to show.
+  const presence = usePresence(info.kind === 'pm' && !info.recipientDeleted ? info.otherUserId : null);
   const unread = useRoomUnreadCount(info.id, spaceId, info.kind);
   const thread = useStoredThread(spaceId, info.kind === 'thread' ? info.id : '');
   /** Run after the sheet has closed, so what it opens doesn't fight the closing sheet. */
@@ -118,7 +120,9 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
   // rule, and the room list's menu).
   const canOpenSettings = abilities.canManageRooms || abilities.canManageRoles;
   const hero: ReactNode =
-    info.kind === 'pm' && info.otherUserId ? (
+    info.kind === 'pm' && info.recipientDeleted ? (
+      <Avatar name={info.name} size="xl" />
+    ) : info.kind === 'pm' && info.otherUserId ? (
       <UserAvatar userId={info.otherUserId} name={info.name} size="xl" ringColor={theme.colors.card} />
     ) : (
       <View style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(theme.colors.primary, 0.2) }}>
@@ -127,7 +131,8 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
     );
 
   let line: string | undefined;
-  if (info.kind === 'pm' && !info.official) {
+  if (info.kind === 'pm' && info.recipientDeleted) line = t('room.recipientDeleted');
+  else if (info.kind === 'pm' && !info.official) {
     // A custom status (or a game) reads as current only while the person is around.
     line = pmStatusLine(presence, presenceLabel);
   }
@@ -207,7 +212,12 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
       </View>
 
       <View style={{ gap: 12, marginTop: 16 }}>
-        {info.kind === 'pm' && info.otherUserId ? (
+        {info.kind === 'pm' && info.otherUserId && info.recipientDeleted ? (
+          // Nothing is left of a deleted account but its id: no profile, no safety number, no call.
+          <ListSection>
+            <ListRow title={t('userArea.copyUserId')} icon="fa-regular fa-id-card" onPress={then(() => void copyText(info.otherUserId!))} />
+          </ListSection>
+        ) : info.kind === 'pm' && info.otherUserId ? (
           <ListSection>
             <ListRow
               title={t('profile.viewFull')}

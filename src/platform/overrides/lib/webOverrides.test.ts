@@ -123,6 +123,18 @@ describe('lib/formatApiError', () => {
     }
     expect(network).not.toEqual(['Failed to fetch']);
   });
+
+  it('keeps the account-deletion codes and maps a dropped connection there too', () => {
+    const fe = require('./formatApiError') as typeof import('./formatApiError');
+    const { ApiError } = require('@web/api/ApiError') as typeof import('@web/api/ApiError');
+    const network = fe.translateApiErrorMessage('Failed to fetch', tk);
+    expect(fe.translateAccountDeletionError(new ApiError('nope', 403, undefined, 'self'), tk)).toEqual(['admin.users.deleteRefused.self']);
+    expect(fe.translateAccountDeletionError(new Error('Network request failed'), tk)).toEqual(network);
+    // A 1:1 PM whose other account was deleted refuses a send with this code.
+    expect(fe.translateCaughtApiError(new ApiError('this account no longer exists', 403, undefined, 'recipient_deleted'), tk)).toEqual([
+      'errors.api.recipientDeleted',
+    ]);
+  });
 });
 
 describe('inert modules', () => {

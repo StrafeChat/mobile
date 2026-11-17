@@ -245,7 +245,8 @@ function registerGatewayHandlers(): void {
   initCustomEmojiHandlers();
   initRoomNotifySettingsHandler();
   initVoiceHandlers();
-  // SESSION_REVOKED: signs out; the session lifecycle restarts the app with the reason.
+  // SESSION_REVOKED: signs out; the session lifecycle restarts the app with the reason. A
+  // deleted account is the session lifecycle's alone (it wipes the account's E2EE store first).
   initInstanceHandlers();
   initRoomLeaveHandler();
 }

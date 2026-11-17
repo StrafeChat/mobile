@@ -182,6 +182,14 @@ describe('PM gates', () => {
     expect(g).toMatchObject({ canSend: false, lock: { kind: 'officialReadOnly' } });
     expect(composerLockText(g.lock!, Date.now())).toBe('room.officialReadOnly');
   });
+
+  test('a PM whose other account was deleted is read-only; reactions and pins stay', () => {
+    const g = pmGates({ type: 1, participants: [user(ME), user('d', { username: '', display_name: '', deleted: true })] }, ME);
+    expect(g).toMatchObject({ canSend: false, canReply: false, canAttach: false, canReact: true, canPin: true, lock: { kind: 'recipientDeleted' } });
+    expect(composerLockText(g.lock!, Date.now())).toBe('room.recipientDeleted');
+    // A deleted member of a group changes nothing there.
+    expect(pmGates({ type: 2, participants: [user(ME), user('d', { deleted: true }), user('a')] }, ME).lock).toBeNull();
+  });
 });
 
 describe('message actions (web context-menu order and gates)', () => {

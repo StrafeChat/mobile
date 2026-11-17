@@ -11,6 +11,7 @@ import {
   rooms,
   addOrUpdateRoom,
   isNotesRoom,
+  isPmWithDeletedUser,
   roomDisplayName,
   sortRoomsByLastMessage,
 } from '@web/stores/rooms';
@@ -102,8 +103,11 @@ export interface PmRowView {
   id: string;
   isGroup: boolean;
   name: string;
-  /** The other person in a 1:1 (presence dot, avatar); undefined for groups. */
+  /** The other person in a 1:1 (presence dot, avatar); undefined for groups, and for a 1:1
+   * whose other account was deleted (no presence, no picture - `deleted`). */
   otherUserId?: string;
+  /** A 1:1 whose other account an administrator deleted: "Deleted User", read-only. */
+  deleted: boolean;
   avatar: string | null;
   bot: boolean;
   /** 1:1 with the instance's official account (OFFICIAL tag, read-only composer). */
@@ -132,11 +136,12 @@ export function pmRowView(roomId: string, onScreenRoomId: string | null): PmRowV
   if (!room) return undefined;
   const isGroup = room.type === ROOM_TYPE_GROUP;
   const other = room.participants?.find((p) => p.id !== uid);
+  const deleted = isPmWithDeletedUser(room, uid);
   const list = messages.byRoom[room.id] ?? [];
   const unread = onScreenRoomId === room.id || !uid ? 0 : getUnreadCountForDisplay(room.id, room, list, uid);
   let subtitle: string | undefined;
   let playing: string | undefined;
-  if (!isGroup && other) {
+  if (!isGroup && other && !deleted) {
     const st = presence.byUser[other.id]?.status ?? other.presence?.status;
     if (isPresentStatus(st)) {
       // The store's whenever it knows them: one cleared since the room list was fetched must
@@ -151,8 +156,9 @@ export function pmRowView(roomId: string, onScreenRoomId: string | null): PmRowV
     id: room.id,
     isGroup,
     name: pmDisplayName(room, uid),
-    ...(isGroup || !other ? {} : { otherUserId: other.id }),
-    avatar: isGroup ? null : (other?.avatar ?? null),
+    ...(isGroup || !other || deleted ? {} : { otherUserId: other.id }),
+    deleted,
+    avatar: isGroup || deleted ? null : (other?.avatar ?? null),
     bot: !isGroup && other?.bot === true,
     system: !isGroup && other?.system === true,
     ...(subtitle ? { subtitle } : {}),
@@ -204,8 +210,12 @@ export interface RoomInfo {
   topic?: string;
   /** The lock badge: always for a 1:1, groups unless turned off, channels only when opted in. */
   e2ee: boolean;
-  /** 1:1 PMs: the other person. */
+  /** 1:1 PMs: the other person (still set when their account was deleted: the intro and the
+   * profile sheet, which then offers only Copy User ID, need the id). */
   otherUserId?: string;
+  /** A 1:1 whose other account an administrator deleted (stores/rooms isPmWithDeletedUser):
+   * history stays readable, nothing new goes in - no composer, no calls, no presence. */
+  recipientDeleted: boolean;
   bot: boolean;
   /** 1:1 with the official account: OFFICIAL tag, and the composer is read-only. */
   official: boolean;
@@ -254,6 +264,7 @@ export function roomInfo(roomId: string, spaceId?: string | null): RoomInfo | un
       ...(r.type === ROOM_TYPE_THREAD && parent ? { parentName: parent.name } : {}),
       ...(r.topic ? { topic: r.topic } : {}),
       e2ee: r.e2ee_enabled === true,
+      recipientDeleted: false,
       bot: false,
       official: false,
       isCreator: false,
@@ -273,6 +284,7 @@ export function roomInfo(roomId: string, spaceId?: string | null): RoomInfo | un
   if (!r) return undefined;
   const notes = !!uid && isNotesRoom(r, uid);
   const other = r.type === ROOM_TYPE_PM ? r.participants?.find((p) => p.id !== uid) : undefined;
+  const recipientDeleted = isPmWithDeletedUser(r, uid);
   return {
     id: r.id,
     type: r.type,
@@ -283,6 +295,7 @@ export function roomInfo(roomId: string, spaceId?: string | null): RoomInfo | un
     ...(r.topic ? { topic: r.topic } : {}),
     e2ee: r.type === ROOM_TYPE_PM || (r.type === ROOM_TYPE_GROUP && r.e2ee_enabled !== false),
     ...(other ? { otherUserId: other.id } : {}),
+    recipientDeleted,
     bot: other?.bot === true,
     official: other?.system === true,
     isCreator: r.type === ROOM_TYPE_GROUP && !!r.creator_id && r.creator_id !== '0' && r.creator_id === uid,
@@ -294,8 +307,10 @@ export function roomInfo(roomId: string, spaceId?: string | null): RoomInfo | un
     slowmodeSeconds: 0,
     userLimit: 0,
     hasMemberList: r.type === ROOM_TYPE_GROUP,
-    // Nobody answers in the official account's PM (the server refuses that call too).
-    callable: (r.type === ROOM_TYPE_PM || r.type === ROOM_TYPE_GROUP) && !!uid && !notes && other?.system !== true,
+    // Nobody answers in the official account's PM, nor in one whose other account was deleted
+    // (the server refuses both calls too).
+    callable:
+      (r.type === ROOM_TYPE_PM || r.type === ROOM_TYPE_GROUP) && !!uid && !notes && other?.system !== true && !recipientDeleted,
   };
 }
 

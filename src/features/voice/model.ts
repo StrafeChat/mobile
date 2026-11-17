@@ -5,6 +5,7 @@
  * web's VoiceStage / VoiceTile / VoiceDock exactly and can be tested on their own.
  */
 import { ApiError } from '@web/api/ApiError';
+import { t } from '@web/i18n/t';
 
 /** Space between tiles (the web's `gap-2`). */
 export const TILE_GAP = 8;
@@ -188,12 +189,13 @@ export function absentParticipantIds(
 /** "Ringing A, B…" names from the call's ringing list; unknown people read as '…'. */
 export function ringingNames(
   call: { ringing: readonly string[] } | undefined,
-  participants: readonly { id: string; display_name?: string; username?: string }[] | undefined,
+  participants: readonly { id: string; display_name?: string; username?: string; deleted?: boolean }[] | undefined,
 ): string {
   if (!call || call.ringing.length === 0) return '';
   return call.ringing
     .map((uid) => {
       const p = participants?.find((x) => x.id === uid);
+      if (p?.deleted) return t('common.deletedUser');
       return p ? p.display_name || p.username || '…' : '…';
     })
     .join(', ');

@@ -16,6 +16,7 @@ import { t } from '@web/i18n/t';
 import { useIncomingCall } from '@/data/voice';
 import { useMyId } from '@/data/me';
 import { pmDisplayName, usePmRoom } from '@/data/rooms';
+import { resolveProfile } from '@/data/spaceProfileCore';
 import { useTheme } from '@/theme';
 import { Avatar, Icon, Spinner, Text, Touchable, useReduceMotion, withAlpha } from '@/ui';
 import { acceptIncomingFromUi, declineIncomingFromUi } from './join';
@@ -54,7 +55,9 @@ function IncomingCallBody({ roomId, startedBy }: { roomId: string; startedBy: st
   const meId = useMyId();
   const room = usePmRoom(roomId);
   const caller = room?.participants?.find((p) => p.id === startedBy);
-  const callerName = caller?.display_name || caller?.username || t('common.someone');
+  // resolveProfile: a deleted account reads "Deleted User", with no picture.
+  const callerView = caller ? resolveProfile(caller, null, t('common.someone')) : undefined;
+  const callerName = callerView?.name ?? t('common.someone');
   const isGroup = room?.type === ROOM_TYPE_GROUP;
   const roomName = room && meId ? pmDisplayName(room, meId) : '';
   const subtitle = isGroup ? t('voice.incoming.group', { name: callerName, room: roomName }) : t('voice.incoming.from', { name: callerName });
@@ -97,7 +100,7 @@ function IncomingCallBody({ roomId, startedBy }: { roomId: string; startedBy: st
 
       <View style={{ alignItems: 'center', gap: 20, maxWidth: 420 }} accessible accessibilityLabel={`${t('voice.incoming.title')}. ${subtitle}`} accessibilityLiveRegion="assertive">
         <PulseRings color={withAlpha(theme.colors.primary, 0.5)} size={avatarSize}>
-          <Avatar uri={caller?.avatar} name={callerName} size={avatarSize} />
+          <Avatar uri={callerView?.avatar} name={callerName} size={avatarSize} />
         </PulseRings>
         <View style={{ alignItems: 'center', gap: 6 }}>
           <Text variant="title" align="center" numberOfLines={2}>

@@ -320,6 +320,9 @@ export function ProfileSheetHost() {
   if (!subject) return <Sheet open={false} onClose={() => undefined} />;
   const isSelf = subject.userId === viewerId;
   const close = () => dismissProfileSheet();
+  // A deleted account: "Deleted User" with no picture, and only its id left to copy - no
+  // message, safety number, menu, roles, nickname or full profile (the web's popover rule).
+  const deleted = subject.deleted === true && !isSelf;
 
   const openFull = () => {
     // The global name shown under a nickname, and the space, so the full profile shows the same
@@ -365,7 +368,9 @@ export function ProfileSheetHost() {
     );
   };
 
-  const actions = (
+  const actions = deleted ? (
+    <IconButton icon="fa-regular fa-id-card" label={t('userArea.copyUserId')} tone="overlay" onPress={() => void copyText(subject.userId)} />
+  ) : (
     <>
       {!isSelf && onMessageUser ? (
         <IconButton
@@ -407,7 +412,7 @@ export function ProfileSheetHost() {
         bannerHeight={96}
         avatarSize={80}
         actions={actions}
-        onAvatarPress={openFull}
+        {...(deleted ? { hideStatus: true } : { onAvatarPress: openFull })}
         rounded
       />
       <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 14 }}>
@@ -423,69 +428,73 @@ export function ProfileSheetHost() {
           pronouns={subject.pronouns}
           isBirthday={subject.birthdayToday}
           nameColor={subject.nameColor}
-          onOpenProfile={openFull}
+          {...(deleted ? {} : { onOpenProfile: openFull })}
         />
-        {(isSelf && spaceId) || canEditNickname ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {isSelf && spaceId ? (
+        {deleted ? null : (
+          <>
+            {(isSelf && spaceId) || canEditNickname ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {isSelf && spaceId ? (
+                  <Button
+                    title={t('spaceProfile.edit')}
+                    icon="id-badge"
+                    variant="secondary"
+                    size="sm"
+                    onPress={() => {
+                      close();
+                      openSpaceProfile(spaceId);
+                    }}
+                    testID="profile-edit-space-profile"
+                  />
+                ) : null}
+                {canEditNickname && spaceId ? (
+                  <Button
+                    title={t('spaceProfile.changeNickname')}
+                    icon="pen"
+                    variant="secondary"
+                    size="sm"
+                    onPress={() => {
+                      close();
+                      presentNicknameSheet({ spaceId, userId: subject.userId });
+                    }}
+                    testID="profile-change-nickname"
+                  />
+                ) : null}
+              </View>
+            ) : null}
+            {hasDetails ? <Divider /> : null}
+            <ProfileActivity userId={subject.userId} />
+            {botInstallable ? (
               <Button
-                title={t('spaceProfile.edit')}
-                icon="id-badge"
-                variant="secondary"
-                size="sm"
+                title={t('profile.addToSpace')}
+                icon="plus"
+                fullWidth
                 onPress={() => {
+                  openAppWindow(authorizeUrl({ clientId: subject.userId, scopes: ['bot'] }));
                   close();
-                  openSpaceProfile(spaceId);
                 }}
-                testID="profile-edit-space-profile"
               />
             ) : null}
-            {canEditNickname && spaceId ? (
-              <Button
-                title={t('spaceProfile.changeNickname')}
-                icon="pen"
-                variant="secondary"
-                size="sm"
-                onPress={() => {
-                  close();
-                  presentNicknameSheet({ spaceId, userId: subject.userId });
-                }}
-                testID="profile-change-nickname"
-              />
+            {aboutMe ? (
+              <View>
+                <SectionLabel>{t('settings.profile.aboutMe')}</SectionLabel>
+                <MessageBody text={aboutMe} roomId="" spaceId={ctx?.spaceId ?? null} allowLinkPreviews={false} inlineOnly />
+              </View>
             ) : null}
-          </View>
-        ) : null}
-        {hasDetails ? <Divider /> : null}
-        <ProfileActivity userId={subject.userId} />
-        {botInstallable ? (
-          <Button
-            title={t('profile.addToSpace')}
-            icon="plus"
-            fullWidth
-            onPress={() => {
-              openAppWindow(authorizeUrl({ clientId: subject.userId, scopes: ['bot'] }));
-              close();
-            }}
-          />
-        ) : null}
-        {aboutMe ? (
-          <View>
-            <SectionLabel>{t('settings.profile.aboutMe')}</SectionLabel>
-            <MessageBody text={aboutMe} roomId="" spaceId={ctx?.spaceId ?? null} allowLinkPreviews={false} inlineOnly />
-          </View>
-        ) : null}
-        <BirthdayFact birthday={subject.birthday} />
-        <RolesSection subject={subject} ctx={ctx} />
-        {subject.joinedAtLabel ? (
-          <Text variant="caption">
-            <Text variant="caption" weight="medium" tone="default">
-              {t('profile.joinedSpace')}
-            </Text>{' '}
-            {subject.joinedAtLabel}
-          </Text>
-        ) : null}
-        <Button title={t('profile.viewFull')} variant="secondary" icon="user" fullWidth onPress={openFull} />
-        {!isSelf && onMessageUser ? <QuickMessage subject={subject} onDone={close} /> : null}
+            <BirthdayFact birthday={subject.birthday} />
+            <RolesSection subject={subject} ctx={ctx} />
+            {subject.joinedAtLabel ? (
+              <Text variant="caption">
+                <Text variant="caption" weight="medium" tone="default">
+                  {t('profile.joinedSpace')}
+                </Text>{' '}
+                {subject.joinedAtLabel}
+              </Text>
+            ) : null}
+            <Button title={t('profile.viewFull')} variant="secondary" icon="user" fullWidth onPress={openFull} />
+            {!isSelf && onMessageUser ? <QuickMessage subject={subject} onDone={close} /> : null}
+          </>
+        )}
       </View>
       <View style={{ height: 8, backgroundColor: theme.colors.card }} />
     </Sheet>

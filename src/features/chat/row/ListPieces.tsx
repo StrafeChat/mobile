@@ -13,7 +13,7 @@ import { formatDateHeader } from '@web/lib/utils/datetime';
 import { getMessagePreviewSource, messagePreviewText } from '@web/components/messageList/utils';
 import { roomParticipantPool, useRoomInfo, useUserDisplay } from '@/data';
 import { useTheme } from '@/theme';
-import { Icon, OfficialTag, Text, UserAvatar, withAlpha } from '@/ui';
+import { Avatar, Icon, OfficialTag, Text, UserAvatar, withAlpha } from '@/ui';
 import { ROW_PAD_X } from '../layout';
 import { SkeletonGroups } from './Skeletons';
 import { useListContext } from './listContext';
@@ -109,19 +109,24 @@ function IntroIcon({ name }: { name: string }) {
   );
 }
 
-function PmIntro({ userId }: { userId: string }) {
+function PmIntro({ userId, deleted }: { userId: string; deleted: boolean }) {
   const { roomId } = useListContext();
   const user = useUserDisplay(userId, { roomId });
-  const name = user?.username || t('common.unknown');
+  // A deleted account: "Deleted User", no picture or presence, and why nothing can be sent.
+  const name = deleted || user?.deleted ? t('common.deletedUser') : user?.username || t('common.unknown');
   return (
     <View style={styles.introCenter}>
-      <UserAvatar userId={userId} uri={user?.avatar ?? null} name={name} size="xl" />
+      {deleted ? (
+        <Avatar name={name} size="xl" />
+      ) : (
+        <UserAvatar userId={userId} uri={user?.avatar ?? null} name={name} size="xl" />
+      )}
       <View style={styles.introName}>
         <Text variant="heading">{name}</Text>
         <OfficialTag system={user?.system} size="sm" />
       </View>
       <Text variant="caption" align="center" style={styles.introNote}>
-        {user?.system ? t('intro.pmOfficial') : t('intro.pmEncrypted')}
+        {deleted ? t('room.recipientDeleted') : user?.system ? t('intro.pmOfficial') : t('intro.pmEncrypted')}
       </Text>
     </View>
   );
@@ -168,7 +173,11 @@ export const ListIntro = memo(function ListIntro() {
   if (!info) return <View style={styles.introSpacer} />;
   switch (info.kind) {
     case 'pm':
-      return info.otherUserId ? <PmIntro userId={info.otherUserId} /> : <View style={styles.introSpacer} />;
+      return info.otherUserId ? (
+        <PmIntro userId={info.otherUserId} deleted={info.recipientDeleted} />
+      ) : (
+        <View style={styles.introSpacer} />
+      );
     case 'notes':
       return (
         <View style={styles.introCenter}>

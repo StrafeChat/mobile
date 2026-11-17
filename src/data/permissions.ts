@@ -34,6 +34,7 @@ import { verificationGate, gateApplies, formatWait, type VerificationGate } from
 import { spaces } from '@web/stores/spaces';
 import { auth } from '@web/stores/auth';
 import { instance } from '@web/stores/instance';
+import { isPmWithDeletedUser } from '@web/stores/rooms';
 import { t } from '@web/i18n/t';
 import { deepEqual, useDerived } from './derived';
 import { spaceAbilities, mySpaceMember } from './spaces';
@@ -43,6 +44,8 @@ import { ROOM_TYPE_GROUP, ROOM_TYPE_PM, ROOM_TYPE_THREAD, isTextLike } from './c
 /** Why the composer is replaced by a notice instead of an input. */
 export type ComposerLock =
   | { kind: 'officialReadOnly' }
+  /** A 1:1 PM whose other account an administrator deleted. */
+  | { kind: 'recipientDeleted' }
   | { kind: 'noPermission' }
   | { kind: 'threadLocked' }
   /** A space verification level; `unlockAt` (ms epoch) for the two age rules. */
@@ -180,17 +183,22 @@ export function channelGates(input: ChannelGatesInput): RoomGates {
   };
 }
 
-/** PMs, groups and Notes (RoomPage): the composer is closed only in a 1:1 with the instance's
- * official account; @everyone only in groups; pins are anyone's; nobody deletes others'. */
+/** PMs, groups and Notes (RoomPage): the composer is closed in a 1:1 with the instance's
+ * official account and in one whose other account was deleted (the server refuses sends there
+ * too; reactions and pins stay open); @everyone only in groups; pins are anyone's; nobody
+ * deletes others'. */
 export function pmGates(room: Pick<Room, 'type' | 'participants'>, userId: string | undefined): RoomGates {
   const other = room.type === ROOM_TYPE_PM ? room.participants?.find((p) => p.id !== userId) : undefined;
   const official = room.type === ROOM_TYPE_PM && other?.system === true;
+  // isPmWithDeletedUser reads only the type and the participants.
+  const recipientDeleted = isPmWithDeletedUser(room as Room, userId);
+  const closed = official || recipientDeleted;
   return {
     kind: 'pm',
     mask: null,
-    canSend: !official,
-    canReply: true,
-    canAttach: true,
+    canSend: !closed,
+    canReply: !recipientDeleted,
+    canAttach: !recipientDeleted,
     canMentionEveryone: room.type === ROOM_TYPE_GROUP,
     canManageMessages: false,
     canPin: true,
@@ -206,7 +214,7 @@ export function pmGates(room: Pick<Room, 'type' | 'participants'>, userId: strin
     canBanMembers: false,
     viewerHighestRolePosition: -1,
     slowmodeSeconds: 0,
-    lock: official ? { kind: 'officialReadOnly' } : null,
+    lock: recipientDeleted ? { kind: 'recipientDeleted' } : official ? { kind: 'officialReadOnly' } : null,
   };
 }
 
@@ -256,6 +264,8 @@ export function composerLockText(lock: ComposerLock, now: number): string {
   switch (lock.kind) {
     case 'officialReadOnly':
       return t('room.officialReadOnly');
+    case 'recipientDeleted':
+      return t('room.recipientDeleted');
     case 'noPermission':
       return t('space.noSendPermission');
     case 'threadLocked':
