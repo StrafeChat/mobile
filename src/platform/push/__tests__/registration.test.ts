@@ -221,7 +221,8 @@ describe('a first run on Android with Firebase', () => {
         activeSlot: slot,
         preview: true,
         sounds: true,
-        accounts: [{ slot, userId: '100', label: '@alice', apiBase: 'https://api.a.example', token: 'tok-a' }],
+        // webOrigin: derived from the API URL as publicWebOrigin does (default avatars).
+        accounts: [{ slot, userId: '100', label: '@alice', apiBase: 'https://api.a.example', webOrigin: 'https://a.example', token: 'tok-a' }],
       }),
     );
   });

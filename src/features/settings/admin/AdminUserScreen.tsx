@@ -164,7 +164,7 @@ export function AdminUserScreen() {
         <View style={{ height: 56, backgroundColor: withAlpha(theme.colors.primary, 0.2) }} />
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingBottom: 14, marginTop: -28 }}>
           <View style={{ borderRadius: 40, borderWidth: 4, borderColor: theme.colors.card }}>
-            <Avatar uri={u.avatar} name={adminName(u)} size="xl" />
+            <Avatar uri={u.avatar} name={adminName(u)} user={u} size="xl" />
           </View>
           <View style={{ flex: 1, paddingTop: 32, gap: 6 }}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>

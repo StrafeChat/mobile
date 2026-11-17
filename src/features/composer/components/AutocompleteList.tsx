@@ -52,7 +52,7 @@ const CandidateRow = memo(function CandidateRow({ candidate: c, onPick }: { cand
   let leading;
   switch (c.kind) {
     case 'user':
-      leading = <Avatar uri={c.avatar ?? null} name={c.label} size={26} />;
+      leading = <Avatar uri={c.avatar ?? null} name={c.label} user={{ userId: c.userId, originId: c.originId }} size={26} />;
       break;
     case 'role':
       leading = (

@@ -190,7 +190,7 @@ export function UsersTab() {
           {results.map((u) => (
             <SettingItem
               key={u.id}
-              leading={<Avatar uri={u.avatar} name={adminName(u)} size="lg" />}
+              leading={<Avatar uri={u.avatar} name={adminName(u)} user={u} size="lg" />}
               title={adminName(u)}
               description={[adminTag(u), u.email].filter(Boolean).join(' · ')}
               chevron
@@ -339,7 +339,7 @@ export function BansTab({ reloadKey, onChanged }: { reloadKey: number; onChanged
           accounts.map((row) => (
             <SettingItem
               key={row.ban.user_id}
-              leading={<Avatar uri={row.user?.avatar} name={adminName(row.user)} size="lg" />}
+              leading={<Avatar uri={row.user?.avatar} name={adminName(row.user)} user={row.user ?? row.ban.user_id} size="lg" />}
               title={adminName(row.user)}
               description={`${adminTag(row.user)}\n${row.ban.reason || t('admin.users.noReason')} · ${row.ban.expires_at ? t('admin.users.bannedUntil', { when: adminWhen(row.ban.expires_at) }) : t('admin.users.bannedForever')}`}
               onPress={() => goUser(row.ban.user_id)}
@@ -427,6 +427,9 @@ export function BansTab({ reloadKey, onChanged }: { reloadKey: number; onChanged
 
 const discoverName = (e: DiscoverEntry) => e.space?.name ?? e.bot?.name ?? e.id;
 const discoverAvatar = (e: DiscoverEntry) => e.space?.icon ?? e.bot?.bot?.avatar ?? e.bot?.icon;
+/** A bot listing pictures its bot user (default avatar from its id, the client id); a space
+ * keeps its initials. */
+const discoverAvatarUser = (e: DiscoverEntry) => (e.bot ? { user: e.bot.bot ?? e.bot.application_id } : {});
 
 export function DiscoverTab({ reloadKey }: { reloadKey: number }) {
   const theme = useTheme();
@@ -483,7 +486,7 @@ export function DiscoverTab({ reloadKey }: { reloadKey: number }) {
           {rows.map((e) => (
             <View key={`${e.kind}:${e.id}`} style={{ padding: 16, gap: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Avatar uri={discoverAvatar(e)} name={discoverName(e)} size="lg" shape="rounded" />
+                <Avatar uri={discoverAvatar(e)} name={discoverName(e)} {...discoverAvatarUser(e)} size="lg" shape="rounded" />
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <Text

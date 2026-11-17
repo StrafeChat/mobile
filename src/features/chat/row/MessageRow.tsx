@@ -293,7 +293,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
                 accessibilityHint={t('mobile.chat.openProfile')}
                 style={msg.reply_to_id ? styles.avatarAfterReply : null}
               >
-                <Avatar uri={sender?.avatar ?? null} name={name} size={AVATAR_PX} />
+                <Avatar uri={sender?.avatar ?? null} name={name} user={{ userId: msg.sender_id, originId: sender?.originId }} size={AVATAR_PX} />
               </Touchable>
             ) : showTime ? (
               <Text variant="caption" style={styles.gutterTime} numberOfLines={1} adjustsFontSizeToFit>

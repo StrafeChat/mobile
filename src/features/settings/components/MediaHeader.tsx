@@ -9,11 +9,14 @@ import { View } from 'react-native';
 import { Image } from 'expo-image';
 import { t } from '@web/i18n/t';
 import { useTheme } from '@/theme';
-import { Avatar, Icon, Spinner, Text, Touchable, onScrim, withAlpha } from '@/ui';
+import { Avatar, Icon, Spinner, Text, Touchable, onScrim, withAlpha, type AvatarUser } from '@/ui';
 
 export interface MediaHeaderProps {
   name: string;
   avatarUri?: string | null;
+  /** Whose picture this is, for a person (or bot): their default avatar shows without one.
+   * Left out for a space or an application, which keep the initial. */
+  avatarUser?: AvatarUser;
   bannerUri?: string | null;
   onPickAvatar?: () => void;
   onPickBanner?: () => void;
@@ -58,6 +61,7 @@ function CameraBadge() {
 export function MediaHeader({
   name,
   avatarUri,
+  avatarUser,
   bannerUri,
   onPickAvatar,
   onPickBanner,
@@ -138,7 +142,7 @@ export function MediaHeader({
             backgroundColor: c.card,
           }}
         >
-          <Avatar uri={avatarUri} name={name} size={avatarSize} shape={avatarShape} overlay={avatarOverlay} />
+          <Avatar uri={avatarUri} name={name} {...(avatarUser !== undefined ? { user: avatarUser } : {})} size={avatarSize} shape={avatarShape} overlay={avatarOverlay} />
           {onPickAvatar ? <CameraBadge /> : null}
           {avatarBusy ? (
             <View

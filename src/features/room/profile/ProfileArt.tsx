@@ -12,6 +12,8 @@ import { Touchable, UserAvatar, withAlpha } from '@/ui';
 
 export interface ProfileArtProps {
   userId: string;
+  /** Federation: their id on their home instance (picks their default avatar). */
+  originId?: string;
   displayName: string;
   avatar?: string;
   banner?: string;
@@ -27,13 +29,14 @@ export interface ProfileArtProps {
   hideStatus?: boolean;
 }
 
-export function ProfileArt({ userId, displayName, avatar, banner, bannerHeight, avatarSize, actions, onAvatarPress, rounded, hideStatus }: ProfileArtProps) {
+export function ProfileArt({ userId, originId, displayName, avatar, banner, bannerHeight, avatarSize, actions, onAvatarPress, rounded, hideStatus }: ProfileArtProps) {
   const theme = useTheme();
   const c = theme.colors;
   const radius = rounded ? theme.radii.xl : 0;
   const avatarNode = (
     <UserAvatar
       userId={userId}
+      user={{ userId, originId }}
       uri={avatar}
       name={displayName}
       size={avatarSize}

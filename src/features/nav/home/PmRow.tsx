@@ -51,9 +51,10 @@ export const PmRow = memo(function PmRow({ roomId, active, onScreen }: { roomId:
           <Icon name="fa-user-group" size={14} tone="muted" />
         </View>
       ) : row.otherUserId ? (
-        <UserAvatar userId={row.otherUserId} name={row.name} uri={row.avatar} size="md" ringColor={theme.colors.card} />
+        <UserAvatar userId={row.otherUserId} user={row.avatarUser} name={row.name} uri={row.avatar} size="md" ringColor={theme.colors.card} />
       ) : (
-        <Avatar name={row.name} uri={row.avatar} size="md" />
+        // Notes (you), or a deleted account (their default, from their id).
+        <Avatar name={row.name} uri={row.avatar} user={row.avatarUser ?? null} size="md" />
       )}
       <View style={styles.text}>
         <View style={styles.titleLine}>

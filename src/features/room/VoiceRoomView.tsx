@@ -46,7 +46,7 @@ export function VoiceRoomView({ info, onBack, onOpenInfo }: { info: RoomInfo; on
                 <ListRow
                   key={o.userId}
                   title={o.name}
-                  leading={<Avatar uri={o.avatar} name={o.name} size="md" />}
+                  leading={<Avatar uri={o.avatar} name={o.name} user={o.userId} size="md" />}
                   trailing={
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       {o.video ? <Icon name="video" size={13} tone="muted" accessibilityLabel={t('voice.status.video')} /> : null}

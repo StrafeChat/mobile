@@ -121,9 +121,16 @@ export function RoomInfoSheet({ info, mode, open, onClose, onThreadDeleted }: Ro
   const canOpenSettings = abilities.canManageRooms || abilities.canManageRoles;
   const hero: ReactNode =
     info.kind === 'pm' && info.recipientDeleted ? (
-      <Avatar name={info.name} size="xl" />
+      <Avatar name={info.name} user={info.otherUserId ?? null} size="xl" />
     ) : info.kind === 'pm' && info.otherUserId ? (
-      <UserAvatar userId={info.otherUserId} name={info.name} size="xl" ringColor={theme.colors.card} />
+      <UserAvatar
+        userId={info.otherUserId}
+        user={{ userId: info.otherUserId, originId: info.otherOriginId }}
+        uri={info.otherAvatar}
+        name={info.name}
+        size="xl"
+        ringColor={theme.colors.card}
+      />
     ) : (
       <View style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(theme.colors.primary, 0.2) }}>
         <Icon name={roomKindIcon(info.kind, { privateThread: info.thread?.private })} size={26} />

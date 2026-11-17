@@ -51,7 +51,7 @@ export function PeoplePicker({ open, title, people, selectedId, onPick, onClose 
             <ListRow
               title={personLabel(item)}
               subtitle={personLabel(item) !== item.username ? item.username : undefined}
-              leading={<Avatar uri={personAvatar(item)} name={personLabel(item)} size="md" />}
+              leading={<Avatar uri={personAvatar(item)} name={personLabel(item)} user={item} size="md" />}
               titleAccessory={<BotTag bot={item.bot} size="xs" style={{ marginStart: 6 }} />}
               selected={item.id === selectedId}
               onPress={() => {

@@ -89,7 +89,7 @@ internal class PushNotifier(context: Context) {
     val sender = Person.Builder()
       .setKey("user:${author.id}")
       .setName(author.name)
-      .apply { avatar(author.avatar, account)?.let { setIcon(IconCompat.createWithBitmap(it)) } }
+      .apply { avatar(author, account)?.let { setIcon(IconCompat.createWithBitmap(it)) } }
       .build()
     val text = PushContent.messageText(p, config.strings, config.preview)
     val message = NotificationCompat.MessagingStyle.Message(text, p.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis(), sender)
@@ -211,7 +211,7 @@ internal class PushNotifier(context: Context) {
     // `when` is the ring's start: Android drops a notification whose when + timeout has
     // already passed, so a call push delivered too late to matter never rings.
     if (p.timestamp > 0) builder.setWhen(p.timestamp).setShowWhen(true)
-    avatar(p.author?.avatar, account)?.let { builder.setLargeIcon(it) }
+    p.author?.let { avatar(it, account) }?.let { builder.setLargeIcon(it) }
     accentColor?.let { builder.setColor(it) }
     if (config.showsAccountLabel) builder.setSubText(account.label)
     // Ring like a phone until answered, declined or timed out, not one chime.
@@ -300,9 +300,16 @@ internal class PushNotifier(context: Context) {
   /** Our notifications' link key (see [PushContent.deepLink]). */
   private val linkKey: String by lazy { PushStore.get(context).linkKey() }
 
-  /** The author's avatar, when the URL is one the device may fetch ([PushContent.avatarAllowed]). */
-  private fun avatar(url: String?, account: DisplayAccount): android.graphics.Bitmap? =
-    if (PushContent.avatarAllowed(url, account.apiBase)) PushHttp.avatar(url) else null
+  /**
+   * The author's avatar, when the URL is one the device may fetch ([PushContent.avatarAllowed]);
+   * without one, or when it fails to load, their default avatar from the account's own
+   * instance ([PushContent.defaultAvatarUrl] - built from the app's config, not the push).
+   */
+  private fun avatar(author: PushAuthor, account: DisplayAccount): android.graphics.Bitmap? {
+    val own = author.avatar?.takeIf { it.isNotBlank() }
+    if (own != null && PushContent.avatarAllowed(own, account.apiBase)) PushHttp.avatar(own)?.let { return it }
+    return PushContent.defaultAvatarUrl(author.id, account.webOrigin)?.let { PushHttp.avatar(it) }
+  }
 
   private fun self(account: DisplayAccount, strings: PushStrings): Person =
     Person.Builder().setKey("self:${account.slot}").setName(account.label.ifEmpty { strings.appName }).build()

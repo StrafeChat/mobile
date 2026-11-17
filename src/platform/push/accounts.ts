@@ -6,10 +6,18 @@
  * moment behind a fresh sign-in, and the live one is what the instance knows.
  */
 import { activeDesktopAccountId, desktopAccounts, type DesktopAccount } from '@web/desktop/accounts';
+import { webOriginForApi } from '@web/lib/runtimeConfig';
 import { auth } from '@web/stores/auth';
 import { unreadableAccountIds } from '../overrides/packages/tauri-core';
 import type { PushAccount } from './api';
 import { slotFor } from './slots';
+
+/** The instance's web origin as runtimeConfig's publicWebOrigin finds it: the recorded one,
+ * else derived from the API URL. Where a push's default avatars come from. */
+function webOriginOf(instance: DesktopAccount['instance']): string {
+  if (typeof instance.webOrigin === 'string' && /^https?:\/\//i.test(instance.webOrigin)) return instance.webOrigin.replace(/\/+$/, '');
+  return webOriginForApi(instance.apiUrl, `https://${instance.domain}`);
+}
 
 function toPushAccount(a: DesktopAccount, active: boolean): PushAccount {
   return {
@@ -19,6 +27,7 @@ function toPushAccount(a: DesktopAccount, active: boolean): PushAccount {
     username: a.username,
     domain: a.instance.domain,
     apiBase: a.instance.apiUrl.replace(/\/+$/, ''),
+    webOrigin: webOriginOf(a.instance),
     token: active && auth.token ? auth.token : a.token,
   };
 }

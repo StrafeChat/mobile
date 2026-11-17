@@ -117,7 +117,7 @@ export function CreateGroupSheet({ open, onRequestClose, onClosed }: CreateGroup
                       accessibilityLabel={`${t('common.remove')} ${f.name}`}
                       style={[styles.chip, { borderRadius: theme.radii.full, backgroundColor: withAlpha(theme.colors.primary, 0.15) }]}
                     >
-                      <Avatar name={f.name} uri={f.avatar} size="xs" />
+                      <Avatar name={f.name} uri={f.avatar} user={f.id} size="xs" />
                       <Text variant="caption" tone="default" numberOfLines={1} style={styles.chipText}>
                         {f.name}
                       </Text>
@@ -152,7 +152,7 @@ export function CreateGroupSheet({ open, onRequestClose, onClosed }: CreateGroup
                     >
                       {on ? <Icon name="fa-check" size={11} color={theme.colors.primaryForeground} /> : null}
                     </View>
-                    <Avatar name={f.name} uri={f.avatar} size="md" />
+                    <Avatar name={f.name} uri={f.avatar} user={f.id} size="md" />
                     <View style={styles.flex}>
                       <Text variant="label" numberOfLines={1}>
                         {f.name}
@@ -232,7 +232,7 @@ export function AddPeopleSheet({ roomId, open, onRequestClose, onClosed }: AddPe
             <View style={[styles.list, { borderColor: theme.colors.border, borderRadius: theme.radii.lg }]}>
               {shown.map((f) => (
                 <View key={f.id} style={styles.friendRow}>
-                  <Avatar name={f.name} uri={f.avatar} size="md" />
+                  <Avatar name={f.name} uri={f.avatar} user={f.id} size="md" />
                   <View style={styles.flex}>
                     <Text variant="label" numberOfLines={1}>
                       {f.name}

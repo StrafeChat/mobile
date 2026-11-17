@@ -73,6 +73,12 @@ web/                     the web client (submodule, pinned) - do not edit from h
 - Theme only through `useTheme()` - every colour, radius and font size. No hex literals in
   components (except pure black scrims/shadows). Respect `theme.reduceMotion`.
 - Icons: `@expo/vector-icons` FontAwesome6 (the web uses Font Awesome; keep the same glyph).
+- Avatars: a person's (bots and deleted accounts included) passes `user` to `Avatar` (the row,
+  `{ userId, originId }` or the id; `UserAvatar` does it from `userId`), and without a picture,
+  or when it fails to load, shows their default avatar: the web's eight images, bundled from
+  `web/public/avatars/default/` (`src/ui/defaultAvatar.ts`), picked by the web's
+  `defaultAvatarIndex` on their home id. Spaces, rooms and applications leave `user` out and
+  keep the initial. Android push draws the same default from the instance's web origin.
 - Images: `expo-image` (SVG emoji, caching). Lists: `@shopify/flash-list`. Keyboard:
   `react-native-keyboard-controller`. Safe areas: `react-native-safe-area-context`.
 - Safe areas: screens pad only their top and bottom. Left and right insets (landscape: the

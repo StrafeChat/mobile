@@ -111,6 +111,10 @@ describe('PM list and the rail under Home', () => {
     expect(pmRowView('p-old', 'p-old')).toMatchObject({ unread: 0, canMarkRead: false });
     expect(pmRowView('p-new', null)).toMatchObject({ bot: true, unread: 0 });
     expect(pmRowView('g1', null)).toMatchObject({ isGroup: true, name: 'User c, User d', avatar: null, muted: true, unread: 1 });
+    // Whose default avatar a row shows: the other person; a group has the group glyph.
+    expect(pmRowView('p-old', null)?.avatarUser).toEqual({ userId: 'a' });
+    expect(pmRowView('g1', null)?.avatarUser).toBeUndefined();
+    expect(pmRowView('notes', null)?.avatarUser).toEqual({ userId: ME });
   });
 
   test('mark-as-read target: newest loaded snowflake, else last_message_id', () => {
@@ -137,6 +141,9 @@ describe('PM list and the rail under Home', () => {
     const row = pmRowView('p-gone', null);
     expect(row).toMatchObject({ name: 'common.deletedUser', deleted: true, avatar: null });
     expect(row?.otherUserId).toBeUndefined();
+    // Still their own default avatar, from their id.
+    expect(row?.avatarUser).toEqual({ userId: 'd' });
+    expect(roomInfo('p-gone')?.otherAvatar).toBeUndefined();
     expect(row?.subtitle).toBeUndefined();
     // Two participants: never mistaken for the Notes room.
     expect(pmRoomIds()).toEqual(['p-gone']);

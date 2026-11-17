@@ -85,7 +85,7 @@ function profileOf(m: SpaceMember) {
 
 function MemberAvatar({ member }: { member: SpaceMember }) {
   const view = profileOf(member);
-  return <Avatar uri={view.avatar} name={view.name} size="md" />;
+  return <Avatar uri={view.avatar} name={view.name} user={member} size="md" />;
 }
 
 export function RoleEditorScreen() {

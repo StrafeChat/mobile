@@ -23,6 +23,8 @@ export interface PushAccount {
   domain: string;
   /** The instance's API base URL, no trailing slash. */
   apiBase: string;
+  /** Where the instance's web client is served, no trailing slash (default avatars). */
+  webOrigin?: string;
   token: string;
 }
 

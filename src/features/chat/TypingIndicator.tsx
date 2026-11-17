@@ -49,7 +49,7 @@ export const TypingIndicator = memo(function TypingIndicator({ roomId }: { roomI
                   { zIndex: TYPING_MAX_FACES + 1 - i, borderColor: theme.colors.background, marginStart: i > 0 ? -6 : 0 },
                 ]}
               >
-                <Avatar uri={p.avatar ?? null} name={p.name} size={FACE} />
+                <Avatar uri={p.avatar ?? null} name={p.name} user={{ userId: p.id, originId: p.originId }} size={FACE} />
               </View>
             ))}
             {overflow > 0 ? (

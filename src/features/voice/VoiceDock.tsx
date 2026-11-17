@@ -72,7 +72,7 @@ function DockBar({ roomId, spaceId, style }: { roomId: string; spaceId: string |
     ...others.map((o) => ({
       key: `user-${o.userId}`,
       label: o.name,
-      leading: <Avatar uri={o.avatar} name={o.name} size="sm" />,
+      leading: <Avatar uri={o.avatar} name={o.name} user={o.userId} size="sm" />,
       onSelect: () => openVoiceUserSheet({ userId: o.userId, roomId, spaceId }),
     })),
     others.length > 0 && 'separator',
@@ -225,7 +225,7 @@ function DockAvatar({ userId, name, avatar, first }: { userId: string; name: str
         borderColor: speaking ? theme.colors.success : theme.colors.card,
       }}
     >
-      <Avatar uri={avatar} name={name} size={22} />
+      <Avatar uri={avatar} name={name} user={userId} size={22} />
     </View>
   );
 }

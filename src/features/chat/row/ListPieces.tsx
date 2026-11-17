@@ -112,14 +112,15 @@ function IntroIcon({ name }: { name: string }) {
 function PmIntro({ userId, deleted }: { userId: string; deleted: boolean }) {
   const { roomId } = useListContext();
   const user = useUserDisplay(userId, { roomId });
-  // A deleted account: "Deleted User", no picture or presence, and why nothing can be sent.
+  // A deleted account: "Deleted User", no picture or presence (their default avatar, from
+  // their id), and why nothing can be sent.
   const name = deleted || user?.deleted ? t('common.deletedUser') : user?.username || t('common.unknown');
   return (
     <View style={styles.introCenter}>
       {deleted ? (
-        <Avatar name={name} size="xl" />
+        <Avatar name={name} user={userId} size="xl" />
       ) : (
-        <UserAvatar userId={userId} uri={user?.avatar ?? null} name={name} size="xl" />
+        <UserAvatar userId={userId} user={{ userId, originId: user?.originId }} uri={user?.avatar ?? null} name={name} size="xl" />
       )}
       <View style={styles.introName}>
         <Text variant="heading">{name}</Text>

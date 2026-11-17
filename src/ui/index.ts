@@ -68,6 +68,8 @@ export { Skeleton, SkeletonText, SkeletonRow, type SkeletonProps } from './Skele
 
 // People
 export { Avatar, avatarInitial, avatarPixels, AVATAR_SIZES, type AvatarProps, type AvatarSize } from './Avatar';
+export { userDefaultAvatarIndex, userDefaultAvatarSource, DEFAULT_AVATAR_IMAGES } from './defaultAvatar';
+export { avatarRef, type AvatarRef, type AvatarUser } from './avatarRef';
 export { PresenceDot, presenceLabel, presenceColor, normalizePresence, type PresenceDotProps, type PresenceStatus } from './PresenceDot';
 export { UserPresenceDot, UserAvatar, useUserStatus, useUserCustomStatus, type UserPresenceDotProps, type UserAvatarProps } from './UserPresence';
 export { Badge, formatBadgeCount, type BadgeProps, type BadgeTone } from './Badge';

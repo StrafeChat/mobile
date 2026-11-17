@@ -103,6 +103,41 @@ describe('Avatar', () => {
     expect(screen.getByTestId('av-image', hidden)).toBeTruthy();
   });
 
+  // 3 << 22: default avatar index 3.
+  const PERSON = String(3n << 22n);
+  // Which bundled image the default shows (the asset mock wraps the source; its file names it).
+  const defaultShown = () => /default\/(\d)\.png/.exec(JSON.stringify(screen.getByTestId('av-default', hidden).props.source))?.[1];
+
+  it('gives a person without a picture their default avatar, not the initial', async () => {
+    await render(<Avatar name="bryden" user={PERSON} testID="av" />);
+    expect(defaultShown()).toBe('3');
+    expect(screen.queryByTestId('av-initial', hidden)).toBeNull();
+  });
+
+  it('picks the default from the home id of someone from another instance', async () => {
+    await render(<Avatar name="remote" user={{ userId: PERSON, originId: String(6n << 22n) }} testID="av" />);
+    expect(defaultShown()).toBe('6');
+  });
+
+  it('gives an unknown person (null) default 0', async () => {
+    await render(<Avatar name="?" user={null} testID="av" />);
+    expect(defaultShown()).toBe('0');
+  });
+
+  it("falls back to a person's default when their picture fails to load", async () => {
+    await render(<Avatar name="alice" uri="https://cdn.example/a.png" user={PERSON} testID="av" />);
+    expect(screen.queryByTestId('av-default', hidden)).toBeNull();
+    await fireEvent(screen.getByTestId('av-image', hidden), 'error', { nativeEvent: { error: 'boom' } });
+    expect(defaultShown()).toBe('3');
+    expect(screen.queryByTestId('av-initial', hidden)).toBeNull();
+  });
+
+  it('keeps the initial for a space (no user)', async () => {
+    await render(<Avatar name="Gaming" shape="rounded" testID="av" />);
+    expect(screen.getByTestId('av-initial', hidden)).toHaveTextContent('G');
+    expect(screen.queryByTestId('av-default', hidden)).toBeNull();
+  });
+
   it('is decorative unless labelled', async () => {
     await render(<Avatar name="alice" accessibilityLabel="alice's avatar" testID="av" />);
     expect(screen.getByRole('image', { name: "alice's avatar" })).toBeTruthy();

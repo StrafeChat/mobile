@@ -242,6 +242,7 @@ export function AccountScreen() {
       <MediaHeader
         name={name}
         avatarUri={me?.avatar}
+        avatarUser={me?.id ?? null}
         bannerUri={me?.banner}
         onPickAvatar={() => void changeImage('avatar')}
         onPickBanner={() => void changeImage('banner')}

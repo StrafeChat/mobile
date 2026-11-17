@@ -102,6 +102,20 @@ class PushContentTest {
   }
 
   @Test
+  fun defaultAvatarFollowsTheWebRule() {
+    // (id >> 22) % 8, as web/src/lib/defaultAvatar.ts.
+    assertEquals("https://chat.example.org/avatars/default/7.png", PushContent.defaultAvatarUrl("1234567890123456789", "https://chat.example.org"))
+    assertEquals("https://chat.example.org/avatars/default/5.png", PushContent.defaultAvatarUrl("20971520", "https://chat.example.org/"))
+    assertEquals("http://10.0.2.2:3000/avatars/default/0.png", PushContent.defaultAvatarUrl("1213", "http://10.0.2.2:3000"))
+    assertNull(PushContent.defaultAvatarUrl("1213", ""))
+    assertNull(PushContent.defaultAvatarUrl("1213", null))
+    assertNull(PushContent.defaultAvatarUrl("1213", "file:///data"))
+    assertNull(PushContent.defaultAvatarUrl("1213", "https://user:pw@chat.example.org"))
+    assertNull(PushContent.defaultAvatarUrl("12/../x", "https://chat.example.org"))
+    assertNull(PushContent.defaultAvatarUrl(null, "https://chat.example.org"))
+  }
+
+  @Test
   fun comparesSnowflakes() {
     assertTrue(PushContent.isAfter("1234567890123456790", "1234567890123456789"))
     assertFalse(PushContent.isAfter("1234567890123456789", "1234567890123456789"))
@@ -128,7 +142,7 @@ class PushContentTest {
   fun displayConfigSurvivesPersistence() {
     val config = DisplayConfig(
       strings = PushStrings(appName = "Strafe!", callFrom = "{{name}} ruft an"),
-      accounts = listOf(DisplayAccount("a", "1", "@alice", "https://x.example/api"), DisplayAccount("b", "2", "@bob@y.example", "https://y.example/api")),
+      accounts = listOf(DisplayAccount("a", "1", "@alice", "https://x.example/api", "https://x.example"), DisplayAccount("b", "2", "@bob@y.example", "https://y.example/api")),
       activeSlot = "b",
       preview = false,
       sounds = false,

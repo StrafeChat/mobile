@@ -1,6 +1,11 @@
 /**
- * Avatar: a user's (or a space's) picture, or the first letter of their name when there is
- * none or it fails to load - the web's MessageAvatar, sized for touch.
+ * Avatar: a person's (or a space's) picture - the web's MessageAvatar, sized for touch.
+ *
+ * Like the web's, it pictures either a person or a thing, and the caller says which: pass
+ * `user` for a person (bots included) and, with no picture or one that fails to load, they get
+ * their default avatar (`defaultAvatar.ts`, bundled). Pass whatever identifies them, even when
+ * it may be missing (`user={id ?? null}`: an unknown sender still gets one). Without `user`
+ * (a space, a room, an application) the fallback is the first letter of the name.
  *
  * It takes a ready URL. Building one (CDN base, size hints, federated users' home instance)
  * is the web libs' job; don't rebuild it here. expo-image caches on disk and in memory and
@@ -18,6 +23,7 @@ import { withAlpha } from './color';
 import { PresenceDot, type PresenceStatus } from './PresenceDot';
 import { Text } from './Text';
 import { useReduceMotion } from './motion';
+import { userDefaultAvatarSource, type AvatarUser } from './defaultAvatar';
 
 export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl';
 
@@ -35,6 +41,12 @@ export interface AvatarProps {
   uri?: string | null;
   /** Display name: the initial fallback and the default accessible label. */
   name: string;
+  /**
+   * Who this is, when it is a person: the user (`{ id, origin_id }` / `{ userId, originId }`)
+   * or their id; null for one we don't know. Their default avatar replaces the initial. Leave
+   * it out for spaces, rooms and applications, which keep the initial.
+   */
+  user?: AvatarUser;
   size?: AvatarSize | number;
   /** `circle` for people, `rounded` for spaces (the web's squircle). */
   shape?: 'circle' | 'rounded';
@@ -69,6 +81,7 @@ export function avatarPixels(size: AvatarSize | number): number {
 export function Avatar({
   uri,
   name,
+  user,
   size = 'lg',
   shape = 'circle',
   status,
@@ -88,6 +101,8 @@ export function Avatar({
 
   const radius = shape === 'circle' ? px / 2 : Math.round(px * 0.33);
   const showImage = !!uri && !failed;
+  // `undefined` is "not a person"; null is a person we can't identify (index 0).
+  const fallback = user !== undefined ? userDefaultAvatarSource(user) : null;
   const dot = Math.max(8, Math.round(px * 0.3));
   const corner = overlay ?? (status ? <PresenceDot status={status} size={dot} ringColor={ringColor ?? theme.colors.background} /> : null);
 
@@ -122,6 +137,16 @@ export function Avatar({
             recyclingKey={uri!}
             transition={reduce ? 0 : 120}
             onError={() => setFailed(true)}
+            accessible={false}
+          />
+        ) : fallback != null ? (
+          <Image
+            testID={testID ? `${testID}-default` : undefined}
+            source={fallback}
+            style={{ width: '100%', height: '100%' }}
+            contentFit="cover"
+            recyclingKey={`default:${fallback}`}
+            transition={0}
             accessible={false}
           />
         ) : (

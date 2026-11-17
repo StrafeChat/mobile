@@ -341,7 +341,7 @@ export function DeveloperAppScreen() {
         {app.has_bot ? (
           <>
             <SettingItem
-              leading={bot ? <Avatar uri={bot.avatar} name={bot.display_name || bot.username} size="lg" /> : undefined}
+              leading={bot ? <Avatar uri={bot.avatar} name={bot.display_name || bot.username} user={bot} size="lg" /> : undefined}
               icon={bot ? undefined : 'robot'}
               title={bot?.display_name || bot?.username || t('settings.developers.botActive')}
               titleAccessory={<BotTag bot />}
@@ -398,6 +398,7 @@ export function DeveloperAppScreen() {
           <MediaHeader
             name={bName.trim() || bot.display_name || bot.username}
             avatarUri={bot.avatar}
+            avatarUser={bot}
             bannerUri={bot.banner}
             onPickAvatar={() => void botImage('avatar')}
             onPickBanner={() => void botImage('banner')}

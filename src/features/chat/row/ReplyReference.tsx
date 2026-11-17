@@ -47,7 +47,7 @@ export const ReplyReference = memo(function ReplyReference({ roomId, messageId, 
       style={styles.line}
     >
       {glyph}
-      <Avatar uri={ref.authorAvatar ?? null} name={ref.authorName} size={16} />
+      <Avatar uri={ref.authorAvatar ?? null} name={ref.authorName} user={{ userId: ref.authorId, originId: ref.authorOriginId }} size={16} />
       <Text variant="caption" weight="semibold" color={withAlpha(theme.colors.foreground, 0.9)} numberOfLines={1} style={styles.name}>
         {ref.authorName}
       </Text>

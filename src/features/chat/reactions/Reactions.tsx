@@ -151,7 +151,7 @@ function ReactorRow({ reactor, roomId, onPress }: { reactor: Reactor; roomId: st
     <ListRow
       title={view.name}
       subtitle={reactor.username && reactor.username !== view.name ? reactor.username : undefined}
-      leading={<Avatar uri={view.avatar} name={view.name} size="md" />}
+      leading={<Avatar uri={view.avatar} name={view.name} user={reactor} size="md" />}
       onPress={onPress}
       accessibilityHint={reactor.id === auth.user?.id ? t('common.you') : undefined}
     />

@@ -105,7 +105,7 @@ function MemberCell({
       accessibilityHint={onPress ? t('mobile.settings.memberActionsHint') : undefined}
       style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 10, minHeight: 56, alignItems: 'center' }}
     >
-      <Avatar uri={view.avatar} name={name} size="lg" overlay={<View style={{ position: 'absolute', bottom: -1, end: -1, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: theme.colors.background, backgroundColor: online ? theme.colors.success : withAlpha(theme.colors.mutedForeground, 0.5) }} />} />
+      <Avatar uri={view.avatar} name={name} user={member} size="lg" overlay={<View style={{ position: 'absolute', bottom: -1, end: -1, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: theme.colors.background, backgroundColor: online ? theme.colors.success : withAlpha(theme.colors.mutedForeground, 0.5) }} />} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text weight="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>

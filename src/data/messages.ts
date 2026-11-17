@@ -313,6 +313,8 @@ export type ReplyReferenceView =
        * a window around it - jumpToMessage handles both). */
       loaded: boolean;
       authorId: string;
+      /** Federation: the author's id on their home instance (picks their default avatar). */
+      authorOriginId?: string;
       authorName: string;
       authorAvatar?: string;
       authorBot: boolean;
@@ -334,6 +336,7 @@ export function replyReferenceView(roomId: string, replyToId: string, embedded: 
     replyToId,
     loaded: !!loaded,
     authorId: replied.sender_id,
+    ...(sender.originId ? { authorOriginId: sender.originId } : {}),
     authorName: sender.name,
     ...(sender.avatar ? { authorAvatar: sender.avatar } : {}),
     authorBot: sender.bot === true,

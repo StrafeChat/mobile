@@ -33,6 +33,8 @@ import {
 
 export interface AccountRowView {
   id: string;
+  /** The account's user id on its own instance - its home id, so it picks the default avatar. */
+  userId: string;
   displayName: string;
   username: string;
   domain: string;
@@ -41,18 +43,21 @@ export interface AccountRowView {
 }
 
 /** Saved accounts, active first then most recently used. */
+function accountRows(): AccountRowView[] {
+  const active = activeAccountId();
+  return sortedAccounts().map((a) => ({
+    id: a.id,
+    userId: a.userId,
+    displayName: a.displayName || a.username,
+    username: a.username,
+    domain: a.instance.domain,
+    ...(a.avatar ? { avatar: a.avatar } : {}),
+    active: a.id === active,
+  }));
+}
+
 export function useSavedAccounts(): readonly AccountRowView[] {
-  return useSolid(() => {
-    const active = activeAccountId();
-    return sortedAccounts().map((a) => ({
-      id: a.id,
-      displayName: a.displayName || a.username,
-      username: a.username,
-      domain: a.instance.domain,
-      ...(a.avatar ? { avatar: a.avatar } : {}),
-      active: a.id === active,
-    }));
-  });
+  return useSolid(accountRows);
 }
 
 /** `@name · domain`, the line under an account's name (SavedAccounts.tsx). */
@@ -99,7 +104,7 @@ export function accountMenu(a: AccountRowView, onSwitch: (id: string) => void): 
 }
 
 function AccountAvatar({ a, size = 'lg' }: { a: AccountRowView; size?: 'md' | 'lg' }) {
-  return <Avatar uri={a.avatar ?? null} name={a.displayName} size={size} />;
+  return <Avatar uri={a.avatar ?? null} name={a.displayName} user={a.userId} size={size} />;
 }
 
 /**
@@ -209,15 +214,7 @@ export function closeAccountSwitcher(): void {
 
 /** The same choices in the shared action sheet, for a tree with no switcher sheet mounted. */
 export async function showAccountSwitcherActionSheet(): Promise<void> {
-  const active = activeAccountId();
-  const rows: AccountRowView[] = sortedAccounts().map((a) => ({
-    id: a.id,
-    displayName: a.displayName || a.username,
-    username: a.username,
-    domain: a.instance.domain,
-    ...(a.avatar ? { avatar: a.avatar } : {}),
-    active: a.id === active,
-  }));
+  const rows = accountRows();
   await showActionSheet(
     [
       ...rows.map((a) => ({

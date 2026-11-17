@@ -74,7 +74,7 @@ export const MessageCard = memo(function MessageCard({ message, roomId, spaceId,
         accessibilityLabel={name}
         hitSlop={6}
       >
-        <Avatar uri={author?.avatar} name={name} size="md" />
+        <Avatar uri={author?.avatar} name={name} user={{ userId: message.sender_id, originId: author?.originId }} size="md" />
       </Touchable>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

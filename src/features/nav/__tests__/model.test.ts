@@ -240,7 +240,7 @@ describe('small helpers', () => {
   test('notification rows: requests first, then recent; space ids from hrefs', () => {
     const rows = notificationRows(
       [{ userId: 'u', name: 'U', username: 'u' }],
-      [{ roomId: 'r', href: '/spaces/s1/rooms/r', name: 'general', context: 'S', mention: true, count: 2, avatar: null, isChannel: true, lastMessageId: '5' }],
+      [{ roomId: 'r', href: '/spaces/s1/rooms/r', name: 'general', context: 'S', mention: true, count: 2, avatar: null, avatarUser: null, isChannel: true, isGroup: false, lastMessageId: '5' }],
     );
     expect(rows.map((r) => r.kind)).toEqual(['header', 'request', 'header', 'item']);
     expect(spaceIdFromHref('/spaces/s1/rooms/r')).toBe('s1');

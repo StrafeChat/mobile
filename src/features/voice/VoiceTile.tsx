@@ -116,7 +116,7 @@ export const VoiceTile = memo(function VoiceTile({ tile, roomId, spaceId, width,
           ) : null}
         </View>
       ) : (
-        <Avatar uri={tile.avatar} name={tile.name} size={avatarPx} />
+        <Avatar uri={tile.avatar} name={tile.name} user={tile.userId} size={avatarPx} />
       )}
 
       {showVideo ? (

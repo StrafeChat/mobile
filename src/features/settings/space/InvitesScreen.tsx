@@ -46,7 +46,7 @@ function InviteCard({ invite, busy, onRevoke }: { invite: SpaceInvite; busy: boo
   return (
     <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Avatar uri={invite.inviter?.avatar} name={inviter} size="md" />
+        <Avatar uri={invite.inviter?.avatar} name={inviter} user={invite.inviter ?? null} size="md" />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text weight="semibold" numberOfLines={1}>
             {inviter}

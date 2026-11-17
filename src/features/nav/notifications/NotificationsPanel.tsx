@@ -16,7 +16,7 @@ import { removeRelationshipLocally, relationships } from '@web/stores/relationsh
 import { ackRoomOptimistic } from '@web/stores/readState';
 import { auth } from '@web/stores/auth';
 import { popoverSubjectFromParticipant } from '@web/lib/userProfilePopoverHelpers';
-import { useIncomingFriendRequests, useNotificationItems, type FriendRequestRow, type NotificationItem } from '@/data';
+import { useIncomingFriendRequests, useNotificationItems, type FriendRequestRow, type NotificationRow } from '@/data';
 import { presentProfileSheet } from '@/platform/presenters';
 import { openRoom } from '@/shell/state';
 import { useTheme } from '@/theme';
@@ -27,7 +27,7 @@ import { openPmWith } from '../navigation';
 type Row =
   | { kind: 'header'; key: string; title: string }
   | { kind: 'request'; key: string; request: FriendRequestRow }
-  | { kind: 'item'; key: string; item: NotificationItem };
+  | { kind: 'item'; key: string; item: NotificationRow };
 
 /** The space id a feed row's href names (`/spaces/:sid/rooms/:rid`), null for a PM. */
 export function spaceIdFromHref(href: string): string | null {
@@ -35,7 +35,7 @@ export function spaceIdFromHref(href: string): string | null {
 }
 
 /** The feed as list rows: requests, then recent. Pure. */
-export function notificationRows(requests: readonly FriendRequestRow[], items: readonly NotificationItem[]): Row[] {
+export function notificationRows(requests: readonly FriendRequestRow[], items: readonly NotificationRow[]): Row[] {
   const out: Row[] = [];
   if (requests.length) {
     out.push({ kind: 'header', key: 'h:requests', title: t('mobile.notifications.friendRequests') });
@@ -70,7 +70,7 @@ const RequestCard = memo(function RequestCard({
   return (
     <View style={[styles.card, { borderColor: withAlpha(theme.colors.border, 0.7), backgroundColor: withAlpha(theme.colors.card, 0.4), borderRadius: theme.radii.lg }]}>
       <Touchable feedback="opacity" onPress={openProfile} accessibilityLabel={request.name} style={styles.cardIdentity}>
-        <Avatar name={request.name} uri={request.avatar} size={36} />
+        <Avatar name={request.name} uri={request.avatar} user={request.userId} size={36} />
         <View style={styles.flex}>
           <Text variant="label" numberOfLines={1}>
             {request.name}
@@ -88,7 +88,7 @@ const RequestCard = memo(function RequestCard({
   );
 });
 
-const FeedRow = memo(function FeedRow({ item }: { item: NotificationItem }) {
+const FeedRow = memo(function FeedRow({ item }: { item: NotificationRow }) {
   const theme = useTheme();
   const spaceId = spaceIdFromHref(item.href);
   const menu = useLongPressActions(
@@ -120,8 +120,13 @@ const FeedRow = memo(function FeedRow({ item }: { item: NotificationItem }) {
         <View style={[styles.channelGlyph, { backgroundColor: withAlpha(theme.colors.muted, 0.6) }]}>
           <Icon name="fa-hashtag" size={13} tone="muted" />
         </View>
+      ) : item.isGroup ? (
+        // A group PM has no picture of its own: the group glyph, as in the PM list.
+        <View style={[styles.channelGlyph, { backgroundColor: withAlpha(theme.colors.muted, 0.6) }]}>
+          <Icon name="fa-user-group" size={13} tone="muted" />
+        </View>
       ) : (
-        <Avatar name={item.name} uri={item.avatar} size={36} />
+        <Avatar name={item.name} uri={item.avatar} user={item.avatarUser} size={36} />
       )}
       <View style={styles.flex}>
         <Text variant="label" numberOfLines={1}>

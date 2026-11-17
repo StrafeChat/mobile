@@ -109,6 +109,9 @@ export interface PmRowView {
   /** A 1:1 whose other account an administrator deleted: "Deleted User", read-only. */
   deleted: boolean;
   avatar: string | null;
+  /** Whose default avatar a 1:1 shows without a picture: the other person (by their id even
+   * when deleted), or you in Notes. Undefined for groups, which show the group glyph. */
+  avatarUser?: { userId: string; originId?: string };
   bot: boolean;
   /** 1:1 with the instance's official account (OFFICIAL tag, read-only composer). */
   system: boolean;
@@ -123,6 +126,12 @@ export interface PmRowView {
   latestMessageId: string | null;
   /** RoomsBar offers Mark as read only with something to ack and something unread. */
   canMarkRead: boolean;
+}
+
+/** The person a 1:1's default avatar is for: the other participant, or yourself (Notes). */
+function pmAvatarUser(other: { id: string; origin_id?: string } | undefined, uid: string): { avatarUser?: { userId: string; originId?: string } } {
+  if (other) return { avatarUser: { userId: other.id, ...(other.origin_id ? { originId: other.origin_id } : {}) } };
+  return uid ? { avatarUser: { userId: uid } } : {};
 }
 
 /**
@@ -158,7 +167,8 @@ export function pmRowView(roomId: string, onScreenRoomId: string | null): PmRowV
     name: pmDisplayName(room, uid),
     ...(isGroup || !other || deleted ? {} : { otherUserId: other.id }),
     deleted,
-    avatar: isGroup || deleted ? null : (other?.avatar ?? null),
+    avatar: isGroup || deleted ? null : (other?.avatar ?? (uid && isNotesRoom(room, uid) ? (auth.user?.avatar ?? null) : null)),
+    ...(isGroup ? {} : pmAvatarUser(other, uid)),
     bot: !isGroup && other?.bot === true,
     system: !isGroup && other?.system === true,
     ...(subtitle ? { subtitle } : {}),
@@ -213,6 +223,10 @@ export interface RoomInfo {
   /** 1:1 PMs: the other person (still set when their account was deleted: the intro and the
    * profile sheet, which then offers only Copy User ID, need the id). */
   otherUserId?: string;
+  /** 1:1 PMs: the other person's picture (none once their account was deleted) and home id,
+   * for the header's avatar (their default without one). */
+  otherAvatar?: string;
+  otherOriginId?: string;
   /** A 1:1 whose other account an administrator deleted (stores/rooms isPmWithDeletedUser):
    * history stays readable, nothing new goes in - no composer, no calls, no presence. */
   recipientDeleted: boolean;
@@ -295,6 +309,8 @@ export function roomInfo(roomId: string, spaceId?: string | null): RoomInfo | un
     ...(r.topic ? { topic: r.topic } : {}),
     e2ee: r.type === ROOM_TYPE_PM || (r.type === ROOM_TYPE_GROUP && r.e2ee_enabled !== false),
     ...(other ? { otherUserId: other.id } : {}),
+    ...(other?.avatar && !recipientDeleted ? { otherAvatar: other.avatar } : {}),
+    ...(other?.origin_id ? { otherOriginId: other.origin_id } : {}),
     recipientDeleted,
     bot: other?.bot === true,
     official: other?.system === true,

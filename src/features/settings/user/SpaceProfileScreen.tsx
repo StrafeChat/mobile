@@ -396,6 +396,7 @@ export function SpaceProfileScreen({ initialSpaceId = null }: { initialSpaceId?:
       <MediaHeader
         name={view.name}
         avatarUri={view.avatar}
+        avatarUser={me?.id ?? null}
         bannerUri={view.banner}
         onPickAvatar={known ? () => void changeImage('avatar') : undefined}
         onPickBanner={known ? () => void changeImage('banner') : undefined}

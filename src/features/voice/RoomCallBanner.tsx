@@ -49,7 +49,7 @@ export function RoomCallBanner({ roomId }: { roomId: string }) {
           <View style={{ flexDirection: 'row', alignItems: 'center' }} accessible accessibilityLabel={t('voice.participants', { count: others.length })}>
             {shown.map((o, i) => (
               <View key={o.userId} style={{ marginStart: i === 0 ? 0 : -6, borderRadius: 12, borderWidth: 2, borderColor: theme.colors.background }}>
-                <Avatar uri={o.avatar} name={o.name} size={20} />
+                <Avatar uri={o.avatar} name={o.name} user={o.userId} size={20} />
               </View>
             ))}
             {overflow > 0 ? (

@@ -17,6 +17,8 @@ export interface TypingPerson {
   id: string;
   name: string;
   avatar?: string;
+  /** Federation: their id on their home instance (picks their default avatar). */
+  originId?: string;
 }
 
 /** Ids typing in a room, oldest first, without yourself. Re-renders when that list changes. */
@@ -32,7 +34,7 @@ export function useTypingPeople(roomId: string): TypingPerson[] {
     () =>
       getTypingUserIds(roomId, auth.user?.id).map((id) => {
         const d = userDisplay(id, { roomId });
-        return { id, name: d.name, ...(d.avatar ? { avatar: d.avatar } : {}) };
+        return { id, name: d.name, ...(d.avatar ? { avatar: d.avatar } : {}), ...(d.originId ? { originId: d.originId } : {}) };
       }),
     deepEqual,
   );

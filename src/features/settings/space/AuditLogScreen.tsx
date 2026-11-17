@@ -36,7 +36,7 @@ function Entry({ entry, lookups, open, onToggle }: { entry: AuditLogEntry; looku
       style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12 }}
     >
       <View>
-        <Avatar uri={actor?.avatar} name={auditUserName(entry.user_id, lookups)} size="lg" />
+        <Avatar uri={actor?.avatar} name={auditUserName(entry.user_id, lookups)} user={actor ?? entry.user_id} size="lg" />
         <View
           style={{
             position: 'absolute',

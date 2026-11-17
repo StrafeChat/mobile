@@ -29,6 +29,8 @@ export interface CompletionPerson extends SpaceProfileFields {
   username: string;
   display_name?: string;
   avatar?: string;
+  /** Federation: their id on their home instance (picks their default avatar). */
+  origin_id?: string;
   bot?: boolean;
 }
 
@@ -64,7 +66,7 @@ export interface CompletionContext {
 }
 
 export type Candidate =
-  | { kind: 'user'; key: string; label: string; sublabel: string; insertText: string; userId: string; avatar?: string; bot: boolean }
+  | { kind: 'user'; key: string; label: string; sublabel: string; insertText: string; userId: string; originId?: string; avatar?: string; bot: boolean }
   | { kind: 'role'; key: string; label: string; sublabel: string; colorHex: string; insertText: string }
   | { kind: 'channel'; key: string; label: string; sublabel: string; insertText: string }
   | { kind: 'special'; key: string; label: string; sublabel: string; insertText: string }
@@ -148,6 +150,7 @@ export function computeCompletion(draft: string, caret: number, ctx: CompletionC
         sublabel: isSelf ? t('common.you') : `@${username}`,
         insertText: `@${username} `,
         userId: p.id,
+        ...(p.origin_id ? { originId: p.origin_id } : {}),
         ...(view.avatar ? { avatar: view.avatar } : {}),
         bot: p.bot === true,
       });

@@ -65,6 +65,7 @@ class DisplayAccountRecord : Record {
   @Field var userId: String = ""
   @Field var label: String = ""
   @Field var apiBase: String = ""
+  @Field var webOrigin: String = ""
   @Field var token: String? = null
 }
 
@@ -177,7 +178,7 @@ class StrafePushModule : Module() {
       val accounts = record.accounts.filter { Slots.isValid(it.slot) }
       val config = DisplayConfig(
         strings = record.strings.toStrings(),
-        accounts = accounts.map { DisplayAccount(it.slot, it.userId, it.label, it.apiBase.trimEnd('/')) },
+        accounts = accounts.map { DisplayAccount(it.slot, it.userId, it.label, it.apiBase.trimEnd('/'), it.webOrigin.trimEnd('/')) },
         activeSlot = record.activeSlot?.takeIf { Slots.isValid(it) },
         preview = record.preview,
         sounds = record.sounds,

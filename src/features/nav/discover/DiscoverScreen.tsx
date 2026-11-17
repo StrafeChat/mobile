@@ -120,7 +120,7 @@ const BotCard = memo(function BotCard({ entry }: { entry: DiscoverEntry }) {
   return (
     <View style={[styles.card, styles.botCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.card, borderRadius: theme.radii.xl }]}>
       <View style={styles.botHead}>
-        <Avatar name={name} uri={bot.bot?.avatar || bot.icon} size={48} shape="rounded" />
+        <Avatar name={name} uri={bot.bot?.avatar || bot.icon} user={bot.bot ?? bot.application_id} size={48} shape="rounded" />
         <View style={styles.flex}>
           <Text variant="heading" numberOfLines={1}>
             {name}

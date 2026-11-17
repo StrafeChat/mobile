@@ -87,7 +87,7 @@ function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open:
         <Text variant="label">{t('spaceSettings.danger.transferSelect')}</Text>
         {target ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: theme.radii.md, backgroundColor: withAlpha(theme.colors.primary, 0.1) }}>
-            <Avatar uri={targetView?.avatar} name={targetView?.name ?? ''} size="md" />
+            <Avatar uri={targetView?.avatar} name={targetView?.name ?? ''} user={target} size="md" />
             <View style={{ flex: 1 }}>
               <Text weight="semibold">{targetView?.name}</Text>
               <Text variant="caption">{formatHandle(target)}</Text>
@@ -111,7 +111,7 @@ function TransferSheet({ data, open, onClose }: { data: SpaceSettingsData; open:
                     accessibilityLabel={`${view.name}, ${formatHandle(item)}`}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, minHeight: 48 }}
                   >
-                    <Avatar uri={view.avatar} name={view.name} size="md" />
+                    <Avatar uri={view.avatar} name={view.name} user={item} size="md" />
                     <View style={{ flex: 1 }}>
                       <Text numberOfLines={1}>{view.name}</Text>
                       <Text variant="caption" numberOfLines={1}>

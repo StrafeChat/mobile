@@ -168,9 +168,9 @@ const DmRailItem = memo(function DmRailItem({ roomId }: { roomId: string }) {
             <Icon name="fa-user-group" size={18} tone="muted" />
           </View>
         ) : row.otherUserId ? (
-          <UserAvatar userId={row.otherUserId} name={row.name} uri={row.avatar} size={ICON} ringColor={theme.colors.background} />
+          <UserAvatar userId={row.otherUserId} user={row.avatarUser} name={row.name} uri={row.avatar} size={ICON} ringColor={theme.colors.background} />
         ) : (
-          <Avatar name={row.name} uri={row.avatar} size={ICON} />
+          <Avatar name={row.name} uri={row.avatar} user={row.avatarUser ?? null} size={ICON} />
         )}
         <Badge count={row.unread} ringColor={theme.colors.background} style={styles.cornerBadge} />
       </Touchable>

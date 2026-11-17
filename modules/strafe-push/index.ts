@@ -75,6 +75,9 @@ export interface DisplayAccount {
   label: string;
   /** The account's instance API base URL (no trailing slash). */
   apiBase: string;
+  /** Where the instance's web client is served (no trailing slash). Android draws an author
+   * without an avatar with their default avatar from it (`/avatars/default/<i>.png`). */
+  webOrigin?: string;
   /** Android only: the session token, for the Mark as read / Decline actions. Stored encrypted. */
   token?: string;
 }

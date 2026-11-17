@@ -143,6 +143,7 @@ const PersonRow = memo(function PersonRow({
         <Avatar
           name={name}
           uri={rel.user.avatar}
+          user={userId}
           size="lg"
           overlay={kind === 'friend' ? <PresenceDot status={live.status} size={12} ringColor={theme.colors.background} /> : undefined}
         />

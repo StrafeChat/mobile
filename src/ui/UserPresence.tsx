@@ -39,10 +39,13 @@ export interface UserAvatarProps extends Omit<AvatarProps, 'status' | 'overlay'>
   hideStatus?: boolean;
 }
 
-export function UserAvatar({ userId, hideStatus, ringColor, size = 'lg', ...rest }: UserAvatarProps) {
+export function UserAvatar({ userId, hideStatus, ringColor, size = 'lg', user, ...rest }: UserAvatarProps) {
   const px = avatarPixels(size);
   return (
     <Avatar
+      // A person: their default avatar when they have no picture (`user` when the caller knows
+      // their home id, else the registry finds it from userId).
+      user={user ?? userId}
       size={size}
       ringColor={ringColor}
       overlay={

@@ -73,7 +73,7 @@ function Bans({ data, setError }: { data: SpaceSettingsData; setError: (m: strin
         const by = b.banned_by_user?.display_name || b.banned_by_user?.username || t('common.someone');
         return (
           <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}>
-            <Avatar uri={b.user?.avatar} name={banName(b)} size="lg" />
+            <Avatar uri={b.user?.avatar} name={banName(b)} user={b.user ?? b.user_id} size="lg" />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text weight="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>

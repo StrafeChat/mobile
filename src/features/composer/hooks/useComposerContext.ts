@@ -34,6 +34,7 @@ function person(p: RoomParticipant & SpaceProfileFields): CompletionPerson {
     username: p.username,
     ...(p.display_name ? { display_name: p.display_name } : {}),
     ...(p.avatar ? { avatar: p.avatar } : {}),
+    ...(p.origin_id ? { origin_id: p.origin_id } : {}),
     ...(p.bot ? { bot: true } : {}),
   };
   for (const key of SPACE_PROFILE_KEYS) {

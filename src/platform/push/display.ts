@@ -61,6 +61,7 @@ export function buildDisplayConfig(inputs: DisplayInputs): DisplayConfig {
     userId: a.userId,
     label: accountLabel(a, localDomain),
     apiBase: a.apiBase,
+    ...(a.webOrigin ? { webOrigin: a.webOrigin } : {}),
     ...(inputs.includeTokens ? { token: a.token } : {}),
   }));
   return {

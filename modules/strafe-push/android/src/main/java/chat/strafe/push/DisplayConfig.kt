@@ -77,8 +77,12 @@ data class PushStrings(
   }
 }
 
-/** One signed-in account. Its session token is not here: that is stored encrypted, apart. */
-data class DisplayAccount(val slot: String, val userId: String, val label: String, val apiBase: String)
+/**
+ * One signed-in account. Its session token is not here: that is stored encrypted, apart.
+ * [webOrigin] is where the instance's web client is served (no trailing slash; empty when the
+ * app did not say): an author without an avatar gets their default from it.
+ */
+data class DisplayAccount(val slot: String, val userId: String, val label: String, val apiBase: String, val webOrigin: String = "")
 
 /** What `setDisplayConfig` gave us, as persisted (minus tokens) for pushes that arrive while JS isn't running. */
 data class DisplayConfig(
@@ -99,7 +103,7 @@ data class DisplayConfig(
       "accounts",
       JSONArray().apply {
         accounts.forEach {
-          put(JSONObject().put("slot", it.slot).put("userId", it.userId).put("label", it.label).put("apiBase", it.apiBase))
+          put(JSONObject().put("slot", it.slot).put("userId", it.userId).put("label", it.label).put("apiBase", it.apiBase).put("webOrigin", it.webOrigin))
         }
       },
     )
@@ -115,7 +119,7 @@ data class DisplayConfig(
         val a = list.optJSONObject(i) ?: return@mapNotNull null
         val slot = a.optString("slot")
         if (!Slots.isValid(slot)) return@mapNotNull null
-        DisplayAccount(slot, a.optString("userId"), a.optString("label"), a.optString("apiBase").trimEnd('/'))
+        DisplayAccount(slot, a.optString("userId"), a.optString("label"), a.optString("apiBase").trimEnd('/'), a.optString("webOrigin").trimEnd('/'))
       }
       return DisplayConfig(
         strings = PushStrings.fromJson(o.optJSONObject("strings")),

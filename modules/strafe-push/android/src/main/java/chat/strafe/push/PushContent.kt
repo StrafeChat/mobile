@@ -1,5 +1,6 @@
 package chat.strafe.push
 
+import java.math.BigInteger
 import java.net.InetAddress
 import java.net.URI
 import java.net.URLEncoder
@@ -84,6 +85,28 @@ object PushContent {
   }
 
   private val SNOWFLAKE = Regex("^[0-9]{1,20}$")
+
+  /** How many default avatars there are (the web's DEFAULT_AVATAR_COUNT; fixed). */
+  private const val DEFAULT_AVATAR_COUNT = 8
+
+  /**
+   * The default avatar of a user without one: `<web origin>/avatars/default/<i>.png`, the web
+   * client's lib/defaultAvatar rule, `i = (id >> 22) % 8`. [userId] is the id the push names
+   * them by (for someone from another instance this instance's id, which may pick another
+   * colour than at home). Null without a usable http(s) web origin or a snowflake id.
+   */
+  fun defaultAvatarUrl(userId: String?, webOrigin: String?): String? {
+    if (!isSnowflake(userId)) return null
+    val origin = webOrigin?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
+    val uri = try {
+      URI(origin)
+    } catch (e: Exception) {
+      return null
+    }
+    if ((uri.scheme != "https" && uri.scheme != "http") || uri.host == null || uri.userInfo != null) return null
+    val index = BigInteger(userId!!).shiftRight(22).mod(BigInteger.valueOf(DEFAULT_AVATAR_COUNT.toLong()))
+    return "$origin/avatars/default/$index.png"
+  }
 
   /** An id as the instance writes them: a snowflake, digits only. */
   fun isSnowflake(id: String?): Boolean = id != null && SNOWFLAKE.matches(id)

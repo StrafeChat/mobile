@@ -40,7 +40,7 @@ function BlockedRow({ userId }: { userId: string }) {
 
   return (
     <SettingItem
-      leading={<Avatar uri={user?.avatar} name={name} size="lg" />}
+      leading={<Avatar uri={user?.avatar} name={name} user={user ?? userId} size="lg" />}
       title={name}
       description={user ? formatHandle(user) : undefined}
       trailing={<Button title={t('userMenu.unblock')} size="sm" variant="outline" loading={busy} onPress={() => void unblock()} />}

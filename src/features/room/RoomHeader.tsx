@@ -101,9 +101,16 @@ export function RoomHeader({ info, mode, onBack, onOpenInfo }: RoomHeaderProps) 
 
   const leading =
     info.kind === 'pm' && info.recipientDeleted ? (
-      <Avatar name={info.name} size="md" />
+      <Avatar name={info.name} user={info.otherUserId ?? null} size="md" />
     ) : info.kind === 'pm' && info.otherUserId ? (
-      <UserAvatar userId={info.otherUserId} name={info.name} size="md" ringColor={theme.colors.card} />
+      <UserAvatar
+        userId={info.otherUserId}
+        user={{ userId: info.otherUserId, originId: info.otherOriginId }}
+        uri={info.otherAvatar}
+        name={info.name}
+        size="md"
+        ringColor={theme.colors.card}
+      />
     ) : (
       <Icon name={roomKindIcon(info.kind, { privateThread: info.thread?.private })} size={16} tone="muted" />
     );

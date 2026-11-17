@@ -87,7 +87,7 @@ function MemberPickerSheet({
                 accessibilityLabel={`${view.name}, ${formatHandle(item)}`}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingVertical: 6 }}
               >
-                <Avatar uri={view.avatar} name={view.name} size="md" />
+                <Avatar uri={view.avatar} name={view.name} user={item} size="md" />
                 <View style={{ flex: 1 }}>
                   <Text numberOfLines={1}>{view.name}</Text>
                   <Text variant="caption" numberOfLines={1}>
@@ -232,7 +232,7 @@ function Permissions({ data, setError }: { data: RoomSettingsData; setError: (m:
           return (
             <SettingItem
               key={o.user_id}
-              leading={<Avatar uri={view?.avatar} name={view?.name ?? o.user_id} size="sm" />}
+              leading={<Avatar uri={view?.avatar} name={view?.name ?? o.user_id} user={member ?? o.user_id} size="sm" />}
               title={view?.name ?? o.user_id}
               description={summary(o)}
               chevron
@@ -333,7 +333,7 @@ function OverrideEditor({ data, target, setError }: { data: RoomSettingsData; ta
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 12 }}>
-        {member ? <Avatar uri={memberView?.avatar} name={name} size="lg" /> : null}
+        {member ? <Avatar uri={memberView?.avatar} name={name} user={member} size="lg" /> : null}
         <View style={{ flex: 1 }}>
           <Text variant="heading">{name}</Text>
           <Text variant="caption">{target.kind === 'role' ? t('roomSettings.roleOverride') : t('roomSettings.memberOverride')}</Text>

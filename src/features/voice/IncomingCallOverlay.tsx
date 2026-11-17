@@ -100,7 +100,7 @@ function IncomingCallBody({ roomId, startedBy }: { roomId: string; startedBy: st
 
       <View style={{ alignItems: 'center', gap: 20, maxWidth: 420 }} accessible accessibilityLabel={`${t('voice.incoming.title')}. ${subtitle}`} accessibilityLiveRegion="assertive">
         <PulseRings color={withAlpha(theme.colors.primary, 0.5)} size={avatarSize}>
-          <Avatar uri={callerView?.avatar} name={callerName} size={avatarSize} />
+          <Avatar uri={callerView?.avatar} name={callerName} user={{ userId: startedBy, originId: caller?.origin_id }} size={avatarSize} />
         </PulseRings>
         <View style={{ alignItems: 'center', gap: 6 }}>
           <Text variant="title" align="center" numberOfLines={2}>

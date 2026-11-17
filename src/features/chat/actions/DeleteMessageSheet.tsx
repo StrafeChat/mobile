@@ -80,7 +80,7 @@ function DeleteMessageSheet({ request, onClose }: { request: DeleteRequest | nul
       dismissible={!busy}
     >
       <View style={[styles.preview, { borderColor: theme.colors.border, backgroundColor: theme.colors.background, borderRadius: theme.radii.lg }]}>
-        <Avatar uri={sender?.avatar ?? null} name={sender?.name ?? '?'} size="lg" />
+        <Avatar uri={sender?.avatar ?? null} name={sender?.name ?? '?'} user={{ userId: msg.sender_id, originId: sender?.originId }} size="lg" />
         <View style={styles.flex}>
           <View style={styles.head}>
             <Text variant="label" weight="semibold" numberOfLines={1} style={styles.shrink}>

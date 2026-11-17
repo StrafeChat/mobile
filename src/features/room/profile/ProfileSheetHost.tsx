@@ -406,6 +406,7 @@ export function ProfileSheetHost() {
     <Sheet open={open && !!live.subject} onClose={close} scrollable padded={false} testID="profile-sheet">
       <ProfileArt
         userId={subject.userId}
+        originId={subject.originId}
         displayName={subject.displayName}
         avatar={subject.avatar}
         banner={subject.banner}

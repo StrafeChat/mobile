@@ -265,6 +265,7 @@ export function FullProfileScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
           <ProfileArt
             userId={subject.userId}
+            originId={'originId' in subject ? subject.originId : undefined}
             displayName={subject.displayName}
             avatar={subject.avatar}
             banner={subject.banner}

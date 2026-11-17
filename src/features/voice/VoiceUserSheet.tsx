@@ -129,7 +129,7 @@ function VoiceUserSheetBody({ target }: { target: VoiceUserTarget }) {
   const header = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 }}>
       <View style={{ borderRadius: 24, borderWidth: 2, borderColor: speaking ? theme.colors.success : 'transparent' }}>
-        <Avatar uri={display.avatar} name={display.name} size="lg" />
+        <Avatar uri={display.avatar} name={display.name} user={userId} size="lg" />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="heading" numberOfLines={1} accessibilityRole="header">

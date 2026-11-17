@@ -18,7 +18,7 @@ import { PermAdministrator, SPACE_ROLE_PERM_ROWS } from '@web/lib/spacePermissio
 import { setSelectedSpaceId, openNav } from '@/shell/state';
 import { useMe } from '@/data';
 import { useTheme } from '@/theme';
-import { Avatar, Button, Checkbox, EmptyState, Icon, ListSection, Select, Spinner, Text, withAlpha } from '@/ui';
+import { Avatar, Button, Checkbox, EmptyState, Icon, ListSection, Select, Spinner, Text, withAlpha, type AvatarUser } from '@/ui';
 import { FormCard, Note, SettingItem } from './components/rows';
 import { SettingsScreen } from './components/SettingsScreen';
 import { useLocale } from './hooks/useLocale';
@@ -192,9 +192,11 @@ export function OAuthAuthorizeScreen() {
     router.dismissTo('/' as Href);
   }
 
-  const header = (title: string, avatar?: string | null, name?: string) => (
+  // `bot`: a bot is a user (its default avatar from its id, the client id); a plain application
+  // keeps its initial.
+  const header = (title: string, avatar?: string | null, name?: string, bot?: AvatarUser) => (
     <View style={{ alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingBottom: 16 }}>
-      <Avatar uri={avatar} name={name ?? title} size="xl" shape="rounded" />
+      <Avatar uri={avatar} name={name ?? title} {...(bot !== undefined ? { user: bot } : {})} size="xl" shape="rounded" />
       <Text variant="title" align="center">
         {title}
       </Text>
@@ -262,7 +264,7 @@ export function OAuthAuthorizeScreen() {
       testID="oauth-consent"
     >
       {wantsBot
-        ? header(t('oauth.botTitle', { bot: botName }), info.bot?.avatar || info.application.icon, botName)
+        ? header(t('oauth.botTitle', { bot: botName }), info.bot?.avatar || info.application.icon, botName, info.bot ?? info.application.id)
         : header(t('oauth.title', { app: appName }), info.application.icon, appName)}
 
       {wantsBot ? (

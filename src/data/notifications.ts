@@ -10,13 +10,24 @@
  */
 import { notificationItems, notificationBadgeCount, incomingFriendRequests, type NotificationItem } from '@web/lib/mobileNotifications';
 import { friendDisplayName } from '@web/stores/relationships';
+import { avatarRef, type AvatarRef } from '@/ui/avatarRef';
 import { deepEqual, useDerived } from './derived';
 
-export type { NotificationItem };
+/** A feed row: the web's item, with whose default avatar a 1:1 shows as plain data (the web
+ * hands over the participant row itself, a store proxy). Null for a channel or a group. */
+export type NotificationRow = Omit<NotificationItem, 'avatarUser'> & { avatarUser: AvatarRef | null };
 
 /** The "Recent" rows. Re-renders when an item appears, goes, or changes count. */
-export function useNotificationItems(): NotificationItem[] {
-  return useDerived('notificationItems', () => notificationItems().map((i) => ({ ...i })), deepEqual);
+export function useNotificationItems(): NotificationRow[] {
+  return useDerived(
+    'notificationItems',
+    () =>
+      notificationItems().map(({ avatarUser, ...i }) => ({
+        ...i,
+        avatarUser: i.isChannel || i.isGroup || avatarUser == null ? null : avatarRef(avatarUser),
+      })),
+    deepEqual,
+  );
 }
 
 export interface FriendRequestRow {

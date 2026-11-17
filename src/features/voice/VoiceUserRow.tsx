@@ -77,7 +77,7 @@ export const VoiceUserRow = memo(function VoiceUserRow({ roomId, spaceId, userId
       ]}
     >
       <View style={{ borderRadius: 14, borderWidth: 2, borderColor: speaking ? theme.colors.success : 'transparent' }}>
-        <Avatar uri={who.avatar} name={who.name} size="sm" />
+        <Avatar uri={who.avatar} name={who.name} user={userId} size="sm" />
       </View>
       <Text variant="label" weight="regular" numberOfLines={1} color={speaking ? theme.colors.foreground : theme.colors.mutedForeground} style={{ flex: 1, minWidth: 0 }}>
         {who.name}
