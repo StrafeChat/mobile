@@ -14,9 +14,13 @@ import { t } from '@web/i18n/t';
 import { createPM } from '@web/api/rooms';
 import { translateCaughtApiError } from '@web/lib/formatApiError';
 import { addOrUpdateRoom } from '@web/stores/rooms';
+import { jumpToMessage, loadMessages, messages } from '@web/stores/messages';
 import { isExternalLink, requestOpenExternalLink } from '@web/stores/externalLink';
+import { parseRoomLinkPath, resolveRoomLink, roomLinkFromUrl, type RoomLink } from '@web/lib/roomLinks';
 import { openNav, openRoom, setSelectedSpaceId } from '@/shell/state';
 import { showActionSheet, toast } from '@/ui';
+
+const ROOM_TYPE_THREAD = 6;
 
 /** A caught API error in the reader's language (the web's translation), or the generic line. */
 export function errorText(err: unknown): string {
@@ -75,11 +79,12 @@ export function messageUser(userId: string): void {
 }
 
 /**
- * Where an in-app link points, by path on this instance: a room, a space room, or an invite.
- * Null for anything else (it opens in the browser).
+ * Where an in-app link points, by path on this instance: a room or a message in it (the web's
+ * `/spaces/:s/rooms/:r[/:m]`, `/rooms/:r[/:m]`, lib/roomLinks), or an invite. Null for anything
+ * else (it opens in the browser).
  */
 export type InternalTarget =
-  | { kind: 'room'; roomId: string; spaceId: string | null }
+  | ({ kind: 'room' } & RoomLink)
   | { kind: 'invite'; code: string };
 
 export function internalTarget(href: string): InternalTarget | null {
@@ -89,10 +94,8 @@ export function internalTarget(href: string): InternalTarget | null {
   } catch {
     return null;
   }
-  const room = /^\/rooms\/(\d+)\/?$/.exec(path);
-  if (room) return { kind: 'room', roomId: room[1]!, spaceId: null };
-  const spaceRoom = /^\/spaces\/(\d+)\/rooms\/(\d+)\/?$/.exec(path);
-  if (spaceRoom) return { kind: 'room', roomId: spaceRoom[2]!, spaceId: spaceRoom[1]! };
+  const room = parseRoomLinkPath(path);
+  if (room) return { kind: 'room', ...room };
   const invite = /^\/invite\/([^/]+)\/?$/.exec(path);
   if (invite) {
     try {
@@ -105,18 +108,56 @@ export function internalTarget(href: string): InternalTarget | null {
 }
 
 /**
- * Follow a link from a message. External links go through the web's guard (a trusted domain
- * opens straight away, anything else asks first - the room area renders that confirmation);
- * links to this instance open in the app where we can, else in the browser.
+ * Open a room link in the app, as the web does (lib/openRoomLink): the room in the shell, a
+ * thread on its own screen, then the message through the store's jump (scrolled to when
+ * loaded, a window loaded around it when not). A room that does not exist or that this account
+ * may not see says so in a toast. Resolves true when the room opened.
+ */
+export async function openRoomLink(link: RoomLink): Promise<boolean> {
+  const target = await resolveRoomLink(link);
+  if (!target) {
+    toast.error(t('messages.roomLink.unavailableBody'));
+    return false;
+  }
+  const { roomId, spaceId, messageId } = target;
+  if (target.type === ROOM_TYPE_THREAD && spaceId) {
+    backToShell();
+    openThread(roomId, spaceId);
+  } else {
+    navigateToRoom(roomId, spaceId);
+  }
+  if (!messageId) return true;
+  try {
+    await jumpToMessage(roomId, messageId);
+  } catch {
+    // The window around it could not be loaded; show the room as it would open anyway.
+    if (messages.byRoom[roomId] === undefined) loadMessages(roomId).catch(() => undefined);
+    toast.error(t('messages.roomLink.messageMissingBody'));
+    return true;
+  }
+  if (!messages.byRoom[roomId]?.some((m) => m.id === messageId)) toast(t('messages.roomLink.messageMissingTitle'));
+  return true;
+}
+
+/**
+ * Follow a link from a message. A link to a room or message here - or on another instance, for
+ * a room mirrored here - opens in the app; other external links go through the web's guard (a
+ * trusted domain opens straight away, anything else asks first - the room area renders that
+ * confirmation); invites open the invite screen; anything else on this instance, the browser.
  */
 export function openMessageLink(href: string): void {
+  const room = roomLinkFromUrl(href);
+  if (room) {
+    void openRoomLink(room);
+    return;
+  }
   if (isExternalLink(href)) {
     requestOpenExternalLink(href);
     return;
   }
   const target = internalTarget(href);
   if (target?.kind === 'room') {
-    navigateToRoom(target.roomId, target.spaceId);
+    void openRoomLink(target);
     return;
   }
   if (target?.kind === 'invite') {

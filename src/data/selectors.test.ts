@@ -4,6 +4,7 @@
  * ones (rooms, spaces, readState, presence...); only the gateway, voice and messages modules
  * are the stand-ins from webMocks.
  */
+import { orPerms } from '@web/lib/permBits';
 import { beforeEach, describe, expect, test } from '@jest/globals';
 import './testing/webMocks';
 import { setRooms } from '@web/stores/rooms';
@@ -28,7 +29,7 @@ import { PermChangeNickname, PermManageNicknames } from './spaceProfileCompat';
 
 beforeEach(resetStores);
 
-const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
+const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages), { name: '@everyone' });
 
 describe('space rail badges', () => {
   beforeEach(() => {
@@ -395,7 +396,7 @@ describe('space profiles: who a person is inside a space', () => {
   });
 
   test('abilities: Change Nickname from @everyone, Manage Nicknames from a role', () => {
-    const sp = space('s1', [role('ev', 0, PermViewChannel | PermChangeNickname, { name: '@everyone' }), role('mods', 4, PermManageNicknames)]);
+    const sp = space('s1', [role('ev', 0, orPerms(PermViewChannel, PermChangeNickname), { name: '@everyone' }), role('mods', 4, PermManageNicknames)]);
     expect(spaceAbilities(sp, sp.roles, member(ME), ME)).toMatchObject({ canChangeOwnNickname: true, canManageNicknames: false });
     expect(spaceAbilities(sp, sp.roles, member(ME, ['mods']), ME)).toMatchObject({ canChangeOwnNickname: true, canManageNicknames: true });
     const locked = space('s1', [EVERYONE]);

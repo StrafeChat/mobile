@@ -34,9 +34,11 @@ import type { RoomParticipant } from '@web/api/rooms';
 import {
   augmentParticipants,
   getMessagePreviewSource,
-  getSenderDisplay,
+  getMessageSenderDisplay,
   messagePreviewText,
+  type SenderDisplay,
 } from '@web/components/messageList/utils';
+import { messageAuthorKey } from '@web/lib/webhookMessages';
 import { snapshot, useSolid } from '@/bridge/solid';
 import { deepEqual, sameArray, useDerived } from './derived';
 import { useSolidScope } from './scope';
@@ -240,6 +242,7 @@ export function useMessageList(roomId: string, entry: EntrySnapshot, opts: { inv
         ...(m.pending ? { pending: true } : {}),
         ...(m.mention_everyone ? { mention_everyone: true } : {}),
         ...(m.mentions?.length ? { mentions: [...m.mentions] } : {}),
+        ...(m.webhook_id ? { authorKey: messageAuthorKey(m) } : {}),
       }));
       const currentUserId = auth.user?.id ?? null;
       const model = buildMessageList({
@@ -318,6 +321,11 @@ export type ReplyReferenceView =
       authorName: string;
       authorAvatar?: string;
       authorBot: boolean;
+      /** A webhook's or bridged person's message: its WEBHOOK / platform tag (never the bot's
+       * BOT tag), and `authorId` is the webhook or puppet id (its default avatar), not a person. */
+      authorWebhook?: SenderDisplay['webhook'];
+      /** A bridged person's own name colour, when their bridge allows it. */
+      authorColour?: string;
       /** One line, mentions resolved, markdown stripped, max 90 chars; '' = "(no text)". In
        * an E2EE room the embedded copy is ciphertext, so it reads as the loading placeholder. */
       preview: string;
@@ -329,17 +337,20 @@ export function replyReferenceView(roomId: string, replyToId: string, embedded: 
   if (!replied) return { state: 'missing', replyToId };
   const pool = roomParticipantPool(roomId);
   const me = auth.user?.id;
-  // In a space room the pool is the member list, so the author shows by their space profile.
-  const sender = getSenderDisplay(replied.sender_id, pool, me);
+  // In a space room the pool is the member list, so the author shows by their space profile;
+  // a webhook's or bridged message by the identity it was posted under.
+  const sender = getMessageSenderDisplay(replied, pool, me);
   return {
     state: 'found',
     replyToId,
     loaded: !!loaded,
-    authorId: replied.sender_id,
+    authorId: sender.webhook ? sender.userId : replied.sender_id,
     ...(sender.originId ? { authorOriginId: sender.originId } : {}),
     authorName: sender.name,
     ...(sender.avatar ? { authorAvatar: sender.avatar } : {}),
     authorBot: sender.bot === true,
+    ...(sender.webhook ? { authorWebhook: snapshot(sender.webhook) } : {}),
+    ...(sender.colour ? { authorColour: sender.colour } : {}),
     // A bot's embed-only message reads as its first embed's title or description (only for a
     // message this client read in the clear).
     preview: messagePreviewText(getMessagePreviewSource(replied), pool, me, 90),

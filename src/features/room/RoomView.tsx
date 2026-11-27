@@ -20,6 +20,7 @@ import { useIsWide } from '@/shell/SwipeShell';
 import { useTheme } from '@/theme';
 import { Button, EmptyState, Header, Spinner } from '@/ui';
 import { RoomBanners } from './RoomBanners';
+import { BridgeComposerHint } from './bridges/BridgeUi';
 import { RoomHeader } from './RoomHeader';
 import { RoomInfoSheet } from './RoomInfoSheet';
 import { VoiceRoomView } from './VoiceRoomView';
@@ -127,6 +128,7 @@ function Conversation({ info, mode }: { info: RoomInfo; mode: RoomMode }) {
           <MessageList roomId={info.id} spaceId={spaceId} screen={mode === 'screen'} />
         </View>
         <TypingIndicator roomId={info.id} />
+        {spaceId && info.kind !== 'thread' ? <BridgeComposerHint spaceId={spaceId} roomId={info.id} /> : null}
         <Composer roomId={info.id} spaceId={spaceId} {...(bodyHeight > 0 ? { maxHeight: bodyHeight - TYPING_ROW_HEIGHT } : {})} />
       </View>
       <RoomInfoSheet info={info} mode={mode} open={infoOpen} onClose={() => setInfoOpen(false)} onThreadDeleted={onThreadDeleted} />

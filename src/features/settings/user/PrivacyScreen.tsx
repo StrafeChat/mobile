@@ -2,9 +2,13 @@
  * Privacy & safety - the mobile home for settings the web spreads over several places, all of
  * them the same shared state: the people you have blocked (with unblock; the web shows them on
  * the Friends page), whether notifications show message text, link previews in encrypted
- * chats (off by default: making one sends the link to the server), and showing your birthday.
+ * chats (off by default: making one sends the link to the server), showing your birthday, and
+ * Bridges (spec 5.9, the web's Privacy page): the account default for whether bridges may copy
+ * your messages to other platforms, and the spaces with a bridged room, each one tap from its
+ * own "Bridge privacy" choice. The server enforces it on every bridge's feed.
  */
 import { useEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { unblockUser } from '@web/api/relationships';
 import { removeRelationshipLocally } from '@web/stores/relationships';
@@ -14,8 +18,13 @@ import { confirmDialog } from '@web/stores/confirmDialog';
 import { getMe, patchMe, toAuthUser } from '@web/api/users';
 import { auth, setAuthUser } from '@web/stores/auth';
 import { formatHandle } from '@web/stores/instance';
-import { useFriendIds, useNotificationPrefs, useRelationship, useSettings } from '@/data';
-import { Avatar, Button, ListSection } from '@/ui';
+import { setAccountBridgeConsent } from '@web/api/bridges';
+import { ensureAccountBridgeConsent, ensureSpaceBridgeConsent, setAccountConsentLocal } from '@web/stores/bridges';
+import { openSpaceBridgeConsent } from '@web/stores/bridgeConsentDialog';
+import { translateCaughtApiError } from '@web/lib/formatApiError';
+import { useBridgeConsent, useBridgedSpaces, useFriendIds, useNotificationPrefs, useRelationship, useSettings } from '@/data';
+import { openBridgesLearnMore } from '@/features/room/bridges/learnMore';
+import { Avatar, Button, ListSection, Text } from '@/ui';
 import { Note, SettingItem, SettingToggle } from '../components/rows';
 import { SettingsScreen } from '../components/SettingsScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -45,6 +54,82 @@ function BlockedRow({ userId }: { userId: string }) {
       description={user ? formatHandle(user) : undefined}
       trailing={<Button title={t('userMenu.unblock')} size="sm" variant="outline" loading={busy} onPress={() => void unblock()} />}
     />
+  );
+}
+
+/** A bridged space's row: its own choice (use my default / allowed / not allowed). */
+function BridgedSpaceRow({ spaceId, name, platforms }: { spaceId: string; name: string; platforms: string }) {
+  const consent = useBridgeConsent(spaceId);
+  useEffect(() => {
+    void ensureSpaceBridgeConsent(spaceId);
+  }, [spaceId]);
+  const state =
+    consent.spaceState === 'allow' ? t('privacy.bridges.spaceAllow') : consent.spaceState === 'deny' ? t('privacy.bridges.spaceDeny') : t('privacy.bridges.spaceInherit');
+  return (
+    <SettingItem
+      icon="layer-group"
+      title={name}
+      description={`${t('privacy.bridges.bridgedWith', { platforms })} · ${state}`}
+      chevron
+      onPress={() => openSpaceBridgeConsent(spaceId)}
+      testID={`bridged-space-${spaceId}`}
+    />
+  );
+}
+
+function BridgesSection() {
+  const consent = useBridgeConsent(null);
+  const bridged = useBridgedSpaces();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    void ensureAccountBridgeConsent();
+  }, []);
+  const allowed = consent.account !== 'deny';
+
+  async function setAllowed(on: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    const value = on ? 'allow' : 'deny';
+    try {
+      await setAccountBridgeConsent(value);
+      setAccountConsentLocal(value);
+    } catch (e) {
+      setError(translateCaughtApiError(e, t).join(' '));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <ListSection title={t('privacy.bridges.title')}>
+        <SettingToggle
+          icon="bridge"
+          title={t('privacy.bridges.allow')}
+          description={allowed ? t('privacy.bridges.allowOn') : t('privacy.bridges.allowOff')}
+          error={error}
+          value={allowed}
+          busy={busy}
+          disabled={consent.account === undefined}
+          onValueChange={(on) => void setAllowed(on)}
+          testID="bridge-consent-default"
+        />
+      </ListSection>
+      <Note>{`${t('privacy.bridges.intro')} ${t('privacy.bridges.offNote')}`}</Note>
+      <Button title={t('bridges.learnMore')} variant="link" size="sm" style={{ alignSelf: 'flex-start', marginHorizontal: 16 }} onPress={openBridgesLearnMore} />
+
+      <ListSection title={t('privacy.bridges.perSpaceTitle')} footer={t('privacy.bridges.perSpaceHint')}>
+        {bridged.length === 0 ? (
+          <View style={{ padding: 16 }}>
+            <Text variant="caption">{t('privacy.bridges.noBridgedSpaces')}</Text>
+          </View>
+        ) : (
+          bridged.map((x) => <BridgedSpaceRow key={x.spaceId} spaceId={x.spaceId} name={x.name} platforms={x.platforms} />)
+        )}
+      </ListSection>
+    </>
   );
 }
 
@@ -113,6 +198,8 @@ export function PrivacyScreen() {
           onValueChange={(on) => void toggleBirthday(on)}
         />
       </ListSection>
+
+      <BridgesSection />
 
       <ListSection title={t('friends.sections.blocked', { count: blocked.length })}>
         {blocked.length === 0 ? (

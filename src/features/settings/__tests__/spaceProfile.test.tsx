@@ -7,6 +7,7 @@
  * the server's limits counted its way, and a space whose member list is not loaded getting no
  * one-member list from this screen.
  */
+import { orPerms } from '@web/lib/permBits';
 import './settingsTestSetup';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
@@ -28,7 +29,7 @@ jest.mock('@/data/spaceProfileCompat', () => {
 
 const compat = jest.requireMock('@/data/spaceProfileCompat') as { getSpaceMember: jest.Mock; patchSpaceMember: jest.Mock };
 
-const CAN_NICK = PermViewChannel | PermSendMessages | PermChangeNickname;
+const CAN_NICK = orPerms(PermViewChannel, PermSendMessages, PermChangeNickname);
 
 function seed(opts: { everyone?: number; spaces?: string[]; mine?: Parameters<typeof member>[2] } = {}) {
   const ids = opts.spaces ?? ['S'];
@@ -151,7 +152,7 @@ describe('space profile screen', () => {
   });
 
   it('without Change Nickname the nickname field is hidden, and a reset leaves it out', async () => {
-    seed({ everyone: PermViewChannel | PermSendMessages, mine: { nick: 'Set by a mod', space_bio: 'mine' } });
+    seed({ everyone: orPerms(PermViewChannel, PermSendMessages), mine: { nick: 'Set by a mod', space_bio: 'mine' } });
     compat.patchSpaceMember.mockImplementationOnce(async () => answer({ nick: 'Set by a mod' }) as never);
     await render(<SpaceProfileScreen initialSpaceId="S" />);
     await waitFor(() => expect(screen.getByTestId('space-profile-pronouns').props.editable).not.toBe(false));
@@ -170,7 +171,7 @@ describe('space profile screen', () => {
   });
 
   it('a reset with only a locked nickname set is not offered', async () => {
-    seed({ everyone: PermViewChannel | PermSendMessages, mine: { nick: 'Set by a mod' } });
+    seed({ everyone: orPerms(PermViewChannel, PermSendMessages), mine: { nick: 'Set by a mod' } });
     await render(<SpaceProfileScreen initialSpaceId="S" />);
     await waitFor(() => expect(screen.getByTestId('space-profile-pronouns').props.editable).not.toBe(false));
     expect(screen.getAllByText('Set by a mod').length).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
 /**
  * One message in the list (the body of the web's MessageListView <For>): a group's first row
- * with avatar, name (role colour), BOT / OFFICIAL tags and time; a continuation pulled tight
+ * with avatar, name (role colour), BOT / OFFICIAL / WEBHOOK or platform tags and time; a continuation pulled tight
  * under it; the reply line and its spine; the body; attachments; a bot's embeds; the thread
  * strip; reactions.
  *
@@ -16,6 +16,11 @@
  * would hide everything inside it from VoiceOver, so the avatar, the reply line, attachments
  * (play, open, save), a bot's embeds, the thread strip and the reactions each stay their own.
  *
+ * A webhook's or bridged message shows the identity it was posted under (data/webhooks
+ * useMessageAuthor): its name, avatar (or the default picked from the webhook or bridged
+ * person's id), its tag, and a bridged person's own colour when their bridge allows it. Its
+ * name and avatar open its card, never a profile, and its menu has no person actions.
+ *
  * Embeds show where the list allows them (a plain room, "Show embeds from bots" on); a file an
  * embed already shows as its picture is left out of the attachments, and a link an embed
  * already carries gets no preview card of its own (the web's rules).
@@ -29,10 +34,10 @@ import type { DecryptedMessage } from '@web/stores/messages';
 import { formatMessageTimestamp, formatTimeOfDay } from '@web/lib/utils/datetime';
 import { formatSystemMessageText, getMessageBodyText, isEdited, messagePreviewText } from '@web/components/messageList/utils';
 import { attachmentsBesideEmbeds, safeHttpUrl } from '@web/lib/embeds/messageEmbeds';
-import { isPlaceholderBody, roomParticipantPool, useMessage, useUserDisplay, type MessageListItem } from '@/data';
+import { isPlaceholderBody, maskedAuthorLabel, roomParticipantPool, useMessage, useMessageAuthor, type MessageListItem } from '@/data';
 import { useSolid } from '@/bridge/solid';
 import { useTheme } from '@/theme';
-import { Avatar, BotTag, OfficialTag, Text, Touchable, useLongPress, withAlpha } from '@/ui';
+import { Avatar, BotTag, OfficialTag, Text, Touchable, WebhookTag, useLongPress, withAlpha } from '@/ui';
 import { composerFor, startReply } from '@/features/composer/state';
 import { dismissKeyboard } from '@/ui/keyboard';
 import { MessageAttachments } from '../attachments/Attachments';
@@ -42,7 +47,7 @@ import { EditedMarker } from '../body/inline';
 import { showMessageActions } from '../actions/messageActions';
 import { FLASH_FADE_MS, FLASH_HOLD_MS, useFlashNonce } from '../flash';
 import { AVATAR_GAP, AVATAR_PX, ROW_PAD_X } from '../layout';
-import { openUserProfile, showAuthorMenu } from '../people';
+import { openMessageAuthor, showMessageAuthorMenu } from '../people';
 import { MessageReactionsRow } from '../reactions/Reactions';
 import { ReplyReference } from './ReplyReference';
 import { SwipeToReply } from './SwipeToReply';
@@ -51,6 +56,8 @@ import { ThreadFooter } from './ThreadFooter';
 import { useListContext } from './listContext';
 import { activateBodyTarget, bodyActionIndex, bodyActionName, bodyTargets } from './messageA11y';
 import { sameMessageItem } from '../list/listLogic';
+// Its module directly, not '@/features/room' (that index pulls RoomView, which pulls the chat).
+import { openBridgesLearnMore } from '@/features/room/bridges/learnMore';
 
 type MessageItem = Extract<MessageListItem, { kind: 'message' }>;
 
@@ -58,6 +65,7 @@ const NO_EMBEDS: NonNullable<DecryptedMessage['embeds']> = [];
 
 /** System lines (joins, pins, calls...): centred, muted, no avatar, no actions. */
 function SystemRow({ msg }: { msg: DecryptedMessage }) {
+  const theme = useTheme();
   const { roomId } = useListContext();
   const text = useSolid(
     () =>
@@ -68,10 +76,25 @@ function SystemRow({ msg }: { msg: DecryptedMessage }) {
       ),
     [msg, roomId],
   );
+  // A bridge's notice links to what bridges do with messages and how to opt out.
+  const bridgeNotice = msg.system_type === 'bridge_created' || msg.system_type === 'bridge_deleted';
   return (
     <View style={styles.system} accessibilityRole="text">
       <Text variant="caption" align="center">
         {text}
+        {bridgeNotice ? (
+          <>
+            {' '}
+            <RNText
+              onPress={openBridgesLearnMore}
+              accessibilityRole="link"
+              style={{ color: theme.colors.primary, fontWeight: '600' }}
+              testID="bridge-learn-more"
+            >
+              {t('bridges.learnMore')}
+            </RNText>
+          </>
+        ) : null}
       </Text>
     </View>
   );
@@ -116,7 +139,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const ctx = useListContext();
   const { roomId, spaceId, compact } = ctx;
   const userCtx = { roomId, spaceId };
-  const sender = useUserDisplay(msg.sender_id, userCtx);
+  const sender = useMessageAuthor(msg, userCtx);
   // FlashList recycles rows: state that belongs to one message resets when the row shows another.
   const [timeFor, setTimeFor] = useState<string | null>(null);
   const showTime = timeFor === msg.id;
@@ -128,7 +151,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const realId = !msg.pending && !msg.id.startsWith('temp-');
   const openActions = useCallback(() => showMessageActions(msg.id, { roomId, spaceId }), [msg.id, roomId, spaceId]);
   const rowLongPress = useLongPress(openActions);
-  const authorLongPress = useLongPress(() => showAuthorMenu(msg.sender_id, userCtx));
+  const authorLongPress = useLongPress(() => showMessageAuthorMenu(msg, userCtx));
   const reply = useCallback(() => startReply(roomId, msg.id), [roomId, msg.id]);
 
   const name = sender?.name ?? t('common.unknown');
@@ -139,7 +162,9 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const edited = isEdited(msg) && msg.updated_at ? (
     <EditedMarker label={t('messages.editedAt', { time: formatMessageTimestamp(new Date(msg.updated_at)) })} />
   ) : null;
-  const openProfile = () => openUserProfile(msg.sender_id, userCtx);
+  const openProfile = () => openMessageAuthor(msg, userCtx);
+  // A webhook's or bridged person's name reads with what it is ("Alice (Discord)"), never as a member's.
+  const spokenName = (sender && maskedAuthorLabel(sender)) || name;
   const canReply = ctx.canReply && realId;
   // The gesture only when the person turned it on (see ../preferences); the accessibility
   // action below is there either way.
@@ -159,9 +184,9 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
     () => [
       { name: 'longpress', label: t('mobile.ui.showActions') },
       ...(canReply ? [{ name: 'reply', label: t('messages.actions.reply') }] : []),
-      ...(authorAction ? [{ name: 'profile', label: t('mobile.chat.openProfileOf', { name }) }] : []),
+      ...(authorAction ? [{ name: 'profile', label: t('mobile.chat.openProfileOf', { name: spokenName }) }] : []),
     ],
-    [canReply, authorAction, name],
+    [canReply, authorAction, spokenName],
   );
   // Read once per text, like the preview: the names go stale only until the text changes. The
   // row's own labels are passed so that no target reads like one of them (see messageA11y.ts).
@@ -223,8 +248,9 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
         compact ? (
           <>
             {nameText}
-            {sender?.bot || sender?.system ? ' ' : ''}
+            {sender?.bot || sender?.system || sender?.webhook ? ' ' : ''}
             {sender?.bot ? <BotTag bot size="xs" /> : null}
+            {sender?.webhook ? <WebhookTag webhook={sender.webhook} size="xs" /> : null}
             {sender?.system ? <OfficialTag system size="xs" /> : null}
             <RNText style={{ color: theme.colors.mutedForeground, fontSize: theme.font(11) }}>{`  ${formatMessageTimestamp(created)}  ·  `}</RNText>
           </>
@@ -289,11 +315,17 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
                 onPress={openProfile}
                 {...authorLongPress}
                 accessibilityRole="button"
-                accessibilityLabel={name}
+                accessibilityLabel={spokenName}
                 accessibilityHint={t('mobile.chat.openProfile')}
                 style={msg.reply_to_id ? styles.avatarAfterReply : null}
               >
-                <Avatar uri={sender?.avatar ?? null} name={name} user={{ userId: msg.sender_id, originId: sender?.originId }} size={AVATAR_PX} />
+                <Avatar
+                  uri={sender?.avatar ?? null}
+                  name={name}
+                  // A webhook's or bridged person's default avatar comes from its own id.
+                  user={sender?.webhook ? sender.userId : { userId: msg.sender_id, originId: sender?.originId }}
+                  size={AVATAR_PX}
+                />
               </Touchable>
             ) : showTime ? (
               <Text variant="caption" style={styles.gutterTime} numberOfLines={1} adjustsFontSizeToFit>
@@ -307,7 +339,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
           <View
             accessible
             accessibilityRole="text"
-            accessibilityLabel={`${name}, ${formatMessageTimestamp(created)}: ${preview}`}
+            accessibilityLabel={`${spokenName}, ${formatMessageTimestamp(created)}: ${preview}`}
             accessibilityHint={t('mobile.chat.messageHint')}
             accessibilityActions={a11yActions}
             onAccessibilityAction={onA11yAction}
@@ -319,6 +351,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
               <View style={styles.header}>
                 <View style={styles.nameWrap}>{nameText}</View>
                 <BotTag bot={sender?.bot} size="sm" />
+                <WebhookTag webhook={sender?.webhook} size="sm" />
                 <OfficialTag system={sender?.system} size="sm" />
                 <Text variant="caption" numberOfLines={1} style={styles.time}>
                   {formatMessageTimestamp(created)}

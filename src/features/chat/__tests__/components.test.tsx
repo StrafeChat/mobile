@@ -323,7 +323,7 @@ describe('message list', () => {
     const req = actionSheetStore.get();
     expect(req).toBeTruthy();
     const labels = (req?.entries ?? []).filter(isActionItem).map((i) => i.label);
-    expect(labels).toEqual(['Add reaction', 'Copy text', 'Copy message ID', 'Reply', 'Pin message', 'Report message']);
+    expect(labels).toEqual(['Add reaction', 'Copy text', 'Copy message ID', 'Copy message link', 'Reply', 'Pin message', 'Report message']);
   });
 
   test('your own message offers edit and delete; Reply goes to the composer', async () => {
@@ -335,7 +335,7 @@ describe('message list', () => {
     const mine = screen.getAllByLabelText(/^Me, /)[0]!;
     await fireEvent(mine, 'longPress');
     const items = (actionSheetStore.get()?.entries ?? []).filter(isActionItem);
-    expect(items.map((i) => i.label)).toEqual(['Add reaction', 'Copy text', 'Copy message ID', 'Reply', 'Pin message', 'Edit message', 'Delete message']);
+    expect(items.map((i) => i.label)).toEqual(['Add reaction', 'Copy text', 'Copy message ID', 'Copy message link', 'Reply', 'Pin message', 'Edit message', 'Delete message']);
     await act(async () => {
       await items.find((i) => i.label === 'Reply')!.onSelect!();
     });

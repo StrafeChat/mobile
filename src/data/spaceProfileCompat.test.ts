@@ -5,6 +5,7 @@
  * gates against the server's table, the menu entries of buildSpaceModerationItems, the reset
  * helpers, the web member handlers carrying the profile keys, and the API calls' wire shapes.
  */
+import { orPerms } from '@web/lib/permBits';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { emitStargateEvent } from './testing/webMocks';
 import { ApiError } from '@web/api/ApiError';
@@ -211,8 +212,8 @@ describe('who may change a nickname (the server table)', () => {
 });
 
 describe('the nickname bits on members', () => {
-  const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages | PermChangeNickname, { name: '@everyone' });
-  const LOCKED = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
+  const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages, PermChangeNickname), { name: '@everyone' });
+  const LOCKED = role('ev', 0, orPerms(PermViewChannel, PermSendMessages), { name: '@everyone' });
   const MODS = role('mods', 5, PermManageNicknames);
   const ADMINS = role('admins', 9, PermAdministrator);
   const BANNERS = role('banners', 4, PermBanMembers);

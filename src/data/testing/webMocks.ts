@@ -132,6 +132,7 @@ jest.mock('@web/stores/messages', () => {
     setMessages,
     hasPendingJump: () => false,
     loadMessages: jest.fn(async () => undefined),
+    jumpToMessage: jest.fn(async () => undefined),
     decryptServerMessages: async (list: unknown[]) => list,
     setMessagePinned: () => undefined,
   };

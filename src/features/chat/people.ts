@@ -4,7 +4,11 @@
  * (lib/userProfilePopoverHelpers through src/data's profileSubject, lib/userContextMenu). In a
  * space the menu also carries the nickname and space-profile entries the member drawer has
  * (the builder's, given room/nicknameSheet's spaceProfileMenuFields).
+ *
+ * A webhook's or bridged message's author is not a person: openMessageAuthor /
+ * showMessageAuthorMenu give it its own card and menu (the web's WebhookCard and author menu).
  */
+import * as Clipboard from 'expo-clipboard';
 import { t } from '@web/i18n/t';
 import { auth } from '@web/stores/auth';
 import { spaces, spaceRoles } from '@web/stores/spaces';
@@ -13,12 +17,26 @@ import { confirmDialog } from '@web/stores/confirmDialog';
 import { banSpaceMember, kickSpaceMember } from '@web/api/spaces';
 import { viewerRoleCeiling } from '@web/lib/spacePermissions';
 import { buildSpaceModerationItems, buildUserMenuItems } from '@web/lib/userContextMenu';
+import { confirmBlockBridgedUser } from '@web/lib/bridgeModeration';
 import type { SpaceMemberRoleEditContext } from '@web/stores/userProfilePopover';
-import { findParticipant, mySpaceMember, profileSubject, roomGates, spaceAbilities, userDisplay, type UserContext } from '@/data';
+import {
+  canBlockBridged,
+  findParticipant,
+  messageAuthorDisplay,
+  mySpaceMember,
+  profileSubject,
+  roomGates,
+  spaceAbilities,
+  userDisplay,
+  type AuthorMessage,
+  type UserContext,
+} from '@/data';
 import { presentProfileSheet } from '@/platform/presenters';
 // Its module directly, not '@/features/room': that index pulls RoomView, which pulls the chat.
 import { spaceProfileMenuFields } from '@/features/room/nicknameSheet';
-import { showActionSheet, toast } from '@/ui';
+import { showActionSheet, toast, type ActionItem } from '@/ui';
+// Its module directly, like nicknameSheet: the card's store, rendered by the room area's host.
+import { presentWebhookCard } from '@/features/room/webhookCard';
 import { errorText, messageUser } from './navigation';
 
 function spaceIdFor(ctx: UserContext): string | null {
@@ -137,4 +155,86 @@ export function showAuthorMenu(userId: string, ctx: UserContext): void {
   const items = authorMenuItems(userId, ctx);
   if (items.length === 0) return;
   void showActionSheet(items, { title: userDisplay(userId, ctx).name });
+}
+
+// ---- webhook and bridged authors ------------------------------------------------------------------
+
+/**
+ * Tap on a message's avatar or name: the person's profile, or - for a webhook's or bridged
+ * message - its card (never a profile looked up by the webhook's id: one webhook posts under
+ * many names, and a bridged person is nobody here).
+ */
+export function openMessageAuthor(msg: AuthorMessage, ctx: UserContext): void {
+  if (!msg.webhook_id) {
+    openUserProfile(msg.sender_id, ctx);
+    return;
+  }
+  const a = messageAuthorDisplay(msg, ctx);
+  const w = a.webhook;
+  if (!w) return;
+  presentWebhookCard({
+    webhookId: w.id,
+    name: a.name,
+    ...(a.avatar ? { avatar: a.avatar } : {}),
+    spaceId: ctx.spaceId ?? null,
+    roomId: ctx.roomId ?? null,
+    ...(w.puppetId ? { puppetId: w.puppetId } : {}),
+    ...(w.bridge ? { bridge: w.bridge } : {}),
+    ...(a.colour ? { colour: a.colour } : {}),
+  });
+}
+
+/**
+ * The long-press menu of a webhook's or bridged author: nothing a person's has (message, add
+ * friend, nickname, roles, kick). A bridged person: the bot behind it, and the moderator's
+ * block; a webhook: copy its id. [] for a person's message.
+ */
+export function maskedAuthorMenuItems(msg: AuthorMessage, ctx: UserContext): ActionItem[] {
+  if (!msg.webhook_id) return [];
+  const a = messageAuthorDisplay(msg, ctx);
+  const w = a.webhook;
+  if (!w) return [];
+  const b = w.bridge;
+  if (!b) {
+    return [{ key: 'copy-webhook-id', label: t('webhooks.copyId'), icon: 'fa-copy', onSelect: () => void copyId(w.id) }];
+  }
+  const items: ActionItem[] = [];
+  if (b.via) {
+    const viaId = b.via.id;
+    items.push({ key: 'view-bot', label: t('bridges.menu.viewBot'), icon: 'fa-robot', onSelect: () => openUserProfile(viaId, ctx) });
+  }
+  if (w.puppetId && canBlockBridged(ctx.spaceId, ctx.roomId)) {
+    const puppetId = w.puppetId;
+    items.push({
+      key: 'block-bridged',
+      label: t('bridges.menu.block', { name: a.name }),
+      icon: 'fa-user-slash',
+      danger: true,
+      onSelect: () =>
+        void confirmBlockBridgedUser({
+          bridgeId: b.bridgeId,
+          puppetId,
+          name: a.name,
+          platform: b.platform,
+          ...(b.platformName ? { platformName: b.platformName } : {}),
+        }).then((done) => done && toast(t('bridges.block.done', { name: a.name }))),
+    });
+  }
+  return items;
+}
+
+async function copyId(id: string): Promise<void> {
+  await Clipboard.setStringAsync(id);
+  toast(t('common.copied'));
+}
+
+/** Long-press on a message's avatar or name. */
+export function showMessageAuthorMenu(msg: AuthorMessage, ctx: UserContext): void {
+  if (!msg.webhook_id) {
+    showAuthorMenu(msg.sender_id, ctx);
+    return;
+  }
+  const items = maskedAuthorMenuItems(msg, ctx);
+  if (items.length === 0) return;
+  void showActionSheet(items, { title: messageAuthorDisplay(msg, ctx).name });
 }

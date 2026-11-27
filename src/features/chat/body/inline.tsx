@@ -15,6 +15,7 @@ import { accessibility } from '@web/stores/accessibility';
 import { getEmojiProvider } from '@web/lib/emoji/providers';
 import { spaces } from '@web/stores/spaces';
 import { spaceRoleColorHex } from '@web/lib/spacePermissions';
+import { findRoomLinkTarget, roomLinkFromUrl, type RoomLinkTarget } from '@web/lib/roomLinks';
 import {
   formatRelativeTimestamp,
   formatTimestamp,
@@ -241,6 +242,65 @@ export function ChannelPill({ roomId }: { roomId: string }) {
       accessibilityLabel={t('messages.goToRoom', { name: channel.name })}
     >
       {HAIR}#{channel.name}
+      {HAIR}
+    </RNText>
+  );
+}
+
+/** The glyph a room link's pill shows for its room (the web's roomLinkIcon). */
+function roomLinkIcon(target: RoomLinkTarget): string {
+  if (target.notes) return 'note-sticky';
+  switch (target.type) {
+    case 1:
+      return 'user';
+    case 2:
+      return 'user-group';
+    case 4:
+      return 'volume-high';
+    case 6:
+      return 'comments';
+    default:
+      return 'hashtag';
+  }
+}
+
+/**
+ * A bare link to a room or message here (the web's lib/roomLinks): a pill with the room's name,
+ * and a message marker when it points at one, opening it in the app - the web's jump pill,
+ * not a preview of the web page. A room this client does not hold stays a plain link (a tap
+ * still tries, and says so when it cannot open).
+ */
+export function RoomLinkPill({ href }: { href: string }) {
+  const theme = useTheme();
+  const target = useSolid(() => {
+    const link = roomLinkFromUrl(href);
+    return link ? findRoomLinkTarget(link) : null;
+  }, [href]);
+  if (!target) return <LinkText href={href}>{href}</LinkText>;
+  const label = target.messageId
+    ? t('messages.roomLink.jumpToMessage', { name: target.name })
+    : t('messages.roomLink.openRoom', { name: target.name });
+  return (
+    <RNText
+      style={pillStyle(theme)}
+      onPress={() => openMessageLink(href)}
+      onLongPress={() => {
+        haptics.longPress();
+        showLinkActions(href);
+      }}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+    >
+      {HAIR}
+      <Icon name={roomLinkIcon(target)} size={11} tone="primary" scaleWithText />
+      {HAIR}
+      {target.name}
+      {target.messageId ? (
+        <>
+          {' \u203a '}
+          <Icon name="message" size={11} tone="primary" scaleWithText />
+        </>
+      ) : null}
       {HAIR}
     </RNText>
   );

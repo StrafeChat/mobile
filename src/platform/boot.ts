@@ -50,6 +50,8 @@ import { bootstrapE2EEDevice } from '@web/stores/e2eeBootstrap';
 import { initE2EESyncHandlers } from '@web/stores/e2eeSync';
 import { clearMessages, initStargateMessageHandler, loadMessages, messages } from '@web/stores/messages';
 import { initPinHandlers } from '@web/stores/pinnedMessages';
+import { initWebhooksHandler } from '@web/stores/webhooks';
+import { initBridgesHandler } from '@web/stores/bridges';
 import { initPresenceHandler } from '@web/stores/presence';
 import { initReadStateHandler, readState } from '@web/stores/readState';
 import { initRelationshipHandlers } from '@web/stores/relationships';
@@ -235,6 +237,10 @@ function registerGatewayHandlers(): void {
   initPresenceHandler();
   initReadStateHandler();
   initPinHandlers();
+  // WEBHOOKS_UPDATE (a managed room's webhook list) and BRIDGE_* (what a room is bridged with:
+  // the header badge, the composer hint, a bridged person's card).
+  initWebhooksHandler();
+  initBridgesHandler();
   initTypingHandler();
   initRelationshipHandlers();
   initRoomHandlers();

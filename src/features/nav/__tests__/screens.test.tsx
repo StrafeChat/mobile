@@ -3,6 +3,7 @@
  * and Join (federated codes included), Discover's join that lands on the LOCAL id, the invite
  * sheet's once-per-open link, and the create-room request.
  */
+import { orPerms } from '@web/lib/permBits';
 import './navTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -52,7 +53,7 @@ jest.mock('@web/stores/spaces', () => {
   return { ...actual, refreshSpaceRooms: jest.fn(async () => undefined) };
 });
 
-const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
+const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages), { name: '@everyone' });
 
 async function settle() {
   await act(async () => {

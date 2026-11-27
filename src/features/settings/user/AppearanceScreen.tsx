@@ -22,6 +22,7 @@ import {
   setCorners,
   setEmojiProvider,
   setEmojiSkinTone,
+  setExternalAvatars,
   setFontScale,
   setGifProvider,
   setMessageGroupSpacing,
@@ -214,6 +215,7 @@ export function AppearanceScreen() {
     emojiProvider: appearance.emojiProvider,
     emojiSkinTone: appearance.emojiSkinTone,
     gifProvider: appearance.gifProvider,
+    externalAvatars: appearance.externalAvatars,
     customThemes: appearance.customThemes.length,
   }));
   const themes = useSolid(() => allThemes());
@@ -389,6 +391,14 @@ export function AppearanceScreen() {
           value={settings.botEmbeds !== false}
           onValueChange={setBotEmbeds}
           testID="appearance-bot-embeds"
+        />
+        <SettingToggle
+          icon="image"
+          title={t('settings.appearance.chat.externalAvatars')}
+          description={t('settings.appearance.chat.externalAvatarsDescription')}
+          value={a.externalAvatars !== false}
+          onValueChange={setExternalAvatars}
+          testID="appearance-external-avatars"
         />
       </ListSection>
 

@@ -13,7 +13,7 @@ import { getMessagePreviewSource, messagePreviewText } from '@web/components/mes
 import { t } from '@web/i18n/t';
 import { deepEqual, useDerived } from '@/data/derived';
 import { roomParticipantPool } from '@/data/messages';
-import { userDisplay } from '@/data/users';
+import { messageAuthorDisplay } from '@/data/webhooks';
 
 /** The reply strip's preview length (the web's 120 characters). */
 export const REPLY_PREVIEW_CHARS = 120;
@@ -33,8 +33,9 @@ export function replyTargetView(roomId: string, messageId: string): ReplyTargetV
   const me = auth.user?.id;
   return {
     id: messageId,
-    // userDisplay, not the web's getSenderDisplay: it names the author by their space profile.
-    name: userDisplay(target.sender_id, { roomId }).name,
+    // userDisplay, not the web's getSenderDisplay: it names the author by their space profile
+    // (messageAuthorDisplay: a webhook's or bridged message by the name it was posted under).
+    name: messageAuthorDisplay(target, { roomId }).name,
     preview: messagePreviewText(getMessagePreviewSource(target), pool, me, REPLY_PREVIEW_CHARS),
     loaded: true,
   };

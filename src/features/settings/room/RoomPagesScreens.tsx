@@ -13,12 +13,15 @@ import { router } from 'expo-router';
 import { formatDate, t } from '@web/i18n/t';
 import { patchSpaceRoom } from '@web/api/spaces';
 import { refreshSpaceRooms } from '@web/stores/spaces';
+import { refreshRoomWebhooks, webhooks } from '@web/stores/webhooks';
+import { roomBridges } from '@web/stores/bridges';
+import { canManageWebhooksIn } from '@web/lib/roomPerms';
 import { rooms } from '@web/stores/rooms';
 import { NotifyModeAll, NotifyModeDefault, NotifyModeMentions, NotifyModeNone, isRoomMuted, muteRoom, setRoomNotifyMode, unmuteRoom } from '@web/lib/roomNotify';
 import { useSolid } from '@/bridge/solid';
 import { findPmRoom, findSpaceRoom, useRoomNotifySettings } from '@/data';
 import { useTheme } from '@/theme';
-import { Button, Icon, Input, ListSection, SegmentedControl, Select, Text, withAlpha } from '@/ui';
+import { Banner, Button, Icon, Input, ListSection, SegmentedControl, Select, Text, withAlpha } from '@/ui';
 import { LiveSlider } from '../components/LiveSlider';
 import { FormCard, Note, SettingItem, SettingToggle, choiceRows } from '../components/rows';
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard';
@@ -132,6 +135,33 @@ function Encryption({ data, setError }: { data: RoomSettingsData; setError: (m: 
   useEffect(() => {
     if (done) back();
   }, [done]);
+  // Turning encryption on switches the room's webhooks and bridges off (the server does it):
+  // say so first. The webhook list needs Manage Webhooks; the bridges are on the room.
+  const spaceId = data.spaceId ?? undefined;
+  const canWebhooks = useSolid(() => canManageWebhooksIn(spaceId, room.id), [spaceId, room.id]);
+  useEffect(() => {
+    if (canWebhooks && !webhooks.byRoom[room.id]) void refreshRoomWebhooks(room.id).catch(() => undefined);
+  }, [canWebhooks, room.id]);
+  const integrations = useSolid(
+    () => ({
+      webhooks: (webhooks.byRoom[room.id] ?? []).filter((w) => !w.disabled_reason).length,
+      bridges: roomBridges(spaceId, room.id).filter((b) => b.state !== 'disabled').length,
+    }),
+    [spaceId, room.id],
+  );
+  const integrationsWarning =
+    on && !stored && (integrations.webhooks > 0 || integrations.bridges > 0)
+      ? [
+          integrations.webhooks > 0 ? t('webhooks.e2eeWarning', { count: integrations.webhooks }) : '',
+          integrations.bridges > 0
+            ? integrations.webhooks > 0
+              ? t('bridges.e2eeWarningAlso', { count: integrations.bridges })
+              : t('bridges.e2eeWarning', { count: integrations.bridges })
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : '';
 
   async function save() {
     if (!data.spaceId || !data.canManageRooms || !dirty) return;
@@ -164,6 +194,9 @@ function Encryption({ data, setError }: { data: RoomSettingsData; setError: (m: 
           testID="room-e2ee"
         />
       </ListSection>
+      {integrationsWarning ? (
+        <Banner tone="warning" icon="plug-circle-xmark" message={integrationsWarning} style={{ marginHorizontal: 12, marginBottom: 12 }} testID="e2ee-integrations-warning" />
+      ) : null}
       <ListSection title={t('roomSettings.e2eeWhatChanges')}>
         <View style={{ padding: 16, gap: 10 }}>
           {['roomSettings.e2eePoint1', 'roomSettings.e2eePoint2', 'roomSettings.e2eePoint3', 'roomSettings.e2eePoint4'].map((k) => (

@@ -3,6 +3,7 @@
  * room's settings, pins that fail to load, a thread started from a message (the chat's
  * request shape), and the frame's lookup of a thread the live list does not hold.
  */
+import { orPerms } from '@web/lib/permBits';
 import './roomTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -31,7 +32,7 @@ const pins = require('@web/stores/pinnedMessages') as { ensureRoomPins: jest.Moc
 const threadsApi = require('@web/api/threads') as { getThread: jest.Mock; createThreadFromMessage: jest.Mock; DEFAULT_THREAD_AUTO_ARCHIVE: number };
 const router = require('expo-router') as { useLocalSearchParams: jest.Mock; router: { push: jest.Mock } };
 
-const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
+const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages), { name: '@everyone' });
 
 function seedSpace(myRoles: string[], extraRoles = [role('mod', 1, PermManageRoles)]) {
   setSpaces({

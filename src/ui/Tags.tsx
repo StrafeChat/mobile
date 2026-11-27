@@ -1,5 +1,5 @@
 /**
- * Identity tags and role pills - the web's BotTag, OfficialTag and RolePill.
+ * Identity tags and role pills - the web's BotTag, OfficialTag, WebhookTag and RolePill.
  *
  * BotTag and OfficialTag are identity, not flair: they sit right after a name everywhere it
  * is shown (message header, member row, profile, PM list) so a bot or a system notice is never
@@ -11,9 +11,10 @@
  * dark role colour is unreadable as text on a dark theme but fine as a swatch. A colourless
  * role gets a faded grey dot so "no colour" is visible as a state.
  */
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { t } from '@web/i18n/t';
 import { spaceRoleColorHex } from '@web/lib/spacePermissions';
+import { bridgePlatformLabel } from '@web/lib/bridgePlatforms';
 import { useTheme } from '@/theme';
 import { withAlpha } from './color';
 import { Icon } from './Icon';
@@ -67,7 +68,8 @@ function TagChip({ label, a11y, bg, fg, size, icon, style, testID }: TagChipProp
         weight="semibold"
         color={fg}
         allowFontScaling={false}
-        style={{ fontSize: s.font, lineHeight: s.font + 2, letterSpacing: 0.2, textTransform: 'uppercase' }}
+        numberOfLines={1}
+        style={{ flexShrink: 1, fontSize: s.font, lineHeight: s.font + 2, letterSpacing: 0.2, textTransform: 'uppercase' }}
       >
         {label}
       </Text>
@@ -93,6 +95,56 @@ export function BotTag({ bot, size = 'sm', style }: BotTagProps) {
       fg={theme.colors.primaryForeground}
       size={size}
       style={style}
+    />
+  );
+}
+
+/** What WebhookTag needs: `true` (a plain webhook), or a sender display's `webhook`. */
+export type WebhookTagSubject =
+  | boolean
+  | { kind: 'webhook' | 'bridge'; bridge?: { platform: string; platformName?: string; bridgeName?: string; via?: { name: string } } }
+  | null
+  | undefined;
+
+export interface WebhookTagProps {
+  webhook?: WebhookTagSubject;
+  size?: TagSize;
+  style?: StyleProp<ViewStyle>;
+}
+
+/** The platform's name and the tag's accessible name ("Bridged from Discord by Strife"). */
+export function webhookTagText(webhook: WebhookTagSubject): { label: string; a11y: string; bridged: boolean } | null {
+  if (!webhook) return null;
+  const b = typeof webhook === 'object' && webhook.kind === 'bridge' ? (webhook.bridge ?? { platform: 'other' }) : null;
+  if (!b) return { label: t('badges.webhookTag'), a11y: t('badges.webhook'), bridged: false };
+  const platform = bridgePlatformLabel(b.platform, b.platformName);
+  const via = b.via?.name || b.bridgeName || '';
+  return { label: platform, a11y: via ? t('bridges.tagLabelVia', { platform, via }) : t('bridges.tagLabel', { platform }), bridged: true };
+}
+
+/**
+ * The tag after a webhook's or a bridged person's name (the web's WebhookTag), so a reader
+ * always knows it is not a Strafe account: WEBHOOK like the BOT tag, or the platform
+ * ("DISCORD", or the bridge's own platform name) with a bridge glyph in a neutral colour, so it
+ * can't pass for a role pill. Renders nothing for an ordinary message.
+ */
+export function WebhookTag({ webhook, size = 'sm', style }: WebhookTagProps) {
+  const theme = useTheme();
+  const text = webhookTagText(webhook);
+  if (!text) return null;
+  if (!text.bridged) {
+    return <TagChip testID="webhook-tag" label={text.label} a11y={text.a11y} bg={theme.colors.primary} fg={theme.colors.primaryForeground} size={size} style={style} />;
+  }
+  return (
+    <TagChip
+      testID="bridge-tag"
+      label={text.label}
+      a11y={text.a11y}
+      bg={withAlpha(theme.colors.mutedForeground, 0.2)}
+      fg={withAlpha(theme.colors.foreground, 0.85)}
+      size={size}
+      icon="bridge"
+      style={[{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.colors.border, maxWidth: 140 }, style]}
     />
   );
 }

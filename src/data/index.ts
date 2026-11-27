@@ -36,4 +36,5 @@ export * from './notifications';
 export * from './voice';
 export * from './settings';
 export * from './spaceProfileCompat';
+export * from './webhooks';
 export { useSolidScope } from './scope';

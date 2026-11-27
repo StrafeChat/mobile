@@ -1,4 +1,5 @@
 /// <reference types="jest" />
+import { orPerms } from '@web/lib/permBits';
 import './settingsTestSetup';
 import type { SpaceMember, SpaceRole } from '@web/api/spaces';
 import { PermAdministrator, PermConnect, PermSendMessages, PermViewChannel } from '@web/lib/spacePermissions';
@@ -281,9 +282,9 @@ describe('permission overrides', () => {
 
   it('turns a section private by denying @everyone View, and back', () => {
     expect(privateSectionChange(undefined, true)).toEqual({ action: 'put', allow: 0, deny: PermViewChannel });
-    expect(privateSectionChange({ allow: PermViewChannel | PermSendMessages, deny: 0 }, true)).toEqual({ action: 'put', allow: PermSendMessages, deny: PermViewChannel });
+    expect(privateSectionChange({ allow: orPerms(PermViewChannel, PermSendMessages), deny: 0 }, true)).toEqual({ action: 'put', allow: PermSendMessages, deny: PermViewChannel });
     expect(privateSectionChange({ allow: 0, deny: PermViewChannel }, false)).toEqual({ action: 'delete' });
-    expect(privateSectionChange({ allow: 0, deny: PermViewChannel | PermSendMessages }, false)).toEqual({ action: 'put', allow: 0, deny: PermSendMessages });
+    expect(privateSectionChange({ allow: 0, deny: orPerms(PermViewChannel, PermSendMessages) }, false)).toEqual({ action: 'put', allow: 0, deny: PermSendMessages });
     expect(isPrivateSection([{ role_id: 'e', allow: 0, deny: PermViewChannel, created_at: '', updated_at: '' }], 'e')).toBe(true);
     expect(isPrivateSection([], 'e')).toBe(false);
   });

@@ -14,6 +14,7 @@
  */
 import { t } from '@web/i18n/t';
 import { spaces } from '@web/stores/spaces';
+import { openSpaceBridgeConsent } from '@web/stores/bridgeConsentDialog';
 import { rooms } from '@web/stores/rooms';
 import { auth } from '@web/stores/auth';
 import { isRoomMuted, NotifyModeAll, NotifyModeDefault, NotifyModeMentions, NotifyModeNone, type RoomLike } from '@web/lib/roomNotify';
@@ -165,6 +166,14 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
     icon: 'fa-id-badge',
     onSelect: () => openSpaceProfile(spaceId),
   };
+  // Every member decides whether bridges here copy their messages to other platforms (spec
+  // 5.9), bridged rooms or not yet (SpaceRoomsBar's "Bridge privacy").
+  const bridgePrivacy: ActionItem = {
+    key: 'bridge-privacy',
+    label: t('bridges.consent.menuItem'),
+    icon: 'fa-bridge',
+    onSelect: () => openSpaceBridgeConsent(spaceId),
+  };
   const settings: ActionSheetEntry = ab.showSettings && {
     key: 'settings',
     label: t('space.settings'),
@@ -186,10 +195,11 @@ export function spaceMenuEntries(spaceId: string, variant: 'rail' | 'header'): A
     danger: true,
     onSelect: () => void leaveSpaceFlow(spaceId),
   };
-  if (variant === 'rail') return [invite, spaceProfile, settings, markRead, copyId, leave];
+  if (variant === 'rail') return [invite, spaceProfile, bridgePrivacy, settings, markRead, copyId, leave];
   return [
     invite,
     spaceProfile,
+    bridgePrivacy,
     settings,
     ab.canManageRooms && {
       key: 'create-room',

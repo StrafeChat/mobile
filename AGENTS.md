@@ -93,6 +93,18 @@ web/                     the web client (submodule, pinned) - do not edit from h
   matches; mobile-only copy goes in `src/i18n/locales/*.ts` under `mobile.` in **all six**
   locales (Arabic plurals `_zero/_one/_two/_few/_many/_other`). `npm run check:i18n`.
 - Ids are snowflake **strings**. Never `Number()` an id.
+- Permission masks go through the web's `lib/permBits` (`hasPerm`, `togglePerm`, `orPerms`,
+  `withoutPerms`, `toWire`...), never `&`, `|`, `~` or `<<`: those are 32-bit, and Manage
+  Webhooks (bit 31) and Masquerade (bit 32) would vanish from what the app edits. Writes go out
+  as `toWire` strings (the web's api/spaces does it for roles and overrides).
+  `npm run check:perm-bits` (also run by `npm test`) scans src/, tests included.
+- A message with `webhook_id` was posted by a webhook or a bridge: its `sender_id` is never a
+  person who can be messaged, and its `author` never goes into a participant lookup. Show it
+  through `@/data`'s `useMessageAuthor` / `messageAuthorDisplay` (the web's
+  getMessageSenderDisplay: its posted-as name, `WebhookTag`, the default avatar from the webhook
+  or puppet id), open `openMessageAuthor` (its card, `room/webhookCard`) rather than a profile,
+  and group rows by `messageAuthorKey`. A bridged room is never shown silently: header badge,
+  composer hint, notices (`room/bridges`).
 - Game activity ("Playing X") is **display only**. The web reports it from `stores/activity.ts`,
   which only `desktop/boot` starts; the app never imports that, and the `desktop/native`
   override's game wrappers are inert (`gamesAvailable()` is false).
@@ -111,7 +123,7 @@ web/                     the web client (submodule, pinned) - do not edit from h
 - Android dev build: `JAVA_HOME=~/.local/share/jdks/jdk-21 npx expo run:android` (JDK 21; GraalVM 22 breaks jlink, 26 is too new for Kotlin). iOS builds
   need macOS (CI workflow).
 - Before calling anything done: `npm run typecheck`, `npm run lint`, `npm test`,
-  `npm run check:i18n`, `npm run check:overrides`.
+  `npm run check:i18n`, `npm run check:overrides`, `npm run check:perm-bits`.
 
 ## Push notifications
 

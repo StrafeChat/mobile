@@ -98,6 +98,7 @@
     "check:overrides": "node scripts/check-overrides.mjs",
     "build:crypto-host": "node crypto-host/build.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "check:perm-bits": "node scripts/check-perm-bits.cjs",
     "check:drift": "node src/platform/overrides/check-drift.cjs",
     "check:voice-drift": "node src/platform/overrides/check-drift.cjs voice",
     "check:e2ee-drift": "node src/platform/overrides/check-drift.cjs e2ee",

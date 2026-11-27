@@ -1,12 +1,13 @@
 /**
  * Space settings -> Moderation (SpaceModerationPage): the verification level a member without
  * a role must meet before talking, and the light automod rules (repeated messages, invite
- * links, mass mentions with a limit). Saves on change.
+ * links, mass mentions with a limit), and whether the space's bridges copy everyone who has not
+ * opted out or only those who opted in (spec 5.9; Manage Space). Saves on change.
  *
  * The mention limit is a stepper (plus a numeric field) instead of the web's number input; it
  * commits on blur / done, ignoring invalid or unchanged values, as the web does.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
 import {
@@ -20,7 +21,12 @@ import {
   type PatchSpaceInput,
 } from '@web/api/spaces';
 import { addOrUpdateSpace } from '@web/stores/spaces';
-import { IconButton, Input, ListSection, Text } from '@/ui';
+import { setSpaceBridgeConsentMode } from '@web/api/bridges';
+import { ensureSpaceBridgeConsent, setSpaceModeLocal } from '@web/stores/bridges';
+import { translateCaughtApiError } from '@web/lib/formatApiError';
+import { useBridgeConsent } from '@/data';
+import { openBridgesLearnMore } from '@/features/room/bridges/learnMore';
+import { Button, IconButton, Input, ListSection, Text } from '@/ui';
 import { Note, SettingToggle, choiceRows } from '../components/rows';
 import { SpacePage } from './SpacePage';
 import type { SpaceSettingsData } from './useSpaceSettings';
@@ -51,6 +57,26 @@ function Moderation({ data, setError }: { data: SpaceSettingsData; setError: (m:
       addOrUpdateSpace(await patchSpace(data.spaceId, body));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('common.saveFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The space object may not say its bridge mode; the member's own consent read does.
+  useEffect(() => {
+    void ensureSpaceBridgeConsent(data.spaceId);
+  }, [data.spaceId]);
+  const optIn = useBridgeConsent(data.spaceId).mode === 'optin';
+  async function setOptIn(on: boolean) {
+    if (!canManage || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const mode = on ? 'optin' : 'optout';
+      await setSpaceBridgeConsentMode(data.spaceId, mode);
+      setSpaceModeLocal(data.spaceId, mode);
+    } catch (e) {
+      setError(translateCaughtApiError(e, t).join(' ') || t('common.saveFailed'));
     } finally {
       setBusy(false);
     }
@@ -142,6 +168,20 @@ function Moderation({ data, setError }: { data: SpaceSettingsData; setError: (m:
         ) : null}
       </ListSection>
       <Note>{t('spaceSettings.moderation.automodHint')}</Note>
+
+      <ListSection title={t('spaceSettings.moderation.bridges.title')}>
+        <SettingToggle
+          icon="bridge"
+          title={t('spaceSettings.moderation.bridges.optIn')}
+          description={optIn ? t('spaceSettings.moderation.bridges.optInOn') : t('spaceSettings.moderation.bridges.optInOff')}
+          value={optIn}
+          disabled={disabled}
+          onValueChange={(on) => void setOptIn(on)}
+          testID="bridge-optin"
+        />
+      </ListSection>
+      <Note>{t('spaceSettings.moderation.bridges.hint')}</Note>
+      <Button title={t('bridges.learnMore')} variant="link" size="sm" style={{ alignSelf: 'flex-start', marginHorizontal: 16 }} onPress={openBridgesLearnMore} />
     </>
   );
 }

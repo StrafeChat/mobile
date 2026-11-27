@@ -41,6 +41,10 @@ export interface ListMessage {
   pending?: boolean;
   mention_everyone?: boolean;
   mentions?: string[];
+  /** Who the row shows as, for grouping (lib/webhookMessages messageAuthorKey): set for a
+   * webhook's or bridge's message, whose sender alone does not say it (one webhook posts under
+   * many names). Absent: the sender. */
+  authorKey?: string;
 }
 
 export type MessageListItem =
@@ -122,10 +126,17 @@ export function stableRowKeys(roomId: string, list: readonly ListMessage[], curr
   return next;
 }
 
+/** The grouping key of a row: its author key, or the sender (messageAuthorKey's `u:` form). */
+export function listAuthorKey(msg: Pick<ListMessage, 'sender_id' | 'authorKey'>): string {
+  return msg.authorKey ?? `u:${msg.sender_id}`;
+}
+
 export function shouldShowHeader(msg: ListMessage, prev: ListMessage | undefined): boolean {
   if (msg.reply_to_id) return true;
   if (!prev) return true;
-  if (prev.sender_id !== msg.sender_id) return true;
+  // The sender, and for a webhook message also the name and avatar (or the bridged person) it
+  // was posted under: "CI" then "Deploy" through one webhook are two authors (the web's rule).
+  if (listAuthorKey(prev) !== listAuthorKey(msg)) return true;
   return new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() > MESSAGE_GROUP_THRESHOLD_MS;
 }
 

@@ -1,6 +1,7 @@
 /**
  * The "replying to" line above a reply (the web's ReplyReference): a small avatar, the author
- * in bold with their BOT tag, and a one-line preview (mentions resolved, markdown stripped,
+ * in bold with their BOT tag (a webhook's or bridged person's: their WEBHOOK / platform tag and,
+ * when their bridge allows it, their colour - never the bot's), and a one-line preview (mentions resolved, markdown stripped,
  * "(no text)" when empty; "…" for an E2EE reply whose original isn't loaded - its embedded copy
  * is ciphertext). Tap jumps to the original, loading a window around it when needed. When
  * neither the loaded list nor the server's embedded copy has it: "Original message was deleted
@@ -10,9 +11,9 @@ import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { t } from '@web/i18n/t';
 import { jumpToMessage } from '@web/stores/messages';
-import { useReplyReference } from '@/data';
+import { maskedAuthorLabel, useReplyReference } from '@/data';
 import { useTheme } from '@/theme';
-import { Avatar, BotTag, haptics, Icon, Text, toast, Touchable, withAlpha } from '@/ui';
+import { Avatar, BotTag, haptics, Icon, Text, toast, Touchable, WebhookTag, withAlpha } from '@/ui';
 import { errorText } from '../navigation';
 
 export const ReplyReference = memo(function ReplyReference({ roomId, messageId, compact }: { roomId: string; messageId: string; compact: boolean }) {
@@ -41,17 +42,18 @@ export const ReplyReference = memo(function ReplyReference({ roomId, messageId, 
         jumpToMessage(roomId, ref.replyToId).catch((e: unknown) => toast.error(errorText(e)));
       }}
       accessibilityRole="button"
-      accessibilityLabel={`${ref.authorName}: ${ref.preview || t('messages.noText')}`}
+      accessibilityLabel={`${maskedAuthorLabel({ name: ref.authorName, webhook: ref.authorWebhook }) ?? ref.authorName}: ${ref.preview || t('messages.noText')}`}
       accessibilityHint={t('messages.replyJump')}
       hitSlop={{ top: 6, bottom: 4 }}
       style={styles.line}
     >
       {glyph}
-      <Avatar uri={ref.authorAvatar ?? null} name={ref.authorName} user={{ userId: ref.authorId, originId: ref.authorOriginId }} size={16} />
-      <Text variant="caption" weight="semibold" color={withAlpha(theme.colors.foreground, 0.9)} numberOfLines={1} style={styles.name}>
+      <Avatar uri={ref.authorAvatar ?? null} name={ref.authorName} user={ref.authorWebhook ? ref.authorId : { userId: ref.authorId, originId: ref.authorOriginId }} size={16} />
+      <Text variant="caption" weight="semibold" color={ref.authorColour ?? withAlpha(theme.colors.foreground, 0.9)} numberOfLines={1} style={styles.name}>
         {ref.authorName}
       </Text>
       <BotTag bot={ref.authorBot} size="xs" />
+      <WebhookTag webhook={ref.authorWebhook} size="xs" style={styles.tag} />
       <Text variant="caption" numberOfLines={1} style={[styles.flexShrink, ref.preview ? null : styles.italic]}>
         {ref.preview || t('messages.noText')}
       </Text>
@@ -62,6 +64,7 @@ export const ReplyReference = memo(function ReplyReference({ roomId, messageId, 
 const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 20, marginBottom: 4, minWidth: 0 },
   name: { flexShrink: 0, maxWidth: '45%' },
+  tag: { marginStart: 0 },
   flexShrink: { flexShrink: 1 },
   italic: { fontStyle: 'italic' },
   ban: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },

@@ -14,7 +14,7 @@ import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { t } from '@web/i18n/t';
 import { isApiError } from '@web/api/ApiError';
 import { authorize, getAuthorizeInfo, scopeKey, type AuthorizeInfo, type AuthorizeQuery, type OAuthScope } from '@web/api/developers';
-import { PermAdministrator, SPACE_ROLE_PERM_ROWS } from '@web/lib/spacePermissions';
+import { andPerms, hasAnyPerm, hasPerm, orPerms, parsePerm, PermAdministrator, SPACE_ROLE_PERM_ROWS, togglePerm, toWire, type PermInput } from '@web/lib/spacePermissions';
 import { setSelectedSpaceId, openNav } from '@/shell/state';
 import { useMe } from '@/data';
 import { useTheme } from '@/theme';
@@ -55,9 +55,11 @@ export function describeConsentError(e: unknown): string {
   return t('oauth.failed');
 }
 
-/** Requested bits the viewer may grant in a space (Administrator grantable = all). */
-export function grantableDefaults(requested: number, grantable: number): number {
-  return requested & (grantable & PermAdministrator ? ~0 : grantable);
+/** Requested bits the viewer may grant in a space (Administrator grantable = all). Through
+ * permBits: bits 31 and up (Manage Webhooks, Masquerade) do not survive 32-bit `&`. */
+export function grantableDefaults(requested: PermInput, grantable: PermInput): number {
+  const asked = parsePerm(requested);
+  return hasPerm(grantable, PermAdministrator) ? asked : andPerms(asked, grantable);
 }
 
 /** Where a cancel sends the browser: the app's redirect with access_denied, or nowhere. */
@@ -137,15 +139,15 @@ export function OAuthAuthorizeScreen() {
   const wantsBot = !!info?.bot;
   const targets = info?.spaces ?? [];
   const selected = targets.find((s) => s.id === spaceId);
-  const grantable = selected?.grantable_permissions ?? 0;
+  const grantable = parsePerm(selected?.grantable_permissions);
   const spaceLocked = params.disable_space_select === 'true' && targets.some((s) => s.id === params.space_id);
-  const requestedRows = useMemo(() => SPACE_ROLE_PERM_ROWS.filter((r) => ((info?.permissions ?? 0) & r.bit) !== 0), [info]);
-  const canGrant = (bit: number) => (grantable & (bit | PermAdministrator)) !== 0;
+  const requestedRows = useMemo(() => SPACE_ROLE_PERM_ROWS.filter((r) => hasPerm(info?.permissions, r.bit)), [info]);
+  const canGrant = (bit: number) => hasAnyPerm(grantable, orPerms(bit, PermAdministrator));
 
   // Re-seed the checked permissions whenever the space (and so what can be granted) changes.
   useEffect(() => {
     if (!info?.bot) return;
-    setGranted(grantableDefaults(info.permissions ?? 0, grantable));
+    setGranted(grantableDefaults(info.permissions, grantable));
   }, [info, grantable]);
 
   const appName = info?.application.name ?? '';
@@ -164,7 +166,7 @@ export function OAuthAuthorizeScreen() {
           return;
         }
         req.space_id = spaceId;
-        req.permissions = String(granted);
+        req.permissions = toWire(granted);
       }
       const res = await authorize(req);
       if (res.location) {
@@ -303,9 +305,9 @@ export function OAuthAuthorizeScreen() {
                 {requestedRows.map((r) => (
                   <Checkbox
                     key={r.key}
-                    checked={(granted & r.bit) !== 0}
+                    checked={hasPerm(granted, r.bit)}
                     disabled={!canGrant(r.bit) || targets.length === 0}
-                    onChange={(on) => setGranted((cur) => (on ? cur | r.bit : cur & ~r.bit))}
+                    onChange={(on) => setGranted((cur) => togglePerm(cur, r.bit, on))}
                     label={r.label}
                     description={canGrant(r.bit) ? r.description : t('oauth.cannotGrant')}
                   />

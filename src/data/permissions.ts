@@ -12,6 +12,8 @@
 import { useEffect, useState } from 'react';
 import type { Space, SpaceMember, SpaceRole, SpaceRoom } from '@web/api/spaces';
 import type { Room } from '@web/api/rooms';
+import type { Message } from '@web/api/messages';
+import { webhookAuthorOf } from '@web/lib/webhookMessages';
 import {
   PermAddReactions,
   PermCreatePrivateThreads,
@@ -314,10 +316,12 @@ export type MessageAction =
   | 'addReaction'
   | 'copyText'
   | 'copyId'
+  | 'copyLink'
   | 'reply'
   | 'createThread'
   | 'pin'
   | 'unpin'
+  | 'blockBridged'
   | 'report'
   | 'edit'
   | 'delete';
@@ -325,20 +329,28 @@ export type MessageAction =
 /**
  * The long-press sheet's actions in the web context menu's order and with its gates. System
  * messages have no menu. (Delete always confirms on mobile - there is no Shift-click.)
+ *
+ * A webhook's or bridge's message is never the viewer's own (its sender is the webhook, or the
+ * bot behind a bridge): no Edit, and Report goes to the bot or the space (see the sheet). A
+ * moderator may block a bridged person from the bridge (`canBlockBridged`: Kick Members, or
+ * Manage Messages in the room - data/webhooks canBlockBridged).
  */
 export function messageActions(
-  msg: { sender_id: string; pinned?: boolean; thread_id?: string; system_type?: string },
+  msg: { sender_id: string; pinned?: boolean; thread_id?: string; system_type?: string } & Partial<Pick<Message, 'webhook_id' | 'masquerade' | 'author'>>,
   currentUserId: string | null | undefined,
   gates: Pick<RoomGates, 'canReact' | 'canReply' | 'canPin' | 'canDeleteOthers' | 'canOfferCreateThread'>,
+  extra: { canBlockBridged?: boolean } = {},
 ): MessageAction[] {
   if (msg.system_type) return [];
-  const own = !!currentUserId && msg.sender_id === currentUserId;
+  const own = !msg.webhook_id && !!currentUserId && msg.sender_id === currentUserId;
   const out: MessageAction[] = [];
   if (gates.canReact) out.push('addReaction');
-  out.push('copyText', 'copyId');
+  out.push('copyText', 'copyId', 'copyLink');
   if (gates.canReply) out.push('reply');
   if (gates.canOfferCreateThread && !msg.thread_id) out.push('createThread');
   if (gates.canPin) out.push(msg.pinned ? 'unpin' : 'pin');
+  const masked = msg.webhook_id ? webhookAuthorOf(msg) : null;
+  if (extra.canBlockBridged && masked?.kind === 'bridge' && masked.puppetId) out.push('blockBridged');
   if (!own) out.push('report');
   if (own) out.push('edit');
   if (own || gates.canDeleteOthers) out.push('delete');

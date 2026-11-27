@@ -1,3 +1,4 @@
+import { orPerms } from '@web/lib/permBits';
 import { describe, expect, test } from '@jest/globals';
 import './testing/webMocks';
 import type { SpaceRole, SpaceRoomOverride } from '@web/api/spaces';
@@ -20,7 +21,7 @@ function role(id: string, position: number, extra: Partial<SpaceRole> = {}): Spa
 }
 
 const ROLES = [
-  role('everyone', 0, { name: '@everyone', permissions: PermViewChannel | PermSendMessages }),
+  role('everyone', 0, { name: '@everyone', permissions: orPerms(PermViewChannel, PermSendMessages) }),
   role('mods', 5, { hoist: true, name: 'Mods' }),
   role('vip', 3, { hoist: true, name: 'VIP' }),
   role('colour', 9, { hoist: false, name: 'Colour' }),

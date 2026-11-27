@@ -86,6 +86,7 @@ import { useExpressionPanel } from './panel/useExpressionPanel';
 import { MicButton } from './components/MicButton';
 import { PendingAttachments } from './components/PendingAttachments';
 import { LockHint, RecordingBar } from './components/RecordingBar';
+import { markBridgeHintSeen } from '@/features/room/bridges/bridgeHint';
 
 export interface ComposerProps {
   roomId: string;
@@ -352,7 +353,11 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
       const sent = await sendMessage(roomId, wire, replyTo ?? undefined, asWebPendingAttachments(files));
       if (sent === null) throw new NotSentError();
       dismissNewHeader(roomId);
-      if (inSpace) startSlowmode(roomId, slowmodeSeconds);
+      if (inSpace) {
+        startSlowmode(roomId, slowmodeSeconds);
+        // A bridged room's hint has done its job once the person has posted there.
+        markBridgeHintSeen(spaceId, roomId);
+      }
     } catch (err) {
       console.warn('[composer] send failed', err);
       startSlowmode(roomId, retryAfterSeconds(err));
@@ -405,7 +410,10 @@ function ComposerBody({ roomId, spaceId, canAttach, canMentionEveryone, customEm
       .then((sent) => {
         if (sent === null) throw new NotSentError();
         dismissNewHeader(roomId);
-        if (inSpace) startSlowmode(roomId, slowmodeSeconds);
+        if (inSpace) {
+          startSlowmode(roomId, slowmodeSeconds);
+          markBridgeHintSeen(spaceId, roomId);
+        }
       })
       .catch((err: unknown) => {
         console.warn('[composer] GIF send failed', err);

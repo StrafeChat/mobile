@@ -269,8 +269,11 @@ describe('links, viewer, players, sizing', () => {
   });
 
   test('in-app link targets', () => {
-    expect(internalTarget('https://chat.example/rooms/12')).toEqual({ kind: 'room', roomId: '12', spaceId: null });
-    expect(internalTarget('https://chat.example/spaces/3/rooms/4')).toEqual({ kind: 'room', roomId: '4', spaceId: '3' });
+    expect(internalTarget('https://chat.example/rooms/12')).toEqual({ kind: 'room', roomId: '12', spaceId: null, messageId: null });
+    expect(internalTarget('https://chat.example/spaces/3/rooms/4')).toEqual({ kind: 'room', roomId: '4', spaceId: '3', messageId: null });
+    expect(internalTarget('https://chat.example/spaces/3/rooms/4/5')).toEqual({ kind: 'room', roomId: '4', spaceId: '3', messageId: '5' });
+    expect(internalTarget('https://chat.example/rooms/12/13/')).toEqual({ kind: 'room', roomId: '12', spaceId: null, messageId: '13' });
+    expect(internalTarget('https://chat.example/rooms/12/abc')).toBeNull();
     expect(internalTarget('https://chat.example/invite/abc%40other.host')).toEqual({ kind: 'invite', code: 'abc@other.host' });
     expect(internalTarget('https://chat.example/settings')).toBeNull();
   });

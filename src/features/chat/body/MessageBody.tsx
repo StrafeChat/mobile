@@ -23,6 +23,7 @@ import { Fragment, memo, useMemo, type ReactNode } from 'react';
 import { StyleSheet, Text as RNText, View, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import type { MessageSegment } from '@web/lib/utils/markdown';
 import { previewUrlsFor } from '@web/lib/linkPreviewUrls';
+import { roomLinkFromUrl } from '@web/lib/roomLinks';
 import { previewUrlsBesideEmbeds } from '@web/lib/embeds/messageEmbeds';
 import { t } from '@web/i18n/t';
 import { useTheme, type Theme } from '@/theme';
@@ -42,6 +43,7 @@ import {
   InlineEmoji,
   InlineMath,
   LinkText,
+  RoomLinkPill,
   MentionPill,
   RoleMentionPill,
   Spoiler,
@@ -142,6 +144,8 @@ function renderInlineNode(seg: MessageSegment, theme: Theme, key: string): React
         </RNText>
       );
     case 'link':
+      // A bare link to a room or message here: the jump pill (web: MessageBody's RoomLinkPill).
+      if (seg.text === seg.href && roomLinkFromUrl(seg.href)) return <RoomLinkPill key={key} href={seg.href} />;
       return (
         <LinkText key={key} href={seg.href}>
           {seg.text}

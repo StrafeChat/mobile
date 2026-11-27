@@ -1,7 +1,8 @@
 /**
  * A conversation's header (the web's RoomHeader, laid out the way Discord mobile does it):
  * back (on a phone: the rails), the room's glyph or the other person's avatar, the name with
- * its BOT / OFFICIAL tags, the encryption lock and a muted bell, and a second line - presence
+ * its BOT / OFFICIAL tags, the encryption lock, a muted bell and the "Bridged: Discord" badge
+ * (bridges/BridgeUi), and a second line - presence
  * for a PM (a custom status, else what they are playing, else the status), the topic for a channel, the channel for a thread. Tapping the title opens the
  * room's info sheet, which holds everything; the bar itself keeps the two or three actions
  * that matter for the kind of room (calls in PMs, threads and members in channels, search
@@ -27,6 +28,7 @@ import { openRoomNotifySheet } from './presenters';
 import { startOrJoinCall, toggleMembers, type RoomMode } from './roomActions';
 import { roomKindIcon } from './util';
 import { headerActionKeys, type HeaderActionKey } from './headerModel';
+import { BridgeHeaderBadge } from './bridges/BridgeUi';
 
 export interface RoomHeaderProps {
   info: RoomInfo;
@@ -130,6 +132,8 @@ export function RoomHeader({ info, mode, onBack, onOpenInfo }: RoomHeaderProps) 
         </View>
       ) : null}
       {info.muted ? <Icon name="bell-slash" size={11} tone="muted" accessibilityLabel={t('room.notify.muted')} /> : null}
+      {/* What the room is bridged with (a room is never bridged silently); not on threads. */}
+      {info.spaceId && info.kind !== 'thread' ? <BridgeHeaderBadge spaceId={info.spaceId} roomId={info.id} wide={wide} /> : null}
     </View>
   );
 

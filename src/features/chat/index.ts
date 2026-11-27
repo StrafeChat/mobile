@@ -18,7 +18,8 @@
  * - openReactionPicker / confirmDeleteMessage: the sheets the list hosts. (Create thread is
  *   the room area's form: openCreateThread from '@/features/room'.)
  * - showMessageActions(messageId, { roomId, spaceId }): the long-press sheet.
- * - openUserProfile / showAuthorMenu: a person in a room's context.
+ * - openUserProfile / showAuthorMenu: a person in a room's context; openMessageAuthor /
+ *   showMessageAuthorMenu: a message's author, a webhook's or bridged person's card included.
  */
 export { MessageList, type MessageListProps } from './list/MessageList';
 export { TypingIndicator, TYPING_ROW_HEIGHT } from './TypingIndicator';
@@ -29,6 +30,6 @@ export { openMedia, MediaViewerHost } from './mediaViewer';
 export { openReactionPicker } from './reactions/ReactionPicker';
 export { confirmDeleteMessage } from './actions/DeleteMessageSheet';
 export { showMessageActions } from './actions/messageActions';
-export { openUserProfile, showAuthorMenu } from './people';
+export { openMessageAuthor, openUserProfile, showAuthorMenu, showMessageAuthorMenu } from './people';
 export { openMessageLink } from './navigation';
 export { setSwipeToReplyEnabled, swipeToReplyEnabled } from './preferences';

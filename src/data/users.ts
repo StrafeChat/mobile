@@ -132,7 +132,8 @@ export interface UserContext {
 /**
  * The richest participant record for `userId` in a context: space member, then room
  * participant, then a user embedded on that room's loaded messages (author, mention_users,
- * referenced_message.author - first found, oldest message first, as augmentParticipants adds them).
+ * referenced_message.author - first found, oldest message first, as augmentParticipants adds them;
+ * never a webhook message's `author`).
  */
 export function findParticipant(userId: string, ctx: UserContext): (RoomParticipant & { roles?: string[]; joined_at?: string }) | undefined {
   const spaceId = ctx.spaceId ?? (ctx.roomId ? spaceIdOfRoom(ctx.roomId) : undefined);
@@ -144,10 +145,13 @@ export function findParticipant(userId: string, ctx: UserContext): (RoomParticip
     const p = rooms.rooms.find((r) => r.id === ctx.roomId)?.participants?.find((x) => x.id === userId);
     if (p) return p;
     for (const m of messages.byRoom[ctx.roomId] ?? []) {
-      if (m.author?.id === userId) return m.author;
+      // A webhook's (or bridge's) `author` is that message's own identity under the webhook's
+      // id, not a person: folded in by id, one webhook would take one name everywhere (the
+      // web's augmentParticipants skips it the same way).
+      if (!m.webhook_id && m.author?.id === userId) return m.author;
       const mu = m.mention_users?.find((u) => u.id === userId);
       if (mu) return mu;
-      if (m.referenced_message?.author?.id === userId) return m.referenced_message.author;
+      if (!m.referenced_message?.webhook_id && m.referenced_message?.author?.id === userId) return m.referenced_message.author;
     }
   }
   const rel = relationships.relationships.find((r) => r.user.id === userId);

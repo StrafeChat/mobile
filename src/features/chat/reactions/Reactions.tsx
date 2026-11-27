@@ -14,7 +14,7 @@ import { t } from '@web/i18n/t';
 import { listReactors, type Reactor } from '@web/api/messages';
 import { auth } from '@web/stores/auth';
 import { useSolid } from '@/bridge/solid';
-import { parseReactionKey, reactionPillDisabled, resolveSpaceUser, spaceIdOfRoom, useCustomEmoji, useMessageReactions } from '@/data';
+import { parseReactionKey, puppetReactorName, reactionPillDisabled, resolveSpaceUser, spaceIdOfRoom, useCustomEmoji, useMessageReactions } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, haptics, Icon, ListRow, Sheet, SheetScrollView, Spinner, Text, Touchable, useLongPress, withAlpha } from '@/ui';
 import { CustomEmojiImage, EmojiGlyph } from '../body/inline';
@@ -141,18 +141,22 @@ export const MessageReactionsRow = memo(function MessageReactionsRow({
 
 // ---- who reacted --------------------------------------------------------------------------------------
 
-/** One reactor: the API's global user, with their space profile on top in a space room. */
+/** One reactor: the API's global user, with their space profile on top in a space room. A
+ * bridged person who reacted through a bridge is "Alice (Discord)": their id is a puppet id,
+ * nobody here, so it is never looked up in the member list and has no profile to open. */
 function ReactorRow({ reactor, roomId, onPress }: { reactor: Reactor; roomId: string; onPress: () => void }) {
+  const puppet = puppetReactorName(reactor);
   const view = useSolid(() => {
+    if (puppet) return { name: puppet, avatar: null };
     const r = resolveSpaceUser(spaceIdOfRoom(roomId), reactor.id, reactor);
     return { name: r.name, avatar: r.avatar ?? null };
-  }, [roomId, reactor]);
+  }, [roomId, reactor, puppet]);
   return (
     <ListRow
       title={view.name}
-      subtitle={reactor.username && reactor.username !== view.name ? reactor.username : undefined}
-      leading={<Avatar uri={view.avatar} name={view.name} user={reactor} size="md" />}
-      onPress={onPress}
+      subtitle={!puppet && reactor.username && reactor.username !== view.name ? reactor.username : undefined}
+      leading={<Avatar uri={view.avatar} name={view.name} user={puppet ? reactor.id : reactor} size="md" />}
+      {...(puppet ? {} : { onPress })}
       accessibilityHint={reactor.id === auth.user?.id ? t('common.you') : undefined}
     />
   );

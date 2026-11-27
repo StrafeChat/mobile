@@ -73,7 +73,20 @@ export { avatarRef, type AvatarRef, type AvatarUser } from './avatarRef';
 export { PresenceDot, presenceLabel, presenceColor, normalizePresence, type PresenceDotProps, type PresenceStatus } from './PresenceDot';
 export { UserPresenceDot, UserAvatar, useUserStatus, useUserCustomStatus, type UserPresenceDotProps, type UserAvatarProps } from './UserPresence';
 export { Badge, formatBadgeCount, type BadgeProps, type BadgeTone } from './Badge';
-export { BotTag, OfficialTag, RolePill, type BotTagProps, type OfficialTagProps, type RolePillProps, type RolePillRole, type TagSize } from './Tags';
+export {
+  BotTag,
+  OfficialTag,
+  RolePill,
+  WebhookTag,
+  webhookTagText,
+  type BotTagProps,
+  type OfficialTagProps,
+  type RolePillProps,
+  type RolePillRole,
+  type TagSize,
+  type WebhookTagProps,
+  type WebhookTagSubject,
+} from './Tags';
 export { UserBadges, type UserBadgesProps } from './UserBadges';
 
 // Behaviour

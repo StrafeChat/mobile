@@ -1,4 +1,5 @@
 /// <reference types="jest" />
+import { orPerms } from '@web/lib/permBits';
 import './settingsTestSetup';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
@@ -133,7 +134,7 @@ describe('pure screen rules', () => {
     const draft = { name: 'Mods', color: '#1abc9c', hoist: false, mentionable: false, permissions: PermKickMembers };
     expect(roleDraftDirty(r, draft)).toBe(false);
     expect(roleDraftDirty(r, { ...draft, name: '  ' })).toBe(false);
-    expect(roleDraftDirty(r, { ...draft, permissions: PermKickMembers | PermSendMessages })).toBe(true);
+    expect(roleDraftDirty(r, { ...draft, permissions: orPerms(PermKickMembers, PermSendMessages) })).toBe(true);
     // Unchanged permissions stay out of the body (the server checks every bit sent against what
     // the editor may grant); changed ones go.
     expect(rolePatch(r, { ...draft, name: 'Moderators' })).toEqual({ color: 0x1abc9c, hoist: false, mentionable: false, name: 'Moderators' });
@@ -153,8 +154,8 @@ describe('pure screen rules', () => {
   });
 
   it('seeds consent permissions from what may be granted', () => {
-    expect(grantableDefaults(PermKickMembers | PermSendMessages, PermSendMessages)).toBe(PermSendMessages);
-    expect(grantableDefaults(PermKickMembers | PermSendMessages, PermAdministrator)).toBe(PermKickMembers | PermSendMessages);
+    expect(grantableDefaults(orPerms(PermKickMembers, PermSendMessages), PermSendMessages)).toBe(PermSendMessages);
+    expect(grantableDefaults(orPerms(PermKickMembers, PermSendMessages), PermAdministrator)).toBe(orPerms(PermKickMembers, PermSendMessages));
     expect(denyRedirect('https://app.example/cb', 'xyz')).toBe('https://app.example/cb?error=access_denied&state=xyz');
     expect(denyRedirect('https://app.example/cb?a=1')).toBe('https://app.example/cb?a=1&error=access_denied');
     expect(denyRedirect('')).toBeNull();

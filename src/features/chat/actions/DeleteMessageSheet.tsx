@@ -12,7 +12,7 @@ import { deleteMessage as deleteMessageApi } from '@web/api/messages';
 import { setMessages, type DecryptedMessage } from '@web/stores/messages';
 import { getMessageBodyText } from '@web/components/messageList/utils';
 import { formatMessageTimestamp } from '@web/lib/utils/datetime';
-import { useUserDisplay } from '@/data';
+import { useMessageAuthor } from '@/data';
 import { useTheme } from '@/theme';
 import { Avatar, Button, createExternalStore, haptics, Sheet, Text, toast, useExternalStore } from '@/ui';
 import { useHostSlot } from '../hostSlot';
@@ -54,7 +54,7 @@ function DeleteMessageSheet({ request, onClose }: { request: DeleteRequest | nul
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(true);
   const msg = request?.message;
-  const sender = useUserDisplay(msg?.sender_id, { roomId: request?.roomId ?? null, spaceId: request?.spaceId ?? null });
+  const sender = useMessageAuthor(msg, { roomId: request?.roomId ?? null, spaceId: request?.spaceId ?? null });
   if (!request || !msg) return null;
   const confirm = async () => {
     setBusy(true);
@@ -80,7 +80,7 @@ function DeleteMessageSheet({ request, onClose }: { request: DeleteRequest | nul
       dismissible={!busy}
     >
       <View style={[styles.preview, { borderColor: theme.colors.border, backgroundColor: theme.colors.background, borderRadius: theme.radii.lg }]}>
-        <Avatar uri={sender?.avatar ?? null} name={sender?.name ?? '?'} user={{ userId: msg.sender_id, originId: sender?.originId }} size="lg" />
+        <Avatar uri={sender?.avatar ?? null} name={sender?.name ?? '?'} user={sender?.webhook ? sender.userId : { userId: msg.sender_id, originId: sender?.originId }} size="lg" />
         <View style={styles.flex}>
           <View style={styles.head}>
             <Text variant="label" weight="semibold" numberOfLines={1} style={styles.shrink}>

@@ -5,23 +5,25 @@
  */
 import { View } from 'react-native';
 import { t } from '@web/i18n/t';
+import { hasPerm, togglePerm, type PermInput } from '@web/lib/permBits';
 import { useTheme } from '@/theme';
 import { Icon, Touchable, haptics, withAlpha } from '@/ui';
 
 export type TriState = 'deny' | 'neutral' | 'allow';
 
-/** The state of one permission bit in an override's allow/deny masks (deny wins, as on the web). */
-export function overrideState(allow: number, deny: number, bit: number): TriState {
-  if ((deny & bit) === bit) return 'deny';
-  if ((allow & bit) === bit) return 'allow';
+/** The state of one permission bit in an override's allow/deny masks (deny wins, as on the
+ * web). Through permBits: bits 31 and up (Manage Webhooks, Masquerade) need BigInt maths. */
+export function overrideState(allow: PermInput, deny: PermInput, bit: number): TriState {
+  if (hasPerm(deny, bit)) return 'deny';
+  if (hasPerm(allow, bit)) return 'allow';
   return 'neutral';
 }
 
-/** The masks after setting one bit to a state. */
-export function applyOverrideState(masks: { allow: number; deny: number }, bit: number, state: TriState): { allow: number; deny: number } {
+/** The masks after setting one bit to a state. Never negative, whatever the bit. */
+export function applyOverrideState(masks: { allow: PermInput; deny: PermInput }, bit: number, state: TriState): { allow: number; deny: number } {
   return {
-    allow: state === 'allow' ? masks.allow | bit : masks.allow & ~bit,
-    deny: state === 'deny' ? masks.deny | bit : masks.deny & ~bit,
+    allow: togglePerm(masks.allow, bit, state === 'allow'),
+    deny: togglePerm(masks.deny, bit, state === 'deny'),
   };
 }
 

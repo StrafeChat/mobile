@@ -1,9 +1,21 @@
 /**
  * Permission-override rules for room settings (SpaceRoomSettingsModal), as pure functions:
  * which rows a room shows, the private-section switch, and how an override reads in a list.
+ * Masks go through the web's permBits (BigInt underneath): Manage Webhooks (bit 31) and
+ * Masquerade (bit 32) do not survive JS's 32-bit `&`/`|`/`~`.
  */
 import type { SpaceRoom, SpaceRoomOverride } from '@web/api/spaces';
-import { PermViewChannel, ROOM_OVERRIDE_PERM_ROWS, VOICE_ROOM_OVERRIDE_PERM_ROWS, type PermRow } from '@web/lib/spacePermissions';
+import {
+  hasAnyPerm,
+  hasPerm,
+  orPerms,
+  PermViewChannel,
+  ROOM_OVERRIDE_PERM_ROWS,
+  VOICE_ROOM_OVERRIDE_PERM_ROWS,
+  withoutPerms,
+  type PermInput,
+  type PermRow,
+} from '@web/lib/spacePermissions';
 import { ROOM_TYPE_SECTION, ROOM_TYPE_VOICE } from './useRoomSettings';
 
 /** Voice rooms override View plus the voice bits; text rooms and sections the text bits. */
@@ -23,7 +35,7 @@ export function isSyncLocked(room: Pick<SpaceRoom, 'type' | 'parent_id' | 'permi
 /** A section is private when @everyone is denied View on it. */
 export function isPrivateSection(overrides: readonly SpaceRoomOverride[] | undefined, everyoneId: string | undefined): boolean {
   const ov = overrides?.find((o) => o.role_id === everyoneId);
-  return !!ov && (ov.deny & PermViewChannel) !== 0;
+  return !!ov && hasAnyPerm(ov.deny, PermViewChannel);
 }
 
 /**
@@ -32,22 +44,22 @@ export function isPrivateSection(overrides: readonly SpaceRoomOverride[] | undef
  * when nothing is left in it (the web's togglePrivateCategory).
  */
 export function privateSectionChange(
-  existing: Pick<SpaceRoomOverride, 'allow' | 'deny'> | undefined,
+  existing: { allow: PermInput; deny: PermInput } | undefined,
   makePrivate: boolean,
 ): { action: 'put'; allow: number; deny: number } | { action: 'delete' } {
-  const allow = (existing?.allow ?? 0) & ~PermViewChannel;
-  const deny = makePrivate ? (existing?.deny ?? 0) | PermViewChannel : (existing?.deny ?? 0) & ~PermViewChannel;
+  const allow = withoutPerms(existing?.allow, PermViewChannel);
+  const deny = makePrivate ? orPerms(existing?.deny, PermViewChannel) : withoutPerms(existing?.deny, PermViewChannel);
   if (!makePrivate && allow === 0 && deny === 0) return { action: 'delete' };
   return { action: 'put', allow, deny };
 }
 
 /** How many of a room's override rows an override allows and denies. */
-export function overrideCounts(o: Pick<SpaceRoomOverride, 'allow' | 'deny'>, rows: readonly PermRow[]): { allowed: number; denied: number } {
+export function overrideCounts(o: { allow: PermInput; deny: PermInput }, rows: readonly PermRow[]): { allowed: number; denied: number } {
   let allowed = 0;
   let denied = 0;
   for (const r of rows) {
-    if ((o.deny & r.bit) === r.bit) denied++;
-    else if ((o.allow & r.bit) === r.bit) allowed++;
+    if (hasPerm(o.deny, r.bit)) denied++;
+    else if (hasPerm(o.allow, r.bit)) allowed++;
   }
   return { allowed, denied };
 }

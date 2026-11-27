@@ -5,6 +5,7 @@
  * the "Change Nickname" sheet (with the server's limits checked as you type), the web's reset
  * flow, and the profile sheet's own actions and global-name line.
  */
+import { orPerms } from '@web/lib/permBits';
 import './roomTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -32,9 +33,9 @@ const { ProfileSheetHost } = require('../profile/ProfileSheetHost') as typeof im
 const { authorMenuItems, openUserProfile } = require('@/features/chat/people') as typeof import('@/features/chat/people');
 const { showUserProfile, spaceRoleContextFor } = require('../profile/present') as typeof import('../profile/present');
 
-const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages | PermChangeNickname, { name: '@everyone' });
+const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages, PermChangeNickname), { name: '@everyone' });
 const LOW = role('low', 2, 0, { name: 'Low' });
-const MOD = role('mod', 5, PermManageNicknames | PermKickMembers, { name: 'Mod' });
+const MOD = role('mod', 5, orPerms(PermManageNicknames, PermKickMembers), { name: 'Mod' });
 
 /** The space S: you are a moderator (Manage Nicknames + Kick), b is below you with a space
  * profile, c below you without one, peer at your rank, and the owner above everyone. */
@@ -93,7 +94,7 @@ describe('nickname menu entries', () => {
   test('your own row: Edit Space Profile, and Change Nickname while @everyone has it', () => {
     seed();
     expect(labels(spaceProfileMenuItems('S', ME))).toEqual([EDIT, CHANGE]);
-    seed({ everyone: PermViewChannel | PermSendMessages, myRoles: [] });
+    seed({ everyone: orPerms(PermViewChannel, PermSendMessages), myRoles: [] });
     expect(labels(spaceProfileMenuItems('S', ME))).toEqual([EDIT]);
   });
 

@@ -2,6 +2,7 @@
  * The nav panel end to end over the real stores: rail, Home's PM list, a space's rooms, the
  * tab bar with the Notifications and You panels, long-press menus, and the Friends view.
  */
+import { orPerms } from '@web/lib/permBits';
 import './navTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
@@ -48,7 +49,7 @@ jest.mock('@web/api/spaces', () => ({
   listSpaceRoles: jest.fn(async () => []),
 }));
 
-const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
+const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages), { name: '@everyone' });
 
 function seed() {
   setRooms({

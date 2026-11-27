@@ -3,6 +3,7 @@
  * flows behind them (confirm first, API, store update, the shell moving off a room that went
  * away, rollback when a status save fails).
  */
+import { orPerms } from '@web/lib/permBits';
 import './navTestSetup';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { setSpaces, spaces } from '@web/stores/spaces';
@@ -52,8 +53,8 @@ jest.mock('@web/api/rooms', () => ({
   getNotesRoom: jest.fn(async () => undefined),
 }));
 
-const EVERYONE = role('ev', 0, PermViewChannel | PermSendMessages, { name: '@everyone' });
-const MANAGER = role('mgr', 5, PermManageRooms | PermCreateInvite, { name: 'Manager' });
+const EVERYONE = role('ev', 0, orPerms(PermViewChannel, PermSendMessages), { name: '@everyone' });
+const MANAGER = role('mgr', 5, orPerms(PermManageRooms, PermCreateInvite), { name: 'Manager' });
 
 function keys(entries: readonly ActionSheetEntry[]): string[] {
   return cleanEntries(entries).map((e) => (e === 'separator' ? '---' : isActionItem(e) ? (e.key ?? e.label) : `#${e.section}`));
@@ -100,15 +101,15 @@ afterEach(() => {
 describe('space menu', () => {
   test('a plain member: their space profile, mark read, copy id, leave on the rail; report and leave in the header', () => {
     seedSpace();
-    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['space-profile', 'mark-read', 'copy-id', 'leave']);
-    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['space-profile', '---', 'mark-read', 'copy-id', '---', 'report', 'leave']);
+    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['space-profile', 'bridge-privacy', 'mark-read', 'copy-id', 'leave']);
+    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['space-profile', 'bridge-privacy', '---', 'mark-read', 'copy-id', '---', 'report', 'leave']);
     expect(item(spaceMenuEntries('s1', 'rail'), 'mark-read').disabled).toBe(false);
   });
 
   test('the owner can invite and manage, and never leaves', () => {
     seedSpace({ owner: true });
-    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['invite', 'space-profile', 'settings', 'mark-read', 'copy-id']);
-    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['invite', 'space-profile', 'settings', 'create-room', 'create-section', '---', 'mark-read', 'copy-id']);
+    expect(keys(spaceMenuEntries('s1', 'rail'))).toEqual(['invite', 'space-profile', 'bridge-privacy', 'settings', 'mark-read', 'copy-id']);
+    expect(keys(spaceMenuEntries('s1', 'header'))).toEqual(['invite', 'space-profile', 'bridge-privacy', 'settings', 'create-room', 'create-section', '---', 'mark-read', 'copy-id']);
   });
 
   test('"Edit Space Profile" opens Settings -> Space Profiles on that space, from both menus', () => {

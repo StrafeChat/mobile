@@ -2,7 +2,8 @@
  * The room area's root-mounted hosts: everything that shared web code (or any area) opens
  * through a store and that has to be on screen wherever the person is.
  *
- * - the profile sheet (src/platform/presenters profileSheet - the web's popover);
+ * - the profile sheet (src/platform/presenters profileSheet - the web's popover), and the card
+ *   a webhook's or bridged message's author opens instead (webhookCard - the web's WebhookCard);
  * - the full profile and safety numbers: the web's userProfileFullModal and
  *   safetyNumberModal stores become pushed screens;
  * - the report sheet (presenters reportSheet - the web's openReportDialog);
@@ -10,6 +11,7 @@
  *   flow raises before it creates or deletes a backup (stores/passwordPrompt), and the
  *   encryption-store reset dialog;
  * - "Leaving Strafe" for external links (stores/externalLink);
+ * - a space's "Bridge privacy" choice (the web's stores/bridgeConsentDialog);
  * - the room area's own sheets: create thread, members over a pushed screen, the one-line
  *   text prompt (notification settings are the settings area's page) and "Change Nickname"
  *   (nicknameSheet - the web's NicknameDialog).
@@ -29,6 +31,8 @@ import { MembersSheetHost } from './members/MembersPanel';
 import { NicknameSheetHost } from './members/NicknameSheet';
 import { openProfileScreen, openSafetyScreen } from './navigation';
 import { ProfileSheetHost } from './profile/ProfileSheetHost';
+import { WebhookCardSheetHost } from './profile/WebhookCardSheet';
+import { SpaceBridgeConsentSheetHost } from './bridges/BridgeUi';
 import { ReportSheetHost } from './report/ReportSheetHost';
 import { CreateThreadSheetHost } from './threads/CreateThreadSheet';
 
@@ -66,6 +70,8 @@ export function RoomHosts() {
   return (
     <>
       <ProfileSheetHost />
+      <WebhookCardSheetHost />
+      <SpaceBridgeConsentSheetHost />
       <ReportSheetHost />
       <CreateThreadSheetHost />
       <MembersSheetHost />

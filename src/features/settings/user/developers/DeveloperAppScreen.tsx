@@ -29,7 +29,7 @@ import {
   type OAuthScope,
 } from '@web/api/developers';
 import { applyBotListing, getBotListing, withdrawBotListing } from '@web/api/discover';
-import { PermAdministrator, SPACE_ROLE_PERM_GROUPS } from '@web/lib/spacePermissions';
+import { hasPerm, PermAdministrator, SPACE_ROLE_PERM_GROUPS, togglePerm, toWire } from '@web/lib/spacePermissions';
 import { confirmDialog } from '@web/stores/confirmDialog';
 import { openExternalUrl } from '@/platform/overrides/desktop/native';
 import { useTheme } from '@/theme';
@@ -470,18 +470,18 @@ export function DeveloperAppScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <Text variant="label">{t('settings.developers.botPermissions')}</Text>
               <Text variant="caption" style={{ fontFamily: MONO_FONT }}>
-                {t('settings.developers.permissionsValue', { value: String(perms) })}
+                {t('settings.developers.permissionsValue', { value: toWire(perms) })}
               </Text>
             </View>
             {SPACE_ROLE_PERM_GROUPS.map((group) => (
               <View key={group.category} style={{ gap: 8 }}>
                 <Text variant="overline">{group.category}</Text>
                 {group.rows.map((r) => (
-                  <Checkbox key={r.key} checked={(perms & r.bit) !== 0} onChange={(on) => setPerms((cur) => (on ? cur | r.bit : cur & ~r.bit))} label={r.label} />
+                  <Checkbox key={r.key} checked={hasPerm(perms, r.bit)} onChange={(on) => setPerms((cur) => togglePerm(cur, r.bit, on))} label={r.label} />
                 ))}
               </View>
             ))}
-            {(perms & PermAdministrator) !== 0 ? (
+            {hasPerm(perms, PermAdministrator) ? (
               <Text variant="caption" tone="danger">
                 {t('settings.developers.administratorWarning')}
               </Text>
