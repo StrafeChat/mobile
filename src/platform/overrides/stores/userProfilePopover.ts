@@ -29,6 +29,12 @@ export function closeUserProfilePopover(): void {
   dismissProfileSheet();
 }
 
+/** The web keeps a press on the trigger that opened the card from closing it; a sheet has no
+ * trigger element, so nothing ever is one. */
+export function isUserProfilePopoverAnchor(_target: unknown): boolean {
+  return false;
+}
+
 /** A sheet sizes itself; there is nothing to re-place once the card has been measured. */
 export function remeasureUserProfilePopover(_height: number): void {
   /* nothing to do */
