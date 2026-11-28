@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import type { Space, SpaceMember, SpaceRole, SpaceRoom } from '@web/api/spaces';
 import type { Room } from '@web/api/rooms';
-import type { Message } from '@web/api/messages';
+import { MESSAGE_FLAGS, type Message } from '@web/api/messages';
 import { webhookAuthorOf } from '@web/lib/webhookMessages';
 import {
   PermAddReactions,
@@ -318,6 +318,7 @@ export type MessageAction =
   | 'copyId'
   | 'copyLink'
   | 'reply'
+  | 'publish'
   | 'createThread'
   | 'pin'
   | 'unpin'
@@ -336,10 +337,12 @@ export type MessageAction =
  * Manage Messages in the room - data/webhooks canBlockBridged).
  */
 export function messageActions(
-  msg: { sender_id: string; pinned?: boolean; thread_id?: string; system_type?: string } & Partial<Pick<Message, 'webhook_id' | 'masquerade' | 'author'>>,
+  msg: { sender_id: string; pinned?: boolean; thread_id?: string; system_type?: string; forward?: unknown } & Partial<
+    Pick<Message, 'webhook_id' | 'masquerade' | 'author' | 'flags'>
+  >,
   currentUserId: string | null | undefined,
-  gates: Pick<RoomGates, 'canReact' | 'canReply' | 'canPin' | 'canDeleteOthers' | 'canOfferCreateThread'>,
-  extra: { canBlockBridged?: boolean } = {},
+  gates: Pick<RoomGates, 'canReact' | 'canReply' | 'canPin' | 'canDeleteOthers' | 'canOfferCreateThread'> & Partial<Pick<RoomGates, 'canManageMessages'>>,
+  extra: { canBlockBridged?: boolean; announcement?: boolean } = {},
 ): MessageAction[] {
   if (msg.system_type) return [];
   const own = !msg.webhook_id && !!currentUserId && msg.sender_id === currentUserId;
@@ -347,6 +350,10 @@ export function messageActions(
   if (gates.canReact) out.push('addReaction');
   out.push('copyText', 'copyId', 'copyLink');
   if (gates.canReply) out.push('reply');
+  // An announcement room's message not yet published: your own with Send Messages, anyone's
+  // with Manage Messages (the web's Publish).
+  const published = ((msg.flags ?? 0) & (MESSAGE_FLAGS.PUBLISHED | MESSAGE_FLAGS.IS_CROSSPOST)) !== 0;
+  if (extra.announcement && !published && !msg.forward && (own ? gates.canReply : gates.canManageMessages === true)) out.push('publish');
   if (gates.canOfferCreateThread && !msg.thread_id) out.push('createThread');
   if (gates.canPin) out.push(msg.pinned ? 'unpin' : 'pin');
   const masked = msg.webhook_id ? webhookAuthorOf(msg) : null;

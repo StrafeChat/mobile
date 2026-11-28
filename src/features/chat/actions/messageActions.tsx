@@ -3,7 +3,7 @@
  * Discord-mobile style: a strip of quick reactions on top (recent first, then defaults, and
  * "+" for the full picker), then the actions in the web's order with its gates
  * (src/data messageActions): Add reaction, Copy text, Copy message ID, Copy message link, Reply,
- * Create thread, Pin / Unpin, Block from this bridge, Report, Edit, Delete. System messages
+ * Publish (an announcement room's message), Create thread, Pin / Unpin, Block from this bridge, Report, Edit, Delete. System messages
  * have no sheet.
  *
  * A webhook's or bridged message (the web's rules): never your own, so no Edit; Report names
@@ -22,6 +22,8 @@ import { messages, type DecryptedMessage } from '@web/stores/messages';
 import { pinMessage, unpinMessage } from '@web/stores/pinnedMessages';
 import { customEmojis } from '@web/stores/customEmojis';
 import { getMessageBodyText } from '@web/components/messageList/utils';
+import { crosspostMessage } from '@web/api/messages';
+import { ApiError } from '@web/api/ApiError';
 import { messageLinkUrl } from '@web/lib/roomLinks';
 import { spaces } from '@web/stores/spaces';
 import { webhookAuthorOf } from '@web/lib/webhookMessages';
@@ -52,6 +54,7 @@ const ICONS: Record<MessageAction, string> = {
   copyId: 'hashtag',
   copyLink: 'link',
   reply: 'reply',
+  publish: 'bullhorn',
   createThread: 'comments',
   pin: 'thumbtack',
   unpin: 'thumbtack',
@@ -73,6 +76,8 @@ function labelOf(action: MessageAction): string {
       return t('messages.actions.copyLink');
     case 'reply':
       return t('messages.actions.reply');
+    case 'publish':
+      return t('announcements.publish');
     case 'createThread':
       return t('threads.createFromMessage');
     case 'pin':
@@ -92,10 +97,13 @@ function labelOf(action: MessageAction): string {
 
 /** Optimistic rows (temp ids) are not on the server yet: only the copies apply to them. */
 export function actionsFor(
-  msg: Pick<DecryptedMessage, 'id' | 'sender_id' | 'pinned' | 'thread_id' | 'system_type' | 'pending' | 'webhook_id' | 'masquerade' | 'author'>,
+  msg: Pick<
+    DecryptedMessage,
+    'id' | 'sender_id' | 'pinned' | 'thread_id' | 'system_type' | 'pending' | 'webhook_id' | 'masquerade' | 'author' | 'flags' | 'forward'
+  >,
   uid: string | null | undefined,
   gates: RoomGates,
-  extra: { canBlockBridged?: boolean } = {},
+  extra: { canBlockBridged?: boolean; announcement?: boolean } = {},
 ): MessageAction[] {
   const all = messageActions(msg, uid, gates, extra);
   if (msg.pending || msg.id.startsWith('temp-')) return all.filter((a) => a === 'copyText' || a === 'copyId');
@@ -125,6 +133,20 @@ function run(action: MessageAction, msg: DecryptedMessage, ctx: MessageActionCon
       return;
     case 'reply':
       startReply(roomId, msg.id);
+      return;
+    case 'publish':
+      // Sent to every room following this one; MESSAGE_UPDATE brings the published flag back.
+      void crosspostMessage(roomId, msg.id)
+        .then(() => toast(t('mobile.chat.published')))
+        .catch((err: unknown) =>
+          toast.error(
+            err instanceof ApiError && err.status === 429
+              ? t('announcements.publishLimited')
+              : err instanceof ApiError && err.status === 403
+                ? t('announcements.publishNoPermission')
+                : t('announcements.publishFailed'),
+          ),
+        );
       return;
     case 'createThread':
       if (spaceId) openCreateThread({ spaceId, roomId, starterMessageId: msg.id });
@@ -195,7 +217,8 @@ function reportMasked(msg: DecryptedMessage, ctx: MessageActionContext): void {
 
 /** The sheet's entries for a message, in order; [] for system messages. */
 export function messageActionItems(msg: DecryptedMessage, ctx: MessageActionContext, gates: RoomGates): ActionItem[] {
-  const extra = msg.webhook_id ? { canBlockBridged: canBlockBridged(ctx.spaceId, ctx.roomId) } : {};
+  const announcement = !!ctx.spaceId && spaces.spaceRoomsBySpaceId[ctx.spaceId]?.find((r) => r.id === ctx.roomId)?.announcement === true;
+  const extra = { ...(msg.webhook_id ? { canBlockBridged: canBlockBridged(ctx.spaceId, ctx.roomId) } : {}), announcement };
   return actionsFor(msg, auth.user?.id, gates, extra).map((a) => ({
     key: a,
     label: labelOf(a),

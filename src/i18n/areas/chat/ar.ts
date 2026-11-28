@@ -4,6 +4,7 @@
  * _few/_many/_other where the others use _one/_other.
  */
 export default {
+  published: 'نُشرت في الغرف التي تتابع هذه الغرفة',
   listLabel: 'الرسائل',
   loadFailed: 'تعذّر تحميل الرسائل.',
   messageHint: 'اضغط مطولاً لعرض الإجراءات، واسحب لليسار للرد',

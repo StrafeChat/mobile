@@ -102,7 +102,12 @@ export function BotTag({ bot, size = 'sm', style }: BotTagProps) {
 /** What WebhookTag needs: `true` (a plain webhook), or a sender display's `webhook`. */
 export type WebhookTagSubject =
   | boolean
-  | { kind: 'webhook' | 'bridge'; bridge?: { platform: string; platformName?: string; bridgeName?: string; via?: { name: string } } }
+  | {
+      kind: 'webhook' | 'bridge' | 'follow';
+      bridge?: { platform: string; platformName?: string; bridgeName?: string; via?: { name: string } };
+      /** A published copy: the announcement room it came from ("#news"). */
+      followRoom?: string;
+    }
   | null
   | undefined;
 
@@ -115,6 +120,11 @@ export interface WebhookTagProps {
 /** The platform's name and the tag's accessible name ("Bridged from Discord by Strife"). */
 export function webhookTagText(webhook: WebhookTagSubject): { label: string; a11y: string; bridged: boolean } | null {
   if (!webhook) return null;
+  if (typeof webhook === 'object' && webhook.kind === 'follow') {
+    // A published copy of an announcement room's message: SPACE, saying where it came from.
+    const a11y = webhook.followRoom ? t('announcements.copyTagLabel', { room: webhook.followRoom }) : t('announcements.copyTagLabelPlain');
+    return { label: t('announcements.copyTag'), a11y, bridged: false };
+  }
   const b = typeof webhook === 'object' && webhook.kind === 'bridge' ? (webhook.bridge ?? { platform: 'other' }) : null;
   if (!b) return { label: t('badges.webhookTag'), a11y: t('badges.webhook'), bridged: false };
   const platform = bridgePlatformLabel(b.platform, b.platformName);

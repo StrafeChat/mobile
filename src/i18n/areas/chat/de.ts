@@ -4,6 +4,7 @@
  * _few/_many/_other where the others use _one/_other.
  */
 export default {
+  published: 'In den Räumen veröffentlicht, die diesem folgen',
   listLabel: 'Nachrichten',
   loadFailed: 'Nachrichten konnten nicht geladen werden.',
   messageHint: 'Lange drücken für Aktionen, nach links wischen zum Antworten',

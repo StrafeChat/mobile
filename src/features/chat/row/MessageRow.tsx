@@ -43,6 +43,7 @@ import { dismissKeyboard } from '@/ui/keyboard';
 import { MessageAttachments } from '../attachments/Attachments';
 import { MessageBody, bodyColor } from '../body/MessageBody';
 import { MessageEmbeds } from '../body/MessageEmbed';
+import { ForwardedMessage } from '../body/ForwardedMessage';
 import { EditedMarker } from '../body/inline';
 import { showMessageActions } from '../actions/messageActions';
 import { FLASH_FADE_MS, FLASH_HOLD_MS, useFlashNonce } from '../flash';
@@ -175,7 +176,9 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
   const attachments = useMemo(() => attachmentsBesideEmbeds(msg.attachments ?? [], embeds), [msg.attachments, embeds]);
   const embedLinks = useMemo(() => embeds.map((e) => safeHttpUrl(e.url)).filter((u): u is string => !!u), [embeds]);
   // The participant pool walks the room's loaded messages: once per text, not per render.
-  const preview = useMemo(() => messagePreviewText(bodyText, roomParticipantPool(roomId), auth.user?.id, 500), [bodyText, roomId]);
+  // A forward has no text of its own: what it says is its copy's ("Forwarded: ...").
+  const spokenText = !bodyText && msg.forward ? `${t('forward.label')}: ${msg.forward.content}` : bodyText;
+  const preview = useMemo(() => messagePreviewText(spokenText, roomParticipantPool(roomId), auth.user?.id, 500), [spokenText, roomId]);
   // Screen readers can neither long-press a row reliably nor swipe it: both as actions. The
   // author's profile too where no avatar is there to reach it (continuations, compact mode),
   // and what can be tapped inside the text, which is one element with the header.
@@ -263,6 +266,7 @@ function UserMessageRow({ item, msg }: { item: MessageItem; msg: DecryptedMessag
     <>
       {attachments.length ? <MessageAttachments key={`a:${msg.id}`} attachments={attachments} /> : null}
       {embeds.length ? <MessageEmbeds key={`e:${msg.id}`} embeds={embeds} roomId={roomId} spaceId={spaceId} /> : null}
+      {msg.forward ? <ForwardedMessage key={`f:${msg.id}`} forward={msg.forward} roomId={roomId} spaceId={spaceId} /> : null}
       {msg.thread_id ? <ThreadFooter key={msg.thread_id} threadId={msg.thread_id} spaceId={spaceId} /> : null}
       {msg.reactions?.length ? (
         <MessageReactionsRow

@@ -4,6 +4,7 @@
  * _few/_many/_other where the others use _one/_other.
  */
 export default {
+  published: 'Published to the rooms that follow this one',
   listLabel: 'Messages',
   loadFailed: 'Couldn\'t load messages.',
   messageHint: 'Long-press for actions, swipe left to reply',

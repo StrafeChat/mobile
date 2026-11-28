@@ -4,6 +4,7 @@
  * _few/_many/_other where the others use _one/_other.
  */
 export default {
+  published: 'Publicado en las salas que siguen a esta',
   listLabel: 'Mensajes',
   loadFailed: 'No se pudieron cargar los mensajes.',
   messageHint: 'Mantén pulsado para ver acciones; desliza a la izquierda para responder',

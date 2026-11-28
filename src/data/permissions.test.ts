@@ -213,4 +213,19 @@ describe('message actions (web context-menu order and gates)', () => {
   test('system messages have no sheet', () => {
     expect(messageActions({ sender_id: 'a', system_type: 'member_added' }, ME, pmG)).toEqual([]);
   });
+
+  test('Publish in an announcement room: your own with Send Messages, anyone\'s with Manage Messages, once', () => {
+    const member = { canReact: false, canReply: true, canPin: false, canDeleteOthers: false, canOfferCreateThread: false, canManageMessages: false };
+    const mod = { ...member, canManageMessages: true };
+    const ann = { announcement: true };
+    expect(messageActions({ sender_id: ME }, ME, member, ann)).toContain('publish');
+    expect(messageActions({ sender_id: 'a' }, ME, member, ann)).not.toContain('publish');
+    expect(messageActions({ sender_id: 'a' }, ME, mod, ann)).toContain('publish');
+    expect(messageActions({ sender_id: 'a', webhook_id: 'w' }, ME, mod, ann)).toContain('publish');
+    // Already published, a published copy, a forward, or not an announcement room: no Publish.
+    expect(messageActions({ sender_id: ME, flags: 1 }, ME, mod, ann)).not.toContain('publish');
+    expect(messageActions({ sender_id: 'w', webhook_id: 'w', flags: 2 }, ME, mod, ann)).not.toContain('publish');
+    expect(messageActions({ sender_id: ME, forward: {} }, ME, mod, ann)).not.toContain('publish');
+    expect(messageActions({ sender_id: ME }, ME, mod)).not.toContain('publish');
+  });
 });
