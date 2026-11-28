@@ -97,7 +97,7 @@ describe('body model', () => {
   test('a hidden spoiler is drawn from its plain text', () => {
     const [spoiler] = parseBody('||secret **bold** <@1>||');
     expect(spoiler?.type).toBe('spoiler');
-    expect(spoiler && 'children' in spoiler ? segmentsPlainText(spoiler.children) : '').toBe('secret bold @user');
+    expect(spoiler?.type === 'spoiler' ? segmentsPlainText(spoiler.children) : '').toBe('secret bold @user');
   });
 
   test('inline math stays in the run; display math and LaTeX documents are blocks of their own', () => {
@@ -125,7 +125,13 @@ describe('body model', () => {
 
   test('math inside a spoiler is hidden as its source', () => {
     const [spoiler] = parseBody('||$x^2$ and $$y$$||');
-    expect(spoiler && 'children' in spoiler ? segmentsPlainText(spoiler.children) : '').toBe('x^2 and y');
+    expect(spoiler?.type === 'spoiler' ? segmentsPlainText(spoiler.children) : '').toBe('x^2 and y');
+  });
+
+  test('a masked link keeps its label styling and reads as plain text', () => {
+    const [link] = parseBody('[`bd14a78`](https://example.com/c/bd14a78)');
+    expect(link?.type === 'link' ? [link.text, link.children?.[0]?.type] : null).toEqual(['bd14a78', 'code']);
+    expect(segmentsPlainText(parseBody('[**v2** beta](https://example.com)'))).toBe('v2 beta');
   });
 
   test('media filename is the last path segment', () => {

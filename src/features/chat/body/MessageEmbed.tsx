@@ -116,7 +116,7 @@ function EmbedCard({ embed: e, roomId, spaceId }: { embed: Embed; roomId: string
   });
 
   return (
-    <EmbedShell color={embedColorHex(e.color) ?? theme.colors.border} maxWidth={maxW}>
+    <EmbedShell color={embedColorHex(e.color) ?? theme.colors.border} maxWidth={maxW} fill>
       <View style={styles.pad}>
         <View style={styles.top}>
           <View style={styles.flex}>

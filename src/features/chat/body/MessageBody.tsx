@@ -148,7 +148,7 @@ function renderInlineNode(seg: MessageSegment, theme: Theme, key: string): React
       if (seg.text === seg.href && roomLinkFromUrl(seg.href)) return <RoomLinkPill key={key} href={seg.href} />;
       return (
         <LinkText key={key} href={seg.href}>
-          {seg.text}
+          {seg.children ? renderInline(seg.children, theme, key) : seg.text}
         </LinkText>
       );
     case 'mention':

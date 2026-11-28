@@ -30,6 +30,7 @@ const SCOPE_ICON: Record<OAuthScope, string> = {
   spaces: 'layer-group',
   'spaces.join': 'user-plus',
   bot: 'robot',
+  connections: 'link',
 };
 
 type Params = {

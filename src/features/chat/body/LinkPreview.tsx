@@ -167,7 +167,7 @@ function Card({ d, fallbackUrl }: { d: LinkMetadata; fallbackUrl: string }) {
   }
 
   return (
-    <EmbedShell color={d.color} maxWidth={maxW}>
+    <EmbedShell color={d.color} maxWidth={maxW} fill={!!(thumbnail && image)}>
       {thumbnail && image ? (
         <View style={styles.row}>
           <View style={[styles.pad, styles.flex]}>{text}</View>
@@ -188,9 +188,9 @@ function Card({ d, fallbackUrl }: { d: LinkMetadata; fallbackUrl: string }) {
 /**
  * The card both a link preview and a bot's embed sit in (the web's EmbedShell), Discord's
  * shape: a coloured edge on the start side (the site's theme colour, the embed's `color`), a
- * quiet surface, rounded corners.
+ * quiet surface, rounded corners. `fill` gives it its full width, for a layout with a `flex: 1` part.
  */
-export function EmbedShell({ color, maxWidth, children }: { color?: string; maxWidth: number; children: ReactNode }) {
+export function EmbedShell({ color, maxWidth, fill, children }: { color?: string; maxWidth: number; fill?: boolean; children: ReactNode }) {
   const theme = useTheme();
   return (
     <View
@@ -198,6 +198,10 @@ export function EmbedShell({ color, maxWidth, children }: { color?: string; maxW
         styles.card,
         {
           maxWidth,
+          // The card otherwise sizes to its content, and a `flex: 1` column inside it (beside a
+          // thumbnail, a row of fields) has no content size of its own: Yoga measures it at zero
+          // and the card collapses to a sliver. Such a card takes the width it may have.
+          width: fill ? maxWidth : undefined,
           borderColor: withAlpha(theme.colors.border, 0.6),
           borderStartColor: color || theme.colors.primary,
           backgroundColor: withAlpha(theme.colors.card, 0.4),
